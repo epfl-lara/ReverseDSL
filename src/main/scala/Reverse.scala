@@ -1,0 +1,341 @@
+object StringReverse {
+  def append(s: String, t: String) = s+t
+  
+  def appendRev(s: String, t: String, out: String): List[(String, String)] = {
+    if(s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
+      val keepFirstIntact = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
+      val keepSecondIntact = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
+      //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
+      (keepFirstIntact ++ keepSecondIntact).filter(res => append(res._1, res._2) == out).sortBy{ case (s, t) =>
+        if(s.length > 0 && t.length > 0) {
+          if(s(s.length - 1) == ' ' && t(0) == ' ') 10
+          else if(s(s.length - 1) != ' ' && t(0) != ' ') 10
+          else 0
+        } else 5
+      }
+    }
+  }// ensuring { ress => ress.forall(res => append(res._1, res._2) == out) }
+}
+
+object IntReverse {
+  def add(s: Int, t: Int) = s+t
+  
+  def addRev(s: Int, t: Int, out: Int): List[(Int, Int)] = {
+    if(s + t == out) List((s, t)) else
+    List((s, out-s),  (out-t, t))
+  }// ensuring { ress => ress.forall(res => add(res._1, res._2) == out) }
+}
+
+object IntValReverse {
+  def add(s: Int, t: Int) = s+t
+  
+  def addRev(s: Int, t: Int, out: Int) = ((i: Int) => (i, out-i))
+}
+
+object ListSplit {
+  def allInterleavings[A](l1: List[A], l2: List[A]): List[List[A]] = {
+    if(l1.isEmpty) List(l2)
+    else if(l2.isEmpty) List(l1)
+    else allInterleavings(l1.tail, l2).map(l1.head :: _) ++ allInterleavings(l1, l2.tail).map(l2.head :: _)
+  }
+  
+  def split[A](l: List[A], p: A => Boolean): (List[A], List[A]) = l match {
+    case Nil => (Nil, Nil)
+    case a::b => val (lfalse, ltrue) = split(b, p)
+     if(p(a)) (lfalse, a::ltrue) else (a::lfalse, ltrue)
+  }
+  
+  // Ensures that every created list has out._1.size + out._2.size
+  def splitRev[A](l: List[A], p: A => Boolean, out: (List[A], List[A])):List[List[A]] = {
+    out match {
+      case (Nil, l2) => List(l2)
+      case (l1, Nil) => List(l1)
+      case (l1@ (a::b), l2 @ (c::d)) => 
+        if(p(a)) Nil
+        else if(!p(c)) Nil
+        else if(l.isEmpty) allInterleavings(l1, l2)
+        else if(!l.exists(_ == c)) // c has been added.
+          splitRev(l, p, (a::b, d)).map(c::_) ++ (if(l.head == a) splitRev(l.tail, p, (b, c::d)).map(a::_) else Nil)
+        else if(!l.exists(_ == a)) // a has been added.
+          splitRev(l, p,(b, c::d)).map(a::_) ++ (if(l.head == c) splitRev(l.tail, p, (a::b, d)).map(c::_) else Nil)
+        else if(!p(l.head) && !l1.exists(_ == l.head)) // l.head has been deleted and was in the first.
+          splitRev(l.tail, p, (l1, l2))
+        else if(p(l.head) && !l2.exists(_ == l.head)) // l.head has been deleted and was in the second.
+          splitRev(l.tail, p, (l1, l2))
+        else if(!p(l.head) && a == l.head) 
+          splitRev(l.tail, p, (b, l2)).map(a::_)
+        else if(p(l.head) && c == l.head)
+          splitRev(l.tail, p, (l1, d)).map(c::_)
+        else /*if(l.head != a && l.head != c)*/ { // l.head is no longer there.
+          splitRev(l.tail, p, (l1, l2))
+        }
+    }
+  }
+}
+
+object TypeSplit {
+  abstract class Tree
+  case class WebElement(name: String) extends Tree
+  case class WebAttribute(name: String, value: String) extends Tree
+  case class WebStyle(name: String, value: String) extends Tree
+  import ListSplit.allInterleavings
+  
+  def split(l: List[Tree]): (List[WebElement], List[WebAttribute], List[WebStyle]) = l match {
+    case Nil => (Nil, Nil, Nil)
+    case a::b => val (l1, l2, l3) = split(b)
+     a match {
+       case w: WebElement => (w::l1, l2, l3)
+       case w: WebAttribute => (l1, w::l2, l3)
+       case w: WebStyle => (l1, l2, w::l3)
+     }
+  }
+
+  // Ensures that every created list has out._1.size + out._2.size
+  def splitRev(l: List[Tree], out: (List[WebElement], List[WebAttribute], List[WebStyle])):List[List[Tree]] = {
+    out match {
+      case (l1, l2, l3) =>
+        l match {
+          case Nil => allInterleavings(l1, l2).flatMap(l1l2 => allInterleavings(l1l2, l3))
+          case lh::lt => 
+            lh match {
+              case lh: WebElement =>
+                l1 match {
+                  case Nil => // An element was deleted.
+                    splitRev(lt, (l1, l2, l3))
+                  case l1h::l1t =>
+                    if (lh == l1h) {
+                      splitRev(lt, (l1t, l2, l3)).map(lh::_)
+                    } else if(!l.exists(_ == l1h)) { // l1h was added
+                      splitRev(l, (l1t, l2, l3)).map(l1h::_)
+                    } else { // It exists later, so lh was removed.
+                      splitRev(lt, (l1, l2, l3))
+                    }
+                }
+              case lh: WebAttribute =>
+                l2 match {
+                  case Nil => // An element was deleted.
+                    splitRev(lt, (l1, l2, l3))
+                  case l2h::l2t =>
+                    if (lh == l2h) {
+                      splitRev(lt, (l1, l2t, l3)).map(lh::_)
+                    } else if(!l.exists(_ == l2h)) { // l2h was added
+                      splitRev(l, (l1, l2t, l3)).map(l2h::_)
+                    } else { // It exists later, so lh was removed.
+                      splitRev(lt, (l1, l2, l3))
+                    }
+                }
+              case lh: WebStyle =>
+                l3 match {
+                  case Nil => // An element was deleted.
+                    splitRev(lt, (l1, l2, l3))
+                  case l3h::l3t =>
+                    if (lh == l3h) {
+                      splitRev(lt, (l1, l2, l3t)).map(lh::_)
+                    } else if(!l.exists(_ == l3h)) { // l3h was added
+                      splitRev(l, (l1, l2, l3t)).map(l3h::_)
+                    } else { // It exists later, so lh was removed.
+                      splitRev(lt, (l1, l2, l3))
+                    }
+                }
+            }
+        }
+    }
+  }
+}
+
+object Compose {
+  def compose[A, B, C](f: A => B, g: B => C): A => C = (x: A) => g(f(x))
+  
+  def composeRev[A, B, C](f: A => B, g: B => C, fRev: B => List[A], gRev: C => List[B]): C => List[A] = { (out: C) =>
+    gRev(out).flatMap(b => fRev(b)).distinct
+  }
+}
+
+object Flatten {
+  def flatten[A](l: List[List[A]]): List[A] = l.flatten
+  
+  def flattenRev[A](l: List[List[A]], out: List[A]): List[List[List[A]]] = {
+    l match {
+      case Nil => List(List(out))
+      case a::Nil => List(List(out))
+      case a::(q@(b::p)) => if(out.take(a.length) == a) {
+        flattenRev(q, out.drop(a.length)).map(a::_)
+      } else { // Something happened, a sequence inserted or deleted, or some elements changed.
+        if(out == a.take(out.length)) { // it was a prefix.
+          List(List(out))
+        } else {
+          val aZipOut = a.zip(out) // of length a.length
+          val sameStart = aZipOut.takeWhile(x => x._1 == x._2) // of length < a.length
+          val missedSeq = a.drop(sameStart.length)
+          val restartIndex = out.indexOfSlice(missedSeq)
+          if(restartIndex != -1) { // There has been an addition in the output, but we can recover.
+            val t = restartIndex + missedSeq.length
+            flattenRev(q, out.drop(t)).map(out.take(t)::_)
+          } else { // Maybe there has been a deletion in the output.
+            for{sizeOfDeletion <- (1 to (a.length - sameStart.length)).toList
+                lookingFor = a.drop(sameStart.length + sizeOfDeletion)
+                indexOfLookingFor = (if(lookingFor.length > 0) out.indexOfSlice(lookingFor, sameStart.length)
+                                     else sameStart.length)
+                if indexOfLookingFor != -1
+                t = indexOfLookingFor + lookingFor.length
+                y <- flattenRev(q, out.drop(t))
+            } yield (out.take(t)::y)
+          }
+//          ini =a[1 2 3 4 9] [5 6] [] [7] // restartIndex != -1
+//          out = [1 2 3 2 4 9 5 6 7]
+
+//          ini =a[1 2 3 2 4 8] [5 6] [] [7] // restartIndex == -1
+//          out = [1 2 3 5 6 7]
+        }
+      }
+    }
+  } // ensuring res => res.forall(sol => sol.flatten == out && lehvenstein(l, sol) == lehvenstein(out, sol.flatten))
+  
+}
+
+object MapReverse {
+  def map[A, B](l: List[A], f: A => B): List[B] = l map f
+  
+  def combinatorialMap[A, B](l: List[A], f: A => List[B]): List[List[B]] = {
+    l match {
+      case Nil => List(Nil)
+      case a::b => f(a).flatMap(fb => combinatorialMap(b, f).map(fb::_))
+    }
+  }
+  
+  def mapRev[A, B](l: List[A], f: A => B, fRev: B => List[A], out: List[B]): List[List[A]] = {
+    l match {
+      case Nil => 
+        out match {
+          case Nil => List(Nil)
+          /*case outhd::Nil => fRev(outhd).map(List(_))*/
+          case outhd::outtail => 
+            val revOutHd = fRev(outhd)
+            for{ sol <- mapRev(l, f, fRev, outtail)
+                 other_a <- revOutHd } yield {
+              other_a :: sol
+            }
+        }
+      case hd::tl =>
+       out match {
+         case Nil => List(Nil)
+         /*case outhd::Nil =>
+           val revOutHd = fRev(outhd)
+           val p = revOutHd.filter(_ == hd)
+           if(p.isEmpty) {
+             revOutHd.map(List(_))
+           } else {
+             p.map(List(_))
+           }*/
+         case outhd::outtail =>
+           val revOutHd = fRev(outhd)
+           val p = revOutHd.filter(_ == hd)
+           if(p.isEmpty) { // Looking for a deleted element maybe ?
+             val expectedOut = l map f
+             val k = expectedOut.indexOfSlice(out)
+             if(k > 0) { // There has been a deletion, but we are able to find the remaining elements.
+               mapRev(l.drop(k), f, fRev, out)
+             } else {
+               val k2 = out.indexOfSlice(expectedOut)
+               if(k2 > 0) { // Some elements were added at some point.
+                 val tailSolutions = mapRev(l, f, fRev, out.drop(k2))
+                 // Now for each of out.take(k2), we take all possible inverses.
+                 combinatorialMap(out.take(k2), fRev).flatMap(l => tailSolutions.map(l ++ _))
+               } else {
+                 revOutHd.flatMap(s => mapRev(tl, f, fRev, outtail).map(s::_))
+               }
+             }
+           } else {
+             p.flatMap(s => mapRev(tl, f, fRev, outtail).map(s::_))
+           }
+       }
+    }
+  }// ensuring res => res.forall(sol => map(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, map(sol, f)))
+}
+
+object FilterReverse {
+  def filter[A](l: List[A], f: A => Boolean): List[A] = l filter f
+  
+  def filterRev[A](l: List[A], f: A => Boolean, out: List[A]): List[List[A]] = {
+    if(l.filter(f) == out) List(l) else
+    (l match {
+      case Nil => 
+        if(out forall f) List(out) else Nil
+      case hd::tl =>
+        if(!f(hd)) {
+          /*for{sol <- filterRev(tl, f, out)
+            c = sol.indexWhere((x: A) => !f(x))
+            i <- 0 to (if(c == -1) sol.length else c)
+          } yield {
+            sol.take(i) ++ (hd ::sol.drop(i))
+          }*/ // Too much possibilities
+          filterRev(tl, f, out).map(hd::_)
+        } else { // hd has to be kept
+          out match {
+            case Nil => List(tl.filter(x => !f(x)))
+            case outhd::outtl =>
+              if(outhd == hd) {
+                filterRev(tl, f, outtl).map(outhd::_)
+              } else { // Find if elements have been deleted.
+                // hd != outhd, either we can find it later or it has been deleted.
+                val expectedFiltered_l = l.filter(f)
+                val k = out.indexOfSlice(expectedFiltered_l)
+                if(k > 0) { // There has been some additions in out, we add them directly.
+                  filterRev(l, f, out.drop(k)).map(out.take(k)++_)
+                } else {
+                  // Maybe some elements have been deleted.
+                  filterRev(tl, f, out)
+                }
+              }
+          }
+        }
+    })
+  }// ensuring res => res.forall(sol => filter(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, filter(sol, f))
+}
+
+object FlatMap {
+  def flatMap[A, B](l: List[A], f: A => List[B]): List[B] = l.flatMap(f)
+
+  def flatMapRev[A, B](l: List[A], f: A => List[B], fRev: List[B] => List[A], out: List[B]): List[List[A]] = {
+    l match {
+      case Nil =>
+        out match {
+          case Nil => List(Nil)
+          case _ =>
+            for{i <- (1 to out.length).toList
+                out_take_i = out.take(i)
+                a <- fRev(out_take_i)
+                sol <- flatMapRev(l, f, fRev, out.drop(i))} yield {
+              a::sol
+            }
+        }
+      case ha::tail =>
+        val expectedout = f(ha)
+        if(expectedout.length == 0) {
+          flatMapRev(tail, f, fRev, out).map(ha::_)
+        } else if(out == expectedout) {
+          flatMapRev(tail, f, fRev, Nil).map(ha::_)
+        } else if(out.take(expectedout.length) == expectedout) { // There has been an addition at the end
+          val t = flatMapRev(tail, f, fRev, out.drop(expectedout.length)).map(ha::_)
+          if(t.isEmpty) { // Fallback: We completely remove the hint
+            flatMapRev(Nil, f, fRev, out)
+          } else t
+        } else {
+          val k = out.indexOfSlice(expectedout)
+          if(k > 0) {
+            val frevouttakek = fRev(out.take(k))
+            val t = for{ sol <- flatMapRev(tail, f, fRev, out.drop(k + expectedout.length))
+                 a <- frevouttakek
+              } yield {
+                 a::ha::sol
+            }
+            if(t.isEmpty) {
+              flatMapRev(Nil, f, fRev, out)
+            } else t
+          } else {
+            flatMapRev(tail, f, fRev, out)
+          }
+        }
+    }
+  }
+}
