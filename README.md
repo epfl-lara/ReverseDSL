@@ -9,7 +9,7 @@ where `I` is the initial input and `O` is the initial output,
 then
 
     F'(I, O') = I' such that
-    F(I', L) = O'
+    F(I') = O'
 
 and `I'` is as close as possible to `I`, where "closest" can be measured in terms of a generalized [Levenshtein distance](https://en.wikipedia.org/wiki/Levenshtein_distance).
 Ideally, we would like that the distance betten `I` and `I'` is no more than the distance between `O and O'`
