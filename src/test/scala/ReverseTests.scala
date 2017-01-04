@@ -222,8 +222,8 @@ class FlatMapTest extends FunSuite with Matchers {
   // f(2) == [3, 4]
   // f(3) == [2, 3, 4]
   
-  val fEven = (x: Int) => if(x%2 == 0) List(x) else Nil
-  val fEvenRev = (x: List[Int]) => if(x.length == 1 && x(0) % 2 == 0) x else Nil
+  val fEven = (x: Int) => if(x%2 == 0) List(x/2) else Nil
+  val fEvenRev = (x: List[Int]) => if(x.length == 1) List(x(0)*2) else Nil
     
   test("Reverse flatmap") {
     flatMapRev(Nil, f, fRev, List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3), List(0, 2))
@@ -237,11 +237,10 @@ class FlatMapTest extends FunSuite with Matchers {
     flatMapRev(List(2), f, fRev, List(2, 3, 4)) shouldEqual List(List(3)) // Change
     flatMapRev(List(0, 1, 2), f, fRev, List(0, 1, 2, 0, 1, 2, 3, 4)) shouldEqual List(List(0, 1, 3)) // Change
     flatMapRev(List(1, 3), f, fRev, List(0, 1, 0, 1, 2, 3, 4)) shouldEqual List(List(1, 1, 3)) // Addition at beg.
-    flatMapRev(List(0, 2), f, fRev, List(0, 1, 0, 1, 2, 3, 4)) shouldEqual List(List(1, 0, 2)) // Addition at beg.
     
     // Keep elements producing empty lists
-    flatMapRev(List(1, 2, 3, 4, 5), fEven, fEvenRev, List(2, 4)) shouldEqual List(List(1, 2, 3, 4, 5))
-    flatMapRev(List(1, 2, 3, 4, 5), fEven, fEvenRev, List(2, 6, 4)) shouldEqual List(List(1, 2, 3, 6, 4, 5))
-    flatMapRev(List(1, 2, 3, 6, 4, 5), fEven, fEvenRev, List(2, 4)) shouldEqual List(List(1, 2, 3, 4, 5))
+    flatMapRev(List(1, 2, 3, 4, 5), fEven, fEvenRev, List(1, 2)) shouldEqual List(List(1, 2, 3, 4, 5))
+    flatMapRev(List(1, 2, 3, 4, 5), fEven, fEvenRev, List(1, 3, 2)) shouldEqual List(List(1, 2, 3, 6, 4, 5))
+    flatMapRev(List(1, 2, 3, 6, 4, 5), fEven, fEvenRev, List(1, 2)) shouldEqual List(List(1, 2, 3, 4, 5))
   }
 }
