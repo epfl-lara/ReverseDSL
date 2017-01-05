@@ -1,6 +1,6 @@
 import org.scalatest._
 
-class StringReveseTest extends FunSuite with Matchers {
+class StringReverseTest extends FunSuite with Matchers {
   import StringReverse._
   def f = append(append("Hello", " "), "world")
   def fRev(out: String): List[(String, String, String)] = appendRev("Hello ", "world", out).flatMap(leftRight => 
@@ -17,6 +17,22 @@ class StringReveseTest extends FunSuite with Matchers {
     fRev("Hi Buddy") should equal(List())
   }
 }
+
+class StringFormatReverseTest extends FunSuite with Matchers {
+  import StringFormatReverse._
+  test("Formatting reverse decomposition") {
+    formatRev("%s %s %d", List("Hello", "world", 42), "Hello buddy 42") shouldEqual List(("%s %s %d", List("Hello", "buddy", 42)))
+/*    
+    fRev("Hello Buddy") should equal(List(("Hello", " ", "Buddy")))
+    fRev("Hello big world") should equal(List(("Hello"," ","big world"), ("Hello"," big ","world"), ("Hello big"," ","world")))
+    fRev("Hello a-world") should equal(List(("Hello"," ","a-world"), ("Hello"," a-","world")))
+    fRev("Hello-a world") should equal(List(("Hello-a"," ","world"), ("Hello","-a ","world")))
+    fRev("Hello  world") should equal(List(("Hello","  ","world"), ("Hello "," ","world"), ("Hello"," "," world")))
+    fRev("Hi world") should equal(List(("Hi"," ","world")))
+    fRev("Hi Buddy") should equal(List())*/
+  }
+}
+
 
 class IntReverseTest extends FunSuite with Matchers {
   import IntReverse._

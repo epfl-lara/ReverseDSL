@@ -1,3 +1,5 @@
+import scala.collection.mutable.ListBuffer
+
 object StringReverse {
   def append(s: String, t: String) = s+t
   
@@ -15,6 +17,55 @@ object StringReverse {
       }
     }
   }// ensuring { ress => ress.forall(res => append(res._1, res._2) == out) }
+}
+/*
+object StringExtractReverse {
+  def substring(s: String, start: Int, end: Int) = s.substring(s, start, end)
+  
+  def substringRev(s: String, start: Int, end: Int, out: String) = s.substring(0, start) + out + s.substring(end)
+}*/
+
+object StringFormatReverse {
+  import java.util.regex.Pattern
+  def format(s: String, args: List[Any]) = s.format(args: _*)
+  
+  var numeroted = false // If there is $1, $2 after %s, %s, etc.
+  
+  // Parsing !
+  def formatRev(s: String, args: List[Any], out: String): List[(String, List[Any])] = {
+    // Replace all %s in s by (.*) regexes, and %d in s by (\d*) regexes.
+    val formatters = "%((?:s|d))(?:\\$(\\d+))?".r
+    val splitters = formatters.findAllIn(s).matchData.map{ m => 
+      (m.start, m.end, m.toString, m.subgroups(0), m.subgroups(1))
+    }.toList
+    val substrings = ((ListBuffer[(Int, Int, String)](), 0) /: (splitters :+ ((s.length, s.length, "", "", "")))) {
+      case ((lb, prevIndex), (startIndex, endIndex, _, _, _)) => (lb += ((prevIndex, startIndex, s.substring(prevIndex, startIndex))), endIndex)
+    }._1.toList
+    
+    val ifargsmodifiedRegex = Pattern.quote(substrings.head._3) + splitters.map{ x => x._4 match {
+      case "s" => "(.*)"
+      case "d" => "(\\d*)"
+    }
+    }.zip(substrings.tail.map(x => Pattern.quote(x._3))).map(x => x._1 + x._2).mkString
+    // TODO: Reorder out.
+    val ifargsmodified = ifargsmodifiedRegex.r.unapplySeq(out) match { // Maybe it's an argument which has been formatted.
+      case Some(args) => List((s, args.zip(splitters).map{ arg_s => 
+        arg_s._2._4 match {
+          case "s" => arg_s._1
+          case "d" => arg_s._1.toInt
+        }
+      }
+      
+      ))
+      case None => Nil
+    }
+    val regexschange = args.map(x => Pattern.quote(x.toString)).mkString("(.*)", "(.*)", "(.*)")
+    val ifsmodified =  regexschange.r.unapplySeq(out) match {
+      case Some(sSplitted) => List((sSplitted.mkString("%s"), args))
+      case None => Nil
+    }
+    ifsmodified ++ ifargsmodified
+  }
 }
 
 object IntReverse {
