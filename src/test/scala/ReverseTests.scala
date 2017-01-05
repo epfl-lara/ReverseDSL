@@ -22,6 +22,10 @@ class StringFormatReverseTest extends FunSuite with Matchers {
   import StringFormatReverse._
   test("Formatting reverse decomposition") {
     formatRev("%s %s %d", List("Hello", "world", 42), "Hello buddy 42") shouldEqual List(("%s %s %d", List("Hello", "buddy", 42)))
+    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello, obscure world!") should contain (("%s, %s %s!", List("Hello", "obscure", "world")))
+    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello,clear world!") should contain (("%s,%s %s!", List("Hello", "clear", "world")))
+    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Good bye,awesome friend!") should contain (("%s,%s %s!", List("Good bye", "awesome", "friend")))
+    formatRev("%s$2,%s$3 %s$1!", List("world", "Hello", "obscure"), "Hello,clear world!") should contain (("%s$2,%s$3 %s$1!", List("world", "Hello", "clear")))
 /*    
     fRev("Hello Buddy") should equal(List(("Hello", " ", "Buddy")))
     fRev("Hello big world") should equal(List(("Hello"," ","big world"), ("Hello"," big ","world"), ("Hello big"," ","world")))

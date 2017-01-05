@@ -1,4 +1,4 @@
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 object StringReverse {
   def append(s: String, t: String) = s+t
@@ -35,28 +35,42 @@ object StringFormatReverse {
   def formatRev(s: String, args: List[Any], out: String): List[(String, List[Any])] = {
     // Replace all %s in s by (.*) regexes, and %d in s by (\d*) regexes.
     val formatters = "%((?:s|d))(?:\\$(\\d+))?".r
+    var i = -1
+    val indexes = new ArrayBuffer[Int]()
     val splitters = formatters.findAllIn(s).matchData.map{ m => 
-      (m.start, m.end, m.toString, m.subgroups(0), m.subgroups(1))
+      (m.start, m.end, m.toString, m.subgroups(0), if(m.subgroups(1) == null) {i += 1; indexes += i; i} else { val k = m.subgroups(1).toInt - 1; indexes += k; k})
     }.toList
     val substrings = ((ListBuffer[(Int, Int, String)](), 0) /: (splitters :+ ((s.length, s.length, "", "", "")))) {
       case ((lb, prevIndex), (startIndex, endIndex, _, _, _)) => (lb += ((prevIndex, startIndex, s.substring(prevIndex, startIndex))), endIndex)
     }._1.toList
+    val reverseIndexes = new Array[Int](indexes.length)
+    i = 0
+    while (i < indexes.length) {
+      reverseIndexes(indexes(i)) = i
+      i+=1
+    }
+    def reverse(permutation: Array[Int], l: List[Any]): List[Any] = {
+      val input = l.toArray
+      (0 until input.length).toList.map(i => input(permutation(i)))
+    }
     
+    // Replace all splitters by regular expressions to pattern match against anything.
     val ifargsmodifiedRegex = Pattern.quote(substrings.head._3) + splitters.map{ x => x._4 match {
       case "s" => "(.*)"
       case "d" => "(\\d*)"
     }
     }.zip(substrings.tail.map(x => Pattern.quote(x._3))).map(x => x._1 + x._2).mkString
-    // TODO: Reorder out.
+    
     val ifargsmodified = ifargsmodifiedRegex.r.unapplySeq(out) match { // Maybe it's an argument which has been formatted.
-      case Some(args) => List((s, args.zip(splitters).map{ arg_s => 
+      case Some(args) => 
+        // TODO: Reorder out for comparison.
+        List((s, reverse(reverseIndexes, args.zip(splitters).map{ arg_s => 
         arg_s._2._4 match {
           case "s" => arg_s._1
           case "d" => arg_s._1.toInt
         }
       }
-      
-      ))
+      )))
       case None => Nil
     }
     val regexschange = args.map(x => Pattern.quote(x.toString)).mkString("(.*)", "(.*)", "(.*)")
