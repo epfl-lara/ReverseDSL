@@ -25,15 +25,9 @@ class StringFormatReverseTest extends FunSuite with Matchers {
     formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello, obscure world!") should contain (("%s, %s %s!", List("Hello", "obscure", "world")))
     formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello,clear world!") should contain (("%s,%s %s!", List("Hello", "clear", "world")))
     formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Good bye,awesome friend!") should contain (("%s,%s %s!", List("Good bye", "awesome", "friend")))
-    formatRev("%s$2,%s$3 %s$1!", List("world", "Hello", "obscure"), "Hello,clear world!") should contain (("%s$2,%s$3 %s$1!", List("world", "Hello", "clear")))
-/*    
-    fRev("Hello Buddy") should equal(List(("Hello", " ", "Buddy")))
-    fRev("Hello big world") should equal(List(("Hello"," ","big world"), ("Hello"," big ","world"), ("Hello big"," ","world")))
-    fRev("Hello a-world") should equal(List(("Hello"," ","a-world"), ("Hello"," a-","world")))
-    fRev("Hello-a world") should equal(List(("Hello-a"," ","world"), ("Hello","-a ","world")))
-    fRev("Hello  world") should equal(List(("Hello","  ","world"), ("Hello "," ","world"), ("Hello"," "," world")))
-    fRev("Hi world") should equal(List(("Hi"," ","world")))
-    fRev("Hi Buddy") should equal(List())*/
+    formatRev("%2$s,%3$s %1$s!", List("world", "Hello", "obscure"), "Hello,clear world!") should contain (("%2$s,%3$s %1$s!", List("world", "Hello", "clear")))
+    formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should contain(("Hello %1$s! %1$s is ok?", List("Mikael")))
+    formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should not contain (("Hello %1$s! %1$s is ok?", List("Marion")))
   }
 }
 
