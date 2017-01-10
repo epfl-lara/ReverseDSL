@@ -68,7 +68,7 @@ trait InputOutput {
 
 // Reverse
 trait Reverse1 extends InputOutput {
-  def perform(in: Input)
+  def perform(in: Input): Output
   def unperform(in1: Input, out2: Output): Iterable[Input]
 }
 
@@ -83,7 +83,7 @@ object StringAppend extends Reverse1 {
   type Output = String
   def append(s: String, t: String): String = s+t
   
-  def perform(st: Input) = append(st._1, st._2)  
+  def perform(st: Input): Output = append(st._1, st._2)  
   
   def unperform(st: Input, out: Output): Iterable[Input] = {
     val s = st._1
@@ -109,15 +109,18 @@ object StringExtractReverse {
   def substringRev(s: String, start: Int, end: Int, out: String) = s.substring(0, start) + out + s.substring(end)
 }*/
 
-object StringFormatReverse {
+object StringFormatReverse extends Reverse1 {
+  type Input = (String, List[Any])
+  type Output = String
   import java.util.regex.Pattern
   def format(s: String, args: List[Any]) = {
     //println(s"Calling '$s'.format(" + args.map(x => (x, x.getClass)).mkString(",") + ")")
     s.format(args: _*)
   }
+  def perform(in: Input) = format(in._1, in._2)
   
-  var numeroted = false // If there is $1, $2 after %s, %s, etc.
-  
+  def unperform(in: Input, out2: Output): Iterable[Input] = formatRev(in._1, in._2, out2)
+
   // Parsing !
   def formatRev(s: String, args: List[Any], out: String): List[(String, List[Any])] = {
     // Replace all %s in s by (.*) regexes, and %d in s by (\d*) regexes.
@@ -199,13 +202,25 @@ object StringFormatReverse {
   }
 }
 
-object IntReverse {
+object IntReverse extends Reverse1 {
+  type Input = (Int, Int)
+  type Output = Int
   def add(s: Int, t: Int) = s+t
+  def perform(in: Input): Output = add(in._1, in._2)
+  def unperform(in: Input, out2: Output): Iterable[Input] = addRev(in._1, in._2, out2)
   
   def addRev(s: Int, t: Int, out: Int): List[(Int, Int)] = {
     if(s + t == out) List((s, t)) else
     List((s, out-s),  (out-t, t))
   }// ensuring { ress => ress.forall(res => add(res._1, res._2) == out) }
+}
+
+object Interleavings {
+  def allInterleavings[A](l1: List[A], l2: List[A]): List[List[A]] = {
+    if(l1.isEmpty) List(l2)
+    else if(l2.isEmpty) List(l1)
+    else allInterleavings(l1.tail, l2).map(l1.head :: _) ++ allInterleavings(l1, l2.tail).map(l2.head :: _)
+  }
 }
 
 object IntValReverse {
@@ -214,21 +229,22 @@ object IntValReverse {
   def addRev(s: Int, t: Int, out: Int) = ((i: Int) => (i, out-i))
 }
 
-object ListSplit {
-  def allInterleavings[A](l1: List[A], l2: List[A]): List[List[A]] = {
-    if(l1.isEmpty) List(l2)
-    else if(l2.isEmpty) List(l1)
-    else allInterleavings(l1.tail, l2).map(l1.head :: _) ++ allInterleavings(l1, l2.tail).map(l2.head :: _)
-  }
+class ListSplit[A](p: A => Boolean) extends Reverse1 {
+  import Interleavings._
+  type Input = List[A]
+  type Output = (List[A], List[A])
   
-  def split[A](l: List[A], p: A => Boolean): (List[A], List[A]) = l match {
+  def perform(in: Input): Output = split(in)
+  def unperform(in: Input, out2: Output) = splitRev(in, out2)
+  
+  def split(l: List[A]): (List[A], List[A]) = l match {
     case Nil => (Nil, Nil)
-    case a::b => val (lfalse, ltrue) = split(b, p)
+    case a::b => val (lfalse, ltrue) = split(b)
      if(p(a)) (lfalse, a::ltrue) else (a::lfalse, ltrue)
   }
   
   // Ensures that every created list has out._1.size + out._2.size
-  def splitRev[A](l: List[A], p: A => Boolean, out: (List[A], List[A])):List[List[A]] = {
+  def splitRev(l: List[A], out: (List[A], List[A])):List[List[A]] = {
     out match {
       case (Nil, l2) => List(l2)
       case (l1, Nil) => List(l1)
@@ -237,30 +253,41 @@ object ListSplit {
         else if(!p(c)) Nil
         else if(l.isEmpty) allInterleavings(l1, l2)
         else if(!l.exists(_ == c)) // c has been added.
-          splitRev(l, p, (a::b, d)).map(c::_) ++ (if(l.head == a) splitRev(l.tail, p, (b, c::d)).map(a::_) else Nil)
+          splitRev(l, (a::b, d)).map(c::_) ++ (if(l.head == a) splitRev(l.tail, (b, c::d)).map(a::_) else Nil)
         else if(!l.exists(_ == a)) // a has been added.
-          splitRev(l, p,(b, c::d)).map(a::_) ++ (if(l.head == c) splitRev(l.tail, p, (a::b, d)).map(c::_) else Nil)
+          splitRev(l, (b, c::d)).map(a::_) ++ (if(l.head == c) splitRev(l.tail, (a::b, d)).map(c::_) else Nil)
         else if(!p(l.head) && !l1.exists(_ == l.head)) // l.head has been deleted and was in the first.
-          splitRev(l.tail, p, (l1, l2))
+          splitRev(l.tail, (l1, l2))
         else if(p(l.head) && !l2.exists(_ == l.head)) // l.head has been deleted and was in the second.
-          splitRev(l.tail, p, (l1, l2))
+          splitRev(l.tail, (l1, l2))
         else if(!p(l.head) && a == l.head) 
-          splitRev(l.tail, p, (b, l2)).map(a::_)
+          splitRev(l.tail, (b, l2)).map(a::_)
         else if(p(l.head) && c == l.head)
-          splitRev(l.tail, p, (l1, d)).map(c::_)
+          splitRev(l.tail, (l1, d)).map(c::_)
         else /*if(l.head != a && l.head != c)*/ { // l.head is no longer there.
-          splitRev(l.tail, p, (l1, l2))
+          splitRev(l.tail, (l1, l2))
         }
     }
   }
 }
 
-object TypeSplit {
+object TypeSplit extends Reverse1 {
+  type Input = List[Tree]
+  type Output = (List[WebElement], List[WebAttribute], List[WebStyle])
+  import Interleavings._
+  var displayNiceDSL = true
   abstract class Tree
-  case class WebElement(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends Tree
-  case class WebAttribute(name: String, value: String) extends Tree
-  case class WebStyle(name: String, value: String) extends Tree
-  import ListSplit.allInterleavings
+  case class WebElement(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends Tree {
+    override def toString = if(displayNiceDSL) "<." + tag + (if(children.nonEmpty || attributes.nonEmpty || styles.nonEmpty) (children ++ attributes ++ styles).mkString(", ") else "") else super.toString
+  }
+  case class WebAttribute(name: String, value: String) extends Tree {
+    override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
+  }
+  case class WebStyle(name: String, value: String) extends Tree {
+    override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
+  }
+  def perform(in: Input): Output = split(in)
+  def unperform(in1: Input, out2: Output): Iterable[Input] = splitRev(in1, out2)
   
   def split(l: List[Tree]): (List[WebElement], List[WebAttribute], List[WebStyle]) = l match {
     case Nil => (Nil, Nil, Nil)
@@ -381,19 +408,37 @@ object WebElementComposition {
     Nil // TODO
   }
 }
-
-object Compose {
-  def compose[A, B, C](f: A => B, g: B => C): A => C = (x: A) => g(f(x))
+/*
+case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Iterable[A], gRev: C => Iterable[B]) extends Reverse1 {
+  type Input = A
+  type Output = C
+  def perform(in: Input) = g(f(in))
   
-  def composeRev[A, B, C](f: A => B, g: B => C, fRev: B => List[A], gRev: C => List[B]): C => List[A] = { (out: C) =>
-    gRev(out).flatMap(b => fRev(b)).distinct
+  def unperform(in: Input, out2: Output) = 
+    gRev(out2).flatMap(b => fRev(b))
+}*/
+
+// Make sure the types agree !!
+case class Compose(a: Reverse1, b: Reverse1) extends Reverse1 {
+  type Input = b.Input
+  type Output = a.Output
+
+  def perform(in: Input): Output = a.perform(b.perform(in).asInstanceOf[a.Input])
+  def unperform(in: Input, out2: Output) = {
+   val intermediate_out = b.perform(in)
+   a.unperform(intermediate_out.asInstanceOf[a.Input], out2).flatMap(x => b.unperform(in, x.asInstanceOf[b.Output]))
   }
 }
 
-object Flatten {
-  def flatten[A](l: List[List[A]]): List[A] = l.flatten
+class Flatten[A] extends Reverse1 {
+  type Input = List[List[A]]
+  type Output = List[A]
+  def perform(in: Input) = flatten(in)
+  def unperform(in: Input, out2: Output) = flattenRev(in, out2)
+
+  def flatten(l: List[List[A]]): List[A] = l.flatten
   
-  def flattenRev[A](l: List[List[A]], out: List[A]): List[List[List[A]]] = {
+  def flattenRev(l: List[List[A]], out: List[A]): List[List[List[A]]] = {
     l match {
       case Nil => List(List(out))
       case a::Nil => List(List(out))
@@ -432,7 +477,12 @@ object Flatten {
   
 }
 
-object MapReverse {
+case class MapReverse[A, B](f: A => B, fRev: B => List[A]) extends Reverse1 {
+  type Input = List[A]
+  type Output = List[B]
+  def perform(in: Input) = map(in, f)
+  def unperform(in: Input, out2: Output) = mapRev(in, f, fRev, out2)
+
   def map[A, B](l: List[A], f: A => B): List[B] = l map f
   
   def combinatorialMap[A, B](l: List[A], f: A => List[B]): List[List[B]] = {
@@ -492,10 +542,15 @@ object MapReverse {
   }// ensuring res => res.forall(sol => map(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, map(sol, f)))
 }
 
-object FilterReverse {
-  def filter[A](l: List[A], f: A => Boolean): List[A] = l filter f
+case class FilterReverse[A](f: A => Boolean) extends Reverse1 {
+  type Input = List[A]
+  type Output = List[A]
+  def perform(in: Input) = filter(in, f)
+  def unperform(in: Input, out2: Output) = filterRev(in, f, out2)
+
+  def filter(l: List[A], f: A => Boolean): List[A] = l filter f
   
-  def filterRev[A](l: List[A], f: A => Boolean, out: List[A]): List[List[A]] = {
+  def filterRev(l: List[A], f: A => Boolean, out: List[A]): List[List[A]] = {
     if(l.filter(f) == out) List(l) else
     (l match {
       case Nil => 
@@ -532,10 +587,15 @@ object FilterReverse {
   }// ensuring res => res.forall(sol => filter(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, filter(sol, f))
 }
 
-object FlatMap {
-  def flatMap[A, B](l: List[A], f: A => List[B]): List[B] = l.flatMap(f)
+case class FlatMap[A, B](f: A => List[B], fRev: List[B] => List[A]) extends Reverse1 {
+  type Input = List[A]
+  type Output = List[B]
+  def perform(in: Input) = flatMap(in, f)
+  def unperform(in: Input, out2: Output) = flatMapRev(in, f, fRev, out2)
 
-  def flatMapRev[A, B](l: List[A], f: A => List[B], fRev: List[B] => List[A], out: List[B]): List[List[A]] = {
+  def flatMap(l: List[A], f: A => List[B]): List[B] = l.flatMap(f)
+
+  def flatMapRev(l: List[A], f: A => List[B], fRev: List[B] => List[A], out: List[B]): List[List[A]] = {
     l match {
       case Nil =>
         out match {

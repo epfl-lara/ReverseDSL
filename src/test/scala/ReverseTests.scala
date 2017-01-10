@@ -119,12 +119,13 @@ We test '3 = 3 gives miraculously one solution
 }
 
 class ListSplitTest extends FunSuite with Matchers {
-  import ListSplit._
   val f = (x: Int) => x % 2 == 0
+  val b = new ListSplit[Int](f)
+  import b._
   test("Testing split reverse") {
-    splitRev(List(3, 5), f, (List(3, 5), List(4))) shouldEqual List(List(4, 3, 5), List(3, 4, 5), List(3, 5, 4))
-    splitRev(List(3, 4, 5), f, (List(3, 5), List())) shouldEqual List(List(3, 5))
-    splitRev(List(1, 2, 3, 4, 5), f, (List(1, 3, 5), List(2, 6, 4))) shouldEqual List(List(1, 2, 6, 3, 4, 5), List(1, 2, 3, 6, 4, 5))
+    splitRev(List(3, 5), (List(3, 5), List(4))) shouldEqual List(List(4, 3, 5), List(3, 4, 5), List(3, 5, 4))
+    splitRev(List(3, 4, 5), (List(3, 5), List())) shouldEqual List(List(3, 5))
+    splitRev(List(1, 2, 3, 4, 5), (List(1, 3, 5), List(2, 6, 4))) shouldEqual List(List(1, 2, 6, 3, 4, 5), List(1, 2, 3, 6, 4, 5))
   }
 }
 
@@ -172,32 +173,46 @@ class WebElementAdditionTest extends FunSuite with Matchers {
   val reverseInit4 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
     WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","block"), WebStyle("width","100px"), WebStyle("height","100px")))
   )
-  reverseInit4.toList shouldEqual List[Input]((WebElement("div",List(),List(),List(WebStyle("display","block"))),List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px"))))
+  reverseInit4.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("display","block"))),List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px"))))
   
   // Added a style before the original style
   val reverseInit5 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
     WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("outline","1px solid black"), WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","100px")))
   )
-  reverseInit5.toList shouldEqual List[Input]((WebElement("div",List(),List(),List(WebStyle("outline","1px solid black"), WebStyle("display","none"))),List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px"))))
+  reverseInit5.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("outline","1px solid black"), WebStyle("display","none"))),List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px"))))
 }
 
 class ComposeTest extends FunSuite with Matchers {
-  import Compose._
-  val f = (x: Int) => x - (x % 2)
-  val g = (x: Int) => x - (x % 3)
   
-  val fRev = (x: Int) => if(x % 2 == 0) List(x, x+1) else Nil
-  val gRev = (x: Int) => if(x % 3 == 0) List(x, x+1, x+2) else Nil
+  object F extends Reverse1 {
+    type Input = Int
+    type Output = Int
+    def perform(x: Int) = x - (x % 2)
+    def unperform(in: Int, x: Int) = if(x % 2 == 0) List(x, x+1) else Nil
+  }
+
+  object G extends Reverse1 {
+    type Input = Int
+    type Output = Int
+    def perform(x: Int) = x - (x % 3)
+    def unperform(in: Int, x: Int) = if(x % 3 == 0) List(x, x+1, x+2) else Nil
+  }
+
+  val b = Compose(G, F)
+
+  def composeRev(i: Int) = b.unperform(0.asInstanceOf[ComposeTest.this.b.b.Input], i.asInstanceOf[ComposeTest.this.b.a.Output]).toList.asInstanceOf[List[Int]]
 
   test("Reverse composing of functions") {
-    val test1 = composeRev(f, g, fRev, gRev)(0) shouldEqual List(0, 1, 2, 3)
-    val test2 = composeRev(f, g, fRev, gRev)(3) shouldEqual List(4, 5)
-    val test3 = composeRev(f, g, fRev, gRev)(6) shouldEqual List(6, 7, 8, 9)
+    val test1 = composeRev(0) shouldEqual List(0, 1, 2, 3)
+    val test2 = composeRev(3) shouldEqual List(4, 5)
+    val test3 = composeRev(6) shouldEqual List(6, 7, 8, 9)
   }
 }
 
 class FlattenTest extends FunSuite with Matchers {
-  import Flatten._
+  val c = new Flatten[Int]
+  import c._
+
   test("Reversing Flatten") {
     flattenRev(List(List(1, 2, 3), List(5, 6), List(), List(7)), List(1, 2, 3, 5, 6, 7)) should contain 
       List(List(1, 2, 3), List(5, 6), List(), List(7))
@@ -217,10 +232,10 @@ class FlattenTest extends FunSuite with Matchers {
 }
 
 class MapReverseTest extends FunSuite with Matchers {
-  import MapReverse._
-
   val f = (x: Int) => x - (x%2)
   val fRev = (x: Int) => if(x % 2 == 0) List(x, x+1) else Nil
+  val c = MapReverse[Int, Int](f, fRev)
+  import c._
   test("Reversing map") {
     mapRev(List(1, 2, 3, 4, 5), f, fRev, List(0, 2, 2, 4, 4)) shouldEqual
     List(List(1, 2, 3, 4, 5))
@@ -234,10 +249,9 @@ class MapReverseTest extends FunSuite with Matchers {
 }
 
 class FilterReverseTest extends FunSuite with Matchers {
-  import FilterReverse._
-
   val isEven = (x: Int) => x % 2 == 0
-  
+  val c = FilterReverse(isEven)
+  import c._
   test("Filter reverse") {
     filterRev(List(1, 2, 3, 4, 8, 5), isEven, List(2, 4, 8)) shouldEqual
     List(List(1, 2, 3, 4, 8, 5))
@@ -255,7 +269,6 @@ class FilterReverseTest extends FunSuite with Matchers {
 
 // Combines map and flatten directly.
 class FlatMapTest extends FunSuite with Matchers {
-  import FlatMap._
   
   val f = (x: Int) => if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
   val fRev = (lx: List[Int]) => if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
@@ -267,6 +280,8 @@ class FlatMapTest extends FunSuite with Matchers {
     else if(lx(0) % 4 == 0) List(lx(1))
     else Nil
   } else Nil
+
+  val c = FlatMap(f, fRev)
   
   // f(0) ++ f(2) == f(1) ++ f(3)
   // f(0) == [0, 1, 2]
@@ -276,8 +291,10 @@ class FlatMapTest extends FunSuite with Matchers {
   
   val fEven = (x: Int) => if(x%2 == 0) List(x/2) else Nil
   val fEvenRev = (x: List[Int]) => if(x.length == 1) List(x(0)*2) else Nil
-    
-  test("Reverse flatmap") {
+  val d = FlatMap(fEven, fEvenRev)
+
+  test("Reverse flatmap - complicated") {
+    import c.flatMapRev
     flatMapRev(Nil, f, fRev, List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3), List(0, 2))
     flatMapRev(List(1, 3), f, fRev, List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3))
     flatMapRev(List(0, 2), f, fRev, List(0, 1, 2, 3, 4)) shouldEqual List(List(0, 2))
@@ -289,7 +306,9 @@ class FlatMapTest extends FunSuite with Matchers {
     flatMapRev(List(2), f, fRev, List(2, 3, 4)) shouldEqual List(List(3)) // Change
     flatMapRev(List(0, 1, 2), f, fRev, List(0, 1, 2, 0, 1, 2, 3, 4)) shouldEqual List(List(0, 1, 3)) // Change
     flatMapRev(List(1, 3), f, fRev, List(0, 1, 0, 1, 2, 3, 4)) shouldEqual List(List(1, 1, 3)) // Addition at beg.
-    
+  }
+  test("Reverse flatmap - even") {
+    import d._
     // Keep elements producing empty lists
     flatMapRev(List(1, 2, 3, 4, 5), fEven, fEvenRev, List(1, 2)) shouldEqual List(List(1, 2, 3, 4, 5))
     flatMapRev(List(1, 2, 3, 4, 5), fEven, fEvenRev, List(1, 3, 2)) shouldEqual List(List(1, 2, 3, 6, 4, 5))
