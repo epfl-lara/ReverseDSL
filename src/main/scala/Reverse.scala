@@ -1,4 +1,72 @@
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import shapeless.HList
+
+/*
+A Ground type is either a primitive type or a case class type.
+
+RevTyping[(A1, …, An)] = (RevTyping[A1], …, RevTyping[An]) for A1, … An non-Ground.
+
+If A is a tuple of types, let it decompose M the Ground subset of A, and 
+F is the pure function subset of A.
+RevTyping[A => B]  =   M => F => RevTyping[F] => Iterable[M]
+In particular, if A is itself a Ground type
+RevTyping[A => B]  = A => B => Iterable[A]
+
+For f a symbol of type F, let f_$rev : RevTyping[F] if it exists
+
+Rewriting rules:
+
+Let {{PROGRAM}} the result of executing PROGRAM
+Let’s define [[PROGRAM]](output) to be a "minimal" modification of PROGRAM producing output.
+If {{PROGRAM}} = output, [[PROGRAM]](output) = PROGRAM
+
+[[Apply(f,g)]](f_output) =
+{{f_$rev(g, f_output)}}.flatMap{ input =>
+  val programs = [[g]](input)
+  programs.map(program => Apply(f, program))
+}
+If some of the g’s are high-level functions, they must be named, have a
+
+For n≥ 2
+[[(InputProgram1, … InputProgramn)]](output1, … outputn) =
+[[InputProgram1]](output1).flatMap{ program =>
+  [[(InputProgram2, …InputProgramn)]](output2,....outputn).map{
+    case program2 =>
+       TupleApply(program, program2)
+  }
+ }
+
+Actually, we should produce not just a list of possible outputs.
+We should produce a list index-changed new-value of possible argument modification, if only one argument is modified.
+
+if a had the value of 2 before, and now the result of a+3+a = 5,
+a+3+a should be viewed as an single expression so that we can solve it the following way.
+- Take all variables and try to modify their value.
+* Take all constants and try to modify their value.
+
+If there is an assignment a = X, we try to revert the program that produced X and get a lot of possible assignments.
+
+*/
+object Common {
+  def updateArgs[A <: HList](in1: A, argsUpdate: List[(Int, Any)]): A = {
+    ((in1 /: argsUpdate) {
+      case (a, (i, e)) => HList.unsafeUpdateAt(a, i, e).asInstanceOf[A]
+    })
+  }
+}
+
+/* What should be the output of an element of reverse?
+- The updated list of arguments (compile-time correct)
+- A list of pairs (index, value of arg modified) (compile-time not typing)
+- The updated list of arguments along with which arguments are modified (to go faster to the expressions which should be modified without comparison)
+*/
+
+trait ReverseOp {
+  type Input
+  type Output
+  def apply(in1: Input): Output
+  def unapply(in1: Input, out1: Output, out2: Output): Iterable[Input]
+}
 
 object StringReverse {
   def append(s: String, t: String) = s+t
@@ -173,7 +241,7 @@ object ListSplit {
 
 object TypeSplit {
   abstract class Tree
-  case class WebElement(name: String) extends Tree
+  case class WebElement(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends Tree
   case class WebAttribute(name: String, value: String) extends Tree
   case class WebStyle(name: String, value: String) extends Tree
   import ListSplit.allInterleavings
@@ -240,6 +308,68 @@ object TypeSplit {
     }
   }
 }
+
+object WebElementAddition {
+  import TypeSplit._
+  type Input = (WebElement, List[WebElement], List[WebAttribute], List[WebStyle])
+  type Output = WebElement
+  
+  def apply(elem: WebElement, children: List[WebElement], attributes: List[WebAttribute], styles: List[WebStyle]): WebElement = {
+    WebElement(elem.tag, elem.children ++ children, elem.attributes ++ attributes, elem.styles ++ styles)
+  }
+  
+  def applyRev(in: Input, out: Output): List[Input] = {
+    val elem = in._1
+    val children = in._2
+    val attributes = in._3
+    val styles = in._4
+    // If the original element could have been not modified
+    val ifOriginalElemNotModified : List[Input] = if(
+        out.children.take(elem.children.length) == elem.children &&
+        out.attributes.take(elem.attributes.length) == elem.attributes &&
+        out.styles.take(elem.styles.length) == elem.styles) {
+      List((elem,
+            out.children.drop(elem.children.length),
+            out.attributes.drop(elem.attributes.length),
+            out.styles.drop(elem.styles.length))
+      )
+    } else Nil
+    val ifAdditionsNotModified : List[Input] = if(
+      out.children.takeRight(children.length) == children &&
+      out.attributes.takeRight(attributes.length) == attributes &&
+      out.styles.takeRight(styles.length) == styles) {
+      List((WebElement(elem.tag,
+        out.children.dropRight(children.length),
+        out.attributes.dropRight(attributes.length),
+        out.styles.dropRight(styles.length)),
+           children,
+           attributes,
+           styles
+        ))
+    } else Nil
+    (ifOriginalElemNotModified ++ ifAdditionsNotModified).distinct
+  }
+}
+/*
+object WebElementComposition {
+  import TypeSplit._
+  type Input = (WebElement, List[Tree])
+  type Output = WebElement
+  
+  def apply(elem: WebElement, subs: List[Tree]): WebElement = {
+    val (children, attrs, styles) = split(subs)
+    WebElement(elem.tag, elem.children ++ children, elem.attributes ++ attrs, elem.styles ++ styles)
+  }
+  
+  def applyRev(in: Input, out: Output): List[Input] = {
+    val elem = in._1
+    val subs = in._2
+    val expected_output = apply(elem, subs)
+    splitRev((out.children, out.attributes, out.styles))
+  }
+  
+  import ListSplit.allInterleavings
+}*/
 
 object Compose {
   def compose[A, B, C](f: A => B, g: B => C): A => C = (x: A) => g(f(x))

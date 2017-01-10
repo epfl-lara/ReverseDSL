@@ -143,6 +143,44 @@ class TypeSplitTest extends FunSuite with Matchers {
   }
 }
 
+class WebElementAdditionTest extends FunSuite with Matchers {
+  import TypeSplit._
+  import WebElementAddition._
+  val initArg1 = WebElement("div", Nil, Nil, List(WebStyle("display", "none")))
+  val initArg2 = (List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))
+  val sinit = WebElementAddition(initArg1, initArg2._1, initArg2._2, initArg2._3)
+  
+  // No modification
+  val reverseInit = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+    WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","100px")))
+  )
+  reverseInit.toList shouldEqual List((initArg1, initArg2._1, initArg2._2, initArg2._3))
+  
+  // Last element changed
+  val reverseInit2 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+    WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","200px")))
+  )
+  reverseInit2.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("display","none"))),List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px"))))
+  
+  // Added a child at the beginning
+  val reverseInit3 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+    WebElement("div",List(WebElement("pre",List(),List(),List()), WebElement("span",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","200px")))
+  )
+  reverseInit3.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("display","none"))),List(WebElement("pre",List(),List(),List()), WebElement("span",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px"))))
+  
+  // Changed the display
+  val reverseInit4 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+    WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","block"), WebStyle("width","100px"), WebStyle("height","100px")))
+  )
+  reverseInit4.toList shouldEqual List[Input]((WebElement("div",List(),List(),List(WebStyle("display","block"))),List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px"))))
+  
+  // Added a style before the original style
+  val reverseInit5 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+    WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("outline","1px solid black"), WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","100px")))
+  )
+  reverseInit5.toList shouldEqual List[Input]((WebElement("div",List(),List(),List(WebStyle("outline","1px solid black"), WebStyle("display","none"))),List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px"))))
+}
+
 class ComposeTest extends FunSuite with Matchers {
   import Compose._
   val f = (x: Int) => x - (x % 2)
