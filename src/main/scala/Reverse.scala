@@ -61,22 +61,38 @@ object Common {
 - The updated list of arguments along with which arguments are modified (to go faster to the expressions which should be modified without comparison)
 */
 
-trait ReverseOp {
+trait InputOutput {
   type Input
   type Output
-  def apply(in1: Input): Output
-  def unapply(in1: Input, out1: Output, out2: Output): Iterable[Input]
 }
 
-object StringReverse {
-  def append(s: String, t: String) = s+t
+// Reverse
+trait Reverse1 extends InputOutput {
+  def perform(in: Input)
+  def unperform(in1: Input, out2: Output): Iterable[Input]
+}
+
+// Reverse with one function
+trait Reverse2[A, B] extends InputOutput  {
+  def perform(in1: Input, f: A => B): Output
+  def unperform(in1: Input, f: A => B, fRev: B => Iterable[A], out2: Output): Iterable[Input]
+}
+
+object StringAppend extends Reverse1 {
+  type Input = (String, String)
+  type Output = String
+  def append(s: String, t: String): String = s+t
   
-  def appendRev(s: String, t: String, out: String): List[(String, String)] = {
-    if(s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
-      val keepFirstIntact = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
-      val keepSecondIntact = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
+  def perform(st: Input) = append(st._1, st._2)  
+  
+  def unperform(st: Input, out: Output): Iterable[Input] = {
+    val s = st._1
+    val t = st._2
+    if (s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
+      val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
+      val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
       //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
-      (keepFirstIntact ++ keepSecondIntact).filter(res => append(res._1, res._2) == out).sortBy{ case (s, t) =>
+      (keepFirstIntact ++ keepSecondIntact).filter(res => perform(res._1, res._2) == out).sortBy{ case (s, t) =>
         if(s.length > 0 && t.length > 0) {
           if(s(s.length - 1) == ' ' && t(0) == ' ') 10
           else if(s(s.length - 1) != ' ' && t(0) != ' ') 10
@@ -350,7 +366,7 @@ object WebElementAddition {
     (ifOriginalElemNotModified ++ ifAdditionsNotModified).distinct
   }
 }
-/*
+
 object WebElementComposition {
   import TypeSplit._
   type Input = (WebElement, List[Tree])
@@ -358,18 +374,13 @@ object WebElementComposition {
   
   def apply(elem: WebElement, subs: List[Tree]): WebElement = {
     val (children, attrs, styles) = split(subs)
-    WebElement(elem.tag, elem.children ++ children, elem.attributes ++ attrs, elem.styles ++ styles)
+    WebElementAddition(elem, children, attrs, styles)
   }
   
   def applyRev(in: Input, out: Output): List[Input] = {
-    val elem = in._1
-    val subs = in._2
-    val expected_output = apply(elem, subs)
-    splitRev((out.children, out.attributes, out.styles))
+    Nil // TODO
   }
-  
-  import ListSplit.allInterleavings
-}*/
+}
 
 object Compose {
   def compose[A, B, C](f: A => B, g: B => C): A => C = (x: A) => g(f(x))

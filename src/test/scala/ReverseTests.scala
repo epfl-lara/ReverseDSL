@@ -1,10 +1,10 @@
 import org.scalatest._
 
-class StringReverseTest extends FunSuite with Matchers {
-  import StringReverse._
+class StringAppendTest extends FunSuite with Matchers {
+  import StringAppend.{unperform => appendRev, _}
   def f = append(append("Hello", " "), "world")
-  def fRev(out: String): List[(String, String, String)] = appendRev("Hello ", "world", out).flatMap(leftRight => 
-    appendRev("Hello", " ", leftRight._1).map(lr => (lr._1, lr._2, leftRight._2))
+  def fRev(out: String): List[(String, String, String)] = appendRev(("Hello ", "world"), out).toList.flatMap(leftRight => 
+    appendRev(("Hello", " "), leftRight._1).map(lr => (lr._1, lr._2, leftRight._2))
   )
   test("Hello world decomposition") {
     fRev("Hello world") should equal(List(("Hello", " ", "world")))
