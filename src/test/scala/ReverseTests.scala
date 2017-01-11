@@ -1,4 +1,5 @@
 import org.scalatest._
+import shapeless.syntax.zipper._
 
 class StringAppendTest extends FunSuite with Matchers {
   import StringAppend.{unperform => appendRev, _}
@@ -180,6 +181,29 @@ class WebElementAdditionTest extends FunSuite with Matchers {
     WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("outline","1px solid black"), WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","100px")))
   )
   reverseInit5.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("outline","1px solid black"), WebStyle("display","none"))),List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px"))))
+}
+
+class WebElementCompositionTest extends FunSuite with Matchers {
+  import TypeSplit._
+  import WebElementComposition._
+  test("should compose and decompose elements correctly") {
+    val initArg1 = WebElement("div", Nil, Nil, List(WebStyle("display", "none")))
+    val initArg2 = List(WebStyle("width", "100px"), WebElement("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"))
+    val in = (initArg1, initArg2)
+    val sinit = WebElementComposition.perform(in)
+    // Verification that the function computes correctly
+    sinit shouldEqual WebElement("div", List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px")))
+    // Replacing an element in the argument's list.
+    WebElementComposition.unperform(in, WebElement("div", List(WebElement("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px")))).toList shouldEqual List((initArg1, initArg2.updated(1, WebElement("span"))))
+    // Adding an element at the end of the argument's list.
+    WebElementComposition.unperform(in, WebElement("div", List(WebElement("pre"), WebElement("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px")))).toList shouldEqual List((initArg1, List(WebStyle("width", "100px"), WebElement("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"), WebElement("span"))))
+    // Adding an element before one of the argument's list.
+    val r = WebElementComposition.unperform(in, WebElement("div", List(WebElement("span"), WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px")))).toList 
+    r should contain ((initArg1, List(WebStyle("width", "100px"), WebElement("span"), WebElement("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"))))
+    r should have size 2
+    // Replacing the main element
+    WebElementComposition.unperform(in, WebElement("div", List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "block"), WebStyle("width", "100px"), WebStyle("height", "100px")))).toList shouldEqual List((initArg1.copy(styles=List(WebStyle("display", "block"))), initArg2))
+  }
 }
 
 class ComposeTest extends FunSuite with Matchers {

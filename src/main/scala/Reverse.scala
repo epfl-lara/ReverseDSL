@@ -276,7 +276,7 @@ object TypeSplit extends Reverse1 {
   type Output = (List[WebElement], List[WebAttribute], List[WebStyle])
   import Interleavings._
   var displayNiceDSL = true
-  abstract class Tree
+  abstract class Tree extends Product with Serializable
   case class WebElement(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends Tree {
     override def toString = if(displayNiceDSL) "<." + tag + (if(children.nonEmpty || attributes.nonEmpty || styles.nonEmpty) (children ++ attributes ++ styles).mkString(", ") else "") else super.toString
   }
@@ -352,11 +352,14 @@ object TypeSplit extends Reverse1 {
   }
 }
 
-object WebElementAddition {
+object WebElementAddition extends Reverse1 {
   import TypeSplit._
   type Input = (WebElement, List[WebElement], List[WebAttribute], List[WebStyle])
   type Output = WebElement
   
+  def perform(in: Input) = apply(in._1, in._2, in._3, in._4)
+  def unperform(in: Input, out2: Output) = applyRev(in, out2)
+
   def apply(elem: WebElement, children: List[WebElement], attributes: List[WebAttribute], styles: List[WebStyle]): WebElement = {
     WebElement(elem.tag, elem.children ++ children, elem.attributes ++ attributes, elem.styles ++ styles)
   }
@@ -394,18 +397,22 @@ object WebElementAddition {
   }
 }
 
-object WebElementComposition {
-  import TypeSplit._
+// TODO: Test this.
+object WebElementComposition extends Reverse1 {
+  import TypeSplit.{WebElement, Tree, WebAttribute, WebStyle}
   type Input = (WebElement, List[Tree])
   type Output = WebElement
   
-  def apply(elem: WebElement, subs: List[Tree]): WebElement = {
-    val (children, attrs, styles) = split(subs)
-    WebElementAddition(elem, children, attrs, styles)
+  def perform(in: Input): WebElement = {
+    val (children, attrs, styles) = TypeSplit.perform(in._2)
+    WebElementAddition.perform(in._1, children, attrs, styles)
   }
-  
-  def applyRev(in: Input, out: Output): List[Input] = {
-    Nil // TODO
+
+  def unperform(in: Input, out: Output): Iterable[Input] = {
+    val (c, a, s) = TypeSplit.perform(in._2)
+    WebElementAddition.unperform((in._1, c, a, s), out).flatMap{ case (elem, c, a, s) => 
+      TypeSplit.unperform(in._2, (c, a, s)).map{ s => (elem, s) }
+    }
   }
 }
 /*
