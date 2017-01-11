@@ -1,52 +1,7 @@
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import shapeless.HList
 
-/*
-A Ground type is either a primitive type or a case class type.
-
-RevTyping[(A1, …, An)] = (RevTyping[A1], …, RevTyping[An]) for A1, … An non-Ground.
-
-If A is a tuple of types, let it decompose M the Ground subset of A, and 
-F is the pure function subset of A.
-RevTyping[A => B]  =   M => F => RevTyping[F] => Iterable[M]
-In particular, if A is itself a Ground type
-RevTyping[A => B]  = A => B => Iterable[A]
-
-For f a symbol of type F, let f_$rev : RevTyping[F] if it exists
-
-Rewriting rules:
-
-Let {{PROGRAM}} the result of executing PROGRAM
-Let’s define [[PROGRAM]](output) to be a "minimal" modification of PROGRAM producing output.
-If {{PROGRAM}} = output, [[PROGRAM]](output) = PROGRAM
-
-[[Apply(f,g)]](f_output) =
-{{f_$rev(g, f_output)}}.flatMap{ input =>
-  val programs = [[g]](input)
-  programs.map(program => Apply(f, program))
-}
-If some of the g’s are high-level functions, they must be named, have a
-
-For n≥ 2
-[[(InputProgram1, … InputProgramn)]](output1, … outputn) =
-[[InputProgram1]](output1).flatMap{ program =>
-  [[(InputProgram2, …InputProgramn)]](output2,....outputn).map{
-    case program2 =>
-       TupleApply(program, program2)
-  }
- }
-
-Actually, we should produce not just a list of possible outputs.
-We should produce a list index-changed new-value of possible argument modification, if only one argument is modified.
-
-if a had the value of 2 before, and now the result of a+3+a = 5,
-a+3+a should be viewed as an single expression so that we can solve it the following way.
-- Take all variables and try to modify their value.
-* Take all constants and try to modify their value.
-
-If there is an assignment a = X, we try to revert the program that produced X and get a lot of possible assignments.
-
-*/
+/* Could be used if we switched the computation from whole input to input diff */
 object Common {
   def updateArgs[A <: HList](in1: A, argsUpdate: List[(Int, Any)]): A = {
     ((in1 /: argsUpdate) {
@@ -55,22 +10,22 @@ object Common {
   }
 }
 
-/* What should be the output of an element of reverse?
-- The updated list of arguments (compile-time correct)
-- A list of pairs (index, value of arg modified) (compile-time not typing)
-- The updated list of arguments along with which arguments are modified (to go faster to the expressions which should be modified without comparison)
+/** Reverse trait
 */
-
-// Reverse
-trait Reverse1[A, B] {
+trait ~~>[A, B] extends (A => B) {
   type Input = A
   type Output = B
   def perform(in: Input): Output
   def unperform(in1: Option[Input], out2: Output): Iterable[Input]
+  final def apply(in: A) = perform(in)
   final def unperform(in1: Input, out2: Output): Iterable[Input] = unperform(Some(in1), out2)
+  final def unperform(out2: Output): Iterable[Input] = unperform(None, out2)
+  final def unapply(out: Output) = unperform(out)
+
+  def andThen[C](f: B ~~> C) = Compose(f, this)
 }
 
-object StringAppend extends Reverse1[(String, String), String] {
+object StringAppend extends  ((String, String) ~~> String) {
   def append(s: String, t: String): String = s+t
   
   def perform(st: Input): Output = append(st._1, st._2)
@@ -103,7 +58,7 @@ object StringExtractReverse {
   def substringRev(s: String, start: Int, end: Int, out: String) = s.substring(0, start) + out + s.substring(end)
 }*/
 
-object StringFormatReverse extends Reverse1[(String, List[Any]), String] {
+object StringFormatReverse extends ((String, List[Any]) ~~> String) {
   import java.util.regex.Pattern
   def format(s: String, args: List[Any]) = {
     //println(s"Calling '$s'.format(" + args.map(x => (x, x.getClass)).mkString(",") + ")")
@@ -186,7 +141,7 @@ object StringFormatReverse extends Reverse1[(String, List[Any]), String] {
   }
 }
 
-object IntReverse extends Reverse1[(Int, Int), Int] {
+object IntReverse extends ((Int, Int) ~~> Int) {
   def add(s: Int, t: Int) = s+t
   def perform(in: Input): Output = add(in._1, in._2)
   def unperform(in: Option[Input], out2: Output): Iterable[Input] = in match {
@@ -214,7 +169,7 @@ object IntValReverse {
   def addRev(s: Int, t: Int, out: Int) = ((i: Int) => (i, out-i))
 }
 
-class ListSplit[A](p: A => Boolean) extends Reverse1[List[A], (List[A], List[A])]{
+class ListSplit[A](p: A => Boolean) extends (List[A] ~~> (List[A], List[A])) {
   import Interleavings._
   
   def perform(in: Input): Output = split(in)
@@ -272,7 +227,7 @@ object WebTrees {
 }
 import WebTrees._
 
-object TypeSplit extends Reverse1[List[Tree], (List[WebElement], List[WebAttribute], List[WebStyle])] {
+object TypeSplit extends (List[Tree] ~~> (List[WebElement], List[WebAttribute], List[WebStyle])) {
   import Interleavings._
   def perform(in: Input): Output = split(in)
   def unperform(in1: Option[Input], out2: Output): Iterable[Input] = in1 match {
@@ -345,7 +300,7 @@ object TypeSplit extends Reverse1[List[Tree], (List[WebElement], List[WebAttribu
   }
 }
 
-object WebElementAddition extends Reverse1[(WebElement, (List[WebElement], List[WebAttribute], List[WebStyle])), WebElement] {
+object WebElementAddition extends ((WebElement, (List[WebElement], List[WebAttribute], List[WebStyle])) ~~> WebElement) {
   
   def perform(in: Input) = apply(in._1, in._2._1, in._2._2, in._2._3)
   def unperform(in: Option[Input], out2: Output) = in match {
@@ -390,7 +345,7 @@ object WebElementAddition extends Reverse1[(WebElement, (List[WebElement], List[
   }
 }
 
-object WebElementComposition extends Reverse1[(WebElement, List[Tree]), WebElement] {
+object WebElementComposition extends ((WebElement, List[Tree])  ~~> WebElement) {
   def perform(in: Input): Output = {
     WebElementAddition.perform(in._1, TypeSplit.perform(in._2))
   }
@@ -405,7 +360,7 @@ object WebElementComposition extends Reverse1[(WebElement, List[Tree]), WebEleme
   }
 }
 /*
-case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Iterable[A], gRev: C => Iterable[B]) extends Reverse1 {
+case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Iterable[A], gRev: C => Iterable[B]) extends ~~> {
   type Input = A
   type Output = C
   def perform(in: Input) = g(f(in))
@@ -415,7 +370,7 @@ case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Iterable[A], gRev: 
 }*/
 
 // Make sure the types agree !!
-case class Compose[A, B, C](a: Reverse1[B, C], b: Reverse1[A, B]) extends Reverse1[A, C] {
+case class Compose[A, B, C](a: B ~~> C, b: A ~~> B) extends (A ~~> C) {
   def perform(in: Input): Output = a.perform(b.perform(in).asInstanceOf[a.Input])
   def unperform(in: Option[Input], out2: Output) = {
    val intermediate_out = in.map(b.perform)
@@ -423,41 +378,82 @@ case class Compose[A, B, C](a: Reverse1[B, C], b: Reverse1[A, B]) extends Revers
   }
 }
 
-class Flatten[A] extends Reverse1[List[List[A]], List[A]] {
+case class Flatten[A]() extends (List[List[A]] ~~> List[A]) {
   def perform(in: Input) = flatten(in)
   def unperform(in: Option[Input], out2: Output) = in match {
     case None => List(List(out2))
     case Some(in) => flattenRev(in, out2)
   }
 
+  def allUnflattenings(out: List[A]): Stream[List[List[A]]] = {
+    out match {
+      case Nil => Stream(List())
+      case out => 
+        for{i <- Stream.from(1).take(out.length)
+            outhead = out.take(i)
+            outtail = out.drop(i)
+            other <- allUnflattenings(outtail)
+          } yield {
+          outhead :: other
+        }
+    }
+  }
+
   def flatten(l: List[List[A]]): List[A] = l.flatten
   
-  def flattenRev(l: List[List[A]], out: List[A]): List[List[List[A]]] = {
+  def flattenRev(l: List[List[A]], out: List[A]): Stream[List[List[A]]] = {
     l match {
-      case Nil => List(List(out))
-      case a::Nil => List(List(out))
-      case a::(q@(b::p)) => if(out.take(a.length) == a) {
-        flattenRev(q, out.drop(a.length)).map(a::_)
+      case Nil => 
+        if(out == Nil) Stream(List()) else
+        allUnflattenings(out) // We should create all possible decompositions of out.
+      //case a::Nil => if(a == out) List(List(out)) else allUnflattenings(out)
+      case a::q => if(out.take(a.length) == a) {
+        (if (out.length == a.length) {
+          Stream(List(a))
+        } else Stream.empty) #:::
+        (flattenRev(q, out.drop(a.length)).map(a::_))
       } else { // Something happened, a sequence inserted or deleted, or some elements changed.
-        if(out == a.take(out.length)) { // it was a prefix.
-          List(List(out))
+        if (out == a.take(out.length)) { // it was a prefix of the current list.
+          Stream(List(out))
         } else {
-          val aZipOut = a.zip(out) // of length a.length
-          val sameStart = aZipOut.takeWhile(x => x._1 == x._2) // of length < a.length
-          val missedSeq = a.drop(sameStart.length)
-          val restartIndex = out.indexOfSlice(missedSeq)
-          if(restartIndex != -1) { // There has been an addition in the output, but we can recover.
-            val t = restartIndex + missedSeq.length
-            flattenRev(q, out.drop(t)).map(out.take(t)::_)
-          } else { // Maybe there has been a deletion in the output.
-            for{sizeOfDeletion <- (1 to (a.length - sameStart.length)).toList
-                lookingFor = a.drop(sameStart.length + sizeOfDeletion)
-                indexOfLookingFor = (if(lookingFor.length > 0) out.indexOfSlice(lookingFor, sameStart.length)
-                                     else sameStart.length)
-                if indexOfLookingFor != -1
-                t = indexOfLookingFor + lookingFor.length
-                y <- flattenRev(q, out.drop(t))
-            } yield (out.take(t)::y)
+          val expected_flatten = flatten(l)
+          if (out.endsWith(expected_flatten)) {
+            val missing = out.dropRight(expected_flatten.length)
+            ((missing ++ a) :: q) #:: (
+            for{ toTakeAlone <- Stream.from(1).take(missing.length)
+                 alone = missing.take(toTakeAlone)
+                 missingAttached = missing.drop(toTakeAlone)
+                 alone_decomposition <- allUnflattenings(alone)
+                 } yield {
+              alone_decomposition ++ ((missingAttached ++ a)::q)
+            })
+          } else if (expected_flatten.endsWith(out)) { // Elements have been deleted.
+            val flattenq = flatten(q)
+            if (flattenq.endsWith(out)) {
+              flattenRev(q, out)
+            } else { // out is slightly longer than q and ends with flattenQ.
+              val missing = out.dropRight(flattenq.length)
+              assert(a.endsWith(missing))
+              flattenRev(a.drop(a.length - missing.length)::q, out)
+            }
+          } else {
+            val aZipOut = a.zip(out) // of length a.length
+            val sameStart = aZipOut.takeWhile(x => x._1 == x._2) // of length < a.length
+            val missedSeq = a.drop(sameStart.length)
+            val restartIndex = out.indexOfSlice(missedSeq)
+            if (restartIndex != -1) { // There has been an addition in the output, but we can recover.
+              val t = restartIndex + missedSeq.length
+              flattenRev(q, out.drop(t)).map(out.take(t)::_)
+            } else { // Maybe there has been a deletion in the output.
+              for{sizeOfDeletion <- Stream.from(1).take(a.length - sameStart.length)
+                  lookingFor = a.drop(sameStart.length + sizeOfDeletion)
+                  indexOfLookingFor = (if(lookingFor.length > 0) out.indexOfSlice(lookingFor, sameStart.length)
+                                       else sameStart.length)
+                  if indexOfLookingFor != -1
+                  t = indexOfLookingFor + lookingFor.length
+                  y <- flattenRev(q, out.drop(t))
+              } yield (out.take(t)::y)
+            }
           }
 //          ini =a[1 2 3 4 9] [5 6] [] [7] // restartIndex != -1
 //          out = [1 2 3 2 4 9 5 6 7]
@@ -471,33 +467,33 @@ class Flatten[A] extends Reverse1[List[List[A]], List[A]] {
   
 }
 
-case class MapReverse[A, B](fr: Reverse1[A, B]) extends Reverse1[List[A], List[B]] {
-  val f = fr.perform _
-  val fRev = (b: B) => fr.unperform(null.asInstanceOf[A], b).toList
-  def perform(in: Input) = map(in, f)
+case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
+  val f: A => B = fr.perform _
+  val fRev = (in: Option[A], b: B) => fr.unperform(in, b).toList
+  def perform(in: Input) = map(in)
   def unperform(in: Option[Input], out2: Output): Iterable[Input] = in match {
-    case None => mapRev(Nil, f, fRev, out2)
-    case Some(in) => mapRev(in, f, fRev, out2)
+    case None => mapRev(Nil, out2)
+    case Some(in) => mapRev(in, out2)
   }
 
-  def map[A, B](l: List[A], f: A => B): List[B] = l map f
+  def map(l: List[A]): List[B] = l map f
   
-  def combinatorialMap[A, B](l: List[A], f: A => List[B]): List[List[B]] = {
+  def combinatorialMap(l: List[B]): List[List[A]] = {
     l match {
       case Nil => List(Nil)
-      case a::b => f(a).flatMap(fb => combinatorialMap(b, f).map(fb::_))
+      case a::b => fRev(None, a).flatMap(fb => combinatorialMap(b).map(fb::_))
     }
   }
   
-  def mapRev[A, B](l: List[A], f: A => B, fRev: B => List[A], out: List[B]): List[List[A]] = {
+  def mapRev(l: List[A], out: List[B]): List[List[A]] = {
     l match {
       case Nil => 
         out match {
           case Nil => List(Nil)
           /*case outhd::Nil => fRev(outhd).map(List(_))*/
           case outhd::outtail => 
-            val revOutHd = fRev(outhd)
-            for{ sol <- mapRev(l, f, fRev, outtail)
+            val revOutHd = fRev(None, outhd)
+            for{ sol <- mapRev(l, outtail)
                  other_a <- revOutHd } yield {
               other_a :: sol
             }
@@ -514,32 +510,32 @@ case class MapReverse[A, B](fr: Reverse1[A, B]) extends Reverse1[List[A], List[B
              p.map(List(_))
            }*/
          case outhd::outtail =>
-           val revOutHd = fRev(outhd)
+           val revOutHd = fRev(Some(hd), outhd)
            val p = revOutHd.filter(_ == hd)
            if(p.isEmpty) { // Looking for a deleted element maybe ?
              val expectedOut = l map f
              val k = expectedOut.indexOfSlice(out)
              if(k > 0) { // There has been a deletion, but we are able to find the remaining elements.
-               mapRev(l.drop(k), f, fRev, out)
+               mapRev(l.drop(k), out)
              } else {
                val k2 = out.indexOfSlice(expectedOut)
                if(k2 > 0) { // Some elements were added at some point.
-                 val tailSolutions = mapRev(l, f, fRev, out.drop(k2))
+                 val tailSolutions = mapRev(l, out.drop(k2))
                  // Now for each of out.take(k2), we take all possible inverses.
-                 combinatorialMap(out.take(k2), fRev).flatMap(l => tailSolutions.map(l ++ _))
+                 combinatorialMap(out.take(k2)).flatMap(l => tailSolutions.map(l ++ _))
                } else {
-                 revOutHd.flatMap(s => mapRev(tl, f, fRev, outtail).map(s::_))
+                 revOutHd.flatMap(s => mapRev(tl, outtail).map(s::_))
                }
              }
            } else {
-             p.flatMap(s => mapRev(tl, f, fRev, outtail).map(s::_))
+             p.flatMap(s => mapRev(tl, outtail).map(s::_))
            }
        }
     }
   }// ensuring res => res.forall(sol => map(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, map(sol, f)))
 }
 
-case class FilterReverse[A](f: A => Boolean) extends Reverse1[List[A], List[A]] {
+case class FilterReverse[A](f: A => Boolean) extends (List[A] ~~> List[A]) {
   def perform(in: Input) = filter(in, f)
   def unperform(in: Option[Input], out2: Output) = in match {
     case None => filterRev(Nil, f, out2)
@@ -585,7 +581,7 @@ case class FilterReverse[A](f: A => Boolean) extends Reverse1[List[A], List[A]] 
   }// ensuring res => res.forall(sol => filter(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, filter(sol, f))
 }
 
-case class FlatMap[A, B](fr: Reverse1[A, List[B]]) extends Reverse1[List[A], List[B]] {
+case class FlatMap[A, B](fr: A ~~> List[B]) extends (List[A] ~~> List[B]) {
   val f = fr.perform _
   val fRev = (x: List[B]) => fr.unperform(None, x).toList
   def perform(in: Input) = flatMap(in, f)

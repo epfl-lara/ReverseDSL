@@ -1,25 +1,26 @@
 import org.scalatest._
 import shapeless.syntax.zipper._
+import Matchers._
 
-class StringAppendTest extends FunSuite with Matchers {
+class StringAppendTest extends FunSuite {
   import StringAppend.{unperform => appendRev, _}
   def f = append(append("Hello", " "), "world")
   def fRev(out: String): List[(String, String, String)] = appendRev(("Hello ", "world"), out).toList.flatMap(leftRight => 
     appendRev(("Hello", " "), leftRight._1).map(lr => (lr._1, lr._2, leftRight._2))
   )
   test("Hello world decomposition") {
-    fRev("Hello world") should equal(List(("Hello", " ", "world")))
-    fRev("Hello Buddy") should equal(List(("Hello", " ", "Buddy")))
-    fRev("Hello big world") should equal(List(("Hello"," ","big world"), ("Hello"," big ","world"), ("Hello big"," ","world")))
-    fRev("Hello a-world") should equal(List(("Hello"," ","a-world"), ("Hello"," a-","world")))
-    fRev("Hello-a world") should equal(List(("Hello-a"," ","world"), ("Hello","-a ","world")))
-    fRev("Hello  world") should equal(List(("Hello","  ","world"), ("Hello "," ","world"), ("Hello"," "," world")))
-    fRev("Hi world") should equal(List(("Hi"," ","world")))
-    fRev("Hi Buddy") should equal(List())
+    fRev("Hello world") shouldEqual List(("Hello", " ", "world"))
+    fRev("Hello Buddy") shouldEqual List(("Hello", " ", "Buddy"))
+    fRev("Hello big world") shouldEqual List(("Hello"," ","big world"), ("Hello"," big ","world"), ("Hello big"," ","world"))
+    fRev("Hello a-world") shouldEqual List(("Hello"," ","a-world"), ("Hello"," a-","world"))
+    fRev("Hello-a world") shouldEqual List(("Hello-a"," ","world"), ("Hello","-a ","world"))
+    fRev("Hello  world") shouldEqual List(("Hello","  ","world"), ("Hello "," ","world"), ("Hello"," "," world"))
+    fRev("Hi world") shouldEqual List(("Hi"," ","world"))
+    fRev("Hi Buddy") shouldEqual List()
   }
 }
 
-class StringFormatReverseTest extends FunSuite with Matchers {
+class StringFormatReverseTest extends FunSuite  {
   import StringFormatReverse._
   test("Formatting reverse decomposition") {
     formatRev("%s %s %d", List("Hello", "world", 42), "Hello buddy 42") shouldEqual List(("%s %s %d", List("Hello", "buddy", 42)))
@@ -33,21 +34,21 @@ class StringFormatReverseTest extends FunSuite with Matchers {
 }
 
 
-class IntReverseTest extends FunSuite with Matchers {
+class IntReverseTest extends FunSuite  {
   import IntReverse._
 
   def fRev(s: Int) = addRev(5, 1, s).flatMap(lr =>
     addRev(2, 3, lr._1).map(lr2 => (lr2._1, lr2._2, lr._2))
   )
   test("(2+3)+1 = 6, 5, 4, 7 repair") {
-    fRev(6) should equal(List((2,3,1)))
-    fRev(5) should equal(List((2,3,0), (2,2,1), (1,3,1)))
-    fRev(4) should equal(List((2,3,-1), (2,1,1), (0,3,1)))
-    fRev(7) should equal(List((2,3,2), (2,4,1), (3,3,1)))
+    fRev(6) shouldEqual List((2,3,1))
+    fRev(5) shouldEqual List((2,3,0), (2,2,1), (1,3,1))
+    fRev(4) shouldEqual List((2,3,-1), (2,1,1), (0,3,1))
+    fRev(7) shouldEqual List((2,3,2), (2,4,1), (3,3,1))
   }
 }
 
-class IntValReverseTest extends FunSuite with Matchers {
+class IntValReverseTest extends FunSuite  {
   import IntValReverse._
   
   val source = """
@@ -119,7 +120,7 @@ We test '3 = 3 gives miraculously one solution
   }
 }
 
-class ListSplitTest extends FunSuite with Matchers {
+class ListSplitTest extends FunSuite  {
   val f = (x: Int) => x % 2 == 0
   val b = new ListSplit[Int](f)
   import b._
@@ -131,7 +132,7 @@ class ListSplitTest extends FunSuite with Matchers {
 }
 import WebTrees._
 
-class TypeSplitTest extends FunSuite with Matchers {
+class TypeSplitTest extends FunSuite  {
   import TypeSplit._
   
   test("Recovering split based on type") {
@@ -146,7 +147,7 @@ class TypeSplitTest extends FunSuite with Matchers {
   }
 }
 
-class WebElementAdditionTest extends FunSuite with Matchers {
+class WebElementAdditionTest extends FunSuite  {
   import TypeSplit._
   import WebElementAddition._
   val initArg1 = WebElement("div", Nil, Nil, List(WebStyle("display", "none")))
@@ -184,7 +185,7 @@ class WebElementAdditionTest extends FunSuite with Matchers {
   reverseInit5.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("outline","1px solid black"), WebStyle("display","none"))),(List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px")))))
 }
 
-class WebElementCompositionTest extends FunSuite with Matchers {
+class WebElementCompositionTest extends FunSuite  {
   import TypeSplit._
   import WebElementComposition._
   test("should compose and decompose elements correctly") {
@@ -207,14 +208,14 @@ class WebElementCompositionTest extends FunSuite with Matchers {
   }
 }
 
-class ComposeTest extends FunSuite with Matchers {
+class ComposeTest extends FunSuite  {
   
-  object F extends Reverse1[Int, Int] {
+  object F extends ~~>[Int, Int] {
     def perform(x: Int) = x - (x % 2)
     def unperform(in: Option[Int], x: Int) = if(x % 2 == 0) List(x, x+1) else Nil
   }
 
-  object G extends Reverse1[Int, Int]  {
+  object G extends ~~>[Int, Int]  {
     def perform(x: Int) = x - (x % 3)
     def unperform(in: Option[Int], x: Int) = if(x % 3 == 0) List(x, x+1, x+2) else Nil
   }
@@ -230,7 +231,7 @@ class ComposeTest extends FunSuite with Matchers {
   }
 }
 
-class FlattenTest extends FunSuite with Matchers {
+class FlattenTest extends FunSuite  {
   val c = new Flatten[Int]
   import c._
 
@@ -252,8 +253,8 @@ class FlattenTest extends FunSuite with Matchers {
   }
 }
 
-class MapReverseTest extends FunSuite with Matchers {
-  object f extends Reverse1[Int, Int] {
+class MapReverseTest extends FunSuite  {
+  object f extends ~~>[Int, Int] {
     def perform(x: Int) = x - (x%2)
     def unperform(in: Option[Int], x: Int) =
       if(x % 2 == 0) List(x, x+1) else Nil
@@ -272,7 +273,7 @@ class MapReverseTest extends FunSuite with Matchers {
   }
 }
 
-class FilterReverseTest extends FunSuite with Matchers {
+class FilterReverseTest extends FunSuite  {
   val isEven = (x: Int) => x % 2 == 0
   val c = FilterReverse(isEven)
   import c.unperform
@@ -290,11 +291,64 @@ class FilterReverseTest extends FunSuite with Matchers {
   }
 }
 
+// Combines map and flatten directly.
+class FlatMapByComposeTest extends FunSuite  {
+  object f extends ~~>[Int, List[Int]] {
+    def perform(x: Int) = if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
+    def unperform(in: Option[Int], lx: List[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
+      if(lx(0) % 4 == 0) List(lx(0))
+      else if(lx(0) % 4 == 2) List(lx(1))
+      else Nil
+    } else if(lx.length == 2 && lx(1) == lx(0) + 1) {
+      if(lx(0) % 4 == 3) List(lx(0)-1)
+      else if(lx(0) % 4 == 0) List(lx(1))
+      else Nil
+    } else Nil
+  }
+
+  val c = MapReverse(f) andThen Flatten[Int]()
+  
+  // f(0) ++ f(2) == f(1) ++ f(3)
+  // f(0) == [0, 1, 2]
+  // f(1) == [0, 1]
+  // f(2) == [3, 4]
+  // f(3) == [2, 3, 4]
+  
+  object fEven extends ~~>[Int, List[Int]] {
+     def perform(x: Int) = if(x%2 == 0) List(x/2) else Nil
+     def unperform(in: Option[Int], x: List[Int]) = if(x.length == 1) List(x(0)*2) else if(x.length == 0 && in.nonEmpty) List(in.get) else Nil
+  }
+ 
+  val d = MapReverse(fEven) andThen Flatten[Int]()
+
+  test("Reverse flatmap - complicated") {
+    import c.unperform
+    Flatten[Int]().unperform(Some(Nil), List(0, 1, 2, 3, 4)) should contain (List(List(0, 1, 2), List(3, 4)))
+    unperform(Nil, List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3), List(0, 2))
+    unperform(List(1, 3), List(0, 1, 2, 3, 4)) should contain(List(1, 3))
+    unperform(List(0, 2), List(0, 1, 2, 3, 4)) should contain(List(0, 2))
+    unperform(List(0, 2), List(0, 1, 2, 3, 4, 0, 1)) should contain(List(0, 2, 1)) // Addition at the end
+    unperform(List(0, 2), List(0, 1, 2, 0, 1, 3, 4)) should contain(List(0, 1, 2)) // Addition in the middle
+    unperform(List(0, 2), List(0, 1, 0, 1, 2, 3, 4)) should contain(List(1, 0, 2)) // Addition at the beg.
+    unperform(List(0, 2), List(3, 4)) should contain(List(2)) // Deletion of beginning
+    unperform(List(0, 2), List(0, 1, 2)) should contain(List(0)) // Deletion of end
+    unperform(List(2), List(2, 3, 4)) should contain(List(3)) // Change
+    unperform(List(0, 1, 2), List(0, 1, 2, 0, 1, 2, 3, 4)) should contain(List(0, 1, 3)) // Change
+    unperform(List(1, 3), List(0, 1, 0, 1, 2, 3, 4)) should contain(List(1, 1, 3)) // Addition at beg.
+  }
+  test("Reverse flatmap - even") {
+    import d.unperform
+
+    // Keep elements producing empty lists
+    unperform(List(1, 2, 3, 4, 5), List(1, 2)) should contain(List(1, 2, 3, 4, 5))
+    unperform(List(1, 2, 3, 4, 5), List(1, 3, 2)) should contain(List(1, 2, 3, 6, 4, 5))
+    unperform(List(1, 2, 3, 6, 4, 5), List(1, 2)) should contain(List(1, 2, 3, 4, 5))
+  }
+}
 
 // Combines map and flatten directly.
-class FlatMapTest extends FunSuite with Matchers {
-  
-  object f extends Reverse1[Int, List[Int]] {
+class FlatMapTest extends FunSuite  {
+  object f extends ~~>[Int, List[Int]] {
     def perform(x: Int) = if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
     def unperform(in: Option[Int], lx: List[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
       if(lx(0) % 4 == 0) List(lx(0))
@@ -315,7 +369,7 @@ class FlatMapTest extends FunSuite with Matchers {
   // f(2) == [3, 4]
   // f(3) == [2, 3, 4]
   
-  object fEven extends Reverse1[Int, List[Int]] {
+  object fEven extends ~~>[Int, List[Int]] {
      def perform(x: Int) = if(x%2 == 0) List(x/2) else Nil
      def unperform(in: Option[Int], x: List[Int]) = if(x.length == 1) List(x(0)*2) else Nil
   }
