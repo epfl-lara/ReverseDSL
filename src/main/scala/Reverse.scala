@@ -61,43 +61,37 @@ object Common {
 - The updated list of arguments along with which arguments are modified (to go faster to the expressions which should be modified without comparison)
 */
 
-trait InputOutput {
-  type Input
-  type Output
-}
-
 // Reverse
-trait Reverse1 extends InputOutput {
+trait Reverse1[A, B] {
+  type Input = A
+  type Output = B
   def perform(in: Input): Output
-  def unperform(in1: Input, out2: Output): Iterable[Input]
+  def unperform(in1: Option[Input], out2: Output): Iterable[Input]
+  final def unperform(in1: Input, out2: Output): Iterable[Input] = unperform(Some(in1), out2)
 }
 
-// Reverse with one function
-trait Reverse2[A, B] extends InputOutput  {
-  def perform(in1: Input, f: A => B): Output
-  def unperform(in1: Input, f: A => B, fRev: B => Iterable[A], out2: Output): Iterable[Input]
-}
-
-object StringAppend extends Reverse1 {
-  type Input = (String, String)
-  type Output = String
+object StringAppend extends Reverse1[(String, String), String] {
   def append(s: String, t: String): String = s+t
   
-  def perform(st: Input): Output = append(st._1, st._2)  
+  def perform(st: Input): Output = append(st._1, st._2)
   
-  def unperform(st: Input, out: Output): Iterable[Input] = {
-    val s = st._1
-    val t = st._2
-    if (s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
-      val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
-      val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
-      //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
-      (keepFirstIntact ++ keepSecondIntact).filter(res => perform(res._1, res._2) == out).sortBy{ case (s, t) =>
-        if(s.length > 0 && t.length > 0) {
-          if(s(s.length - 1) == ' ' && t(0) == ' ') 10
-          else if(s(s.length - 1) != ' ' && t(0) != ' ') 10
-          else 0
-        } else 5
+  def unperform(st: Option[Input], out: Output): Iterable[Input] = {
+    st match {
+      case None => List((out, "")).distinct
+      case Some(st) =>
+      val s = st._1
+      val t = st._2
+      if (s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
+        val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
+        val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
+        //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
+        (keepFirstIntact ++ keepSecondIntact).filter(res => perform(res._1, res._2) == out).sortBy{ case (s, t) =>
+          if(s.length > 0 && t.length > 0) {
+            if(s(s.length - 1) == ' ' && t(0) == ' ') 10
+            else if(s(s.length - 1) != ' ' && t(0) != ' ') 10
+            else 0
+          } else 5
+        }
       }
     }
   }// ensuring { ress => ress.forall(res => append(res._1, res._2) == out) }
@@ -109,9 +103,7 @@ object StringExtractReverse {
   def substringRev(s: String, start: Int, end: Int, out: String) = s.substring(0, start) + out + s.substring(end)
 }*/
 
-object StringFormatReverse extends Reverse1 {
-  type Input = (String, List[Any])
-  type Output = String
+object StringFormatReverse extends Reverse1[(String, List[Any]), String] {
   import java.util.regex.Pattern
   def format(s: String, args: List[Any]) = {
     //println(s"Calling '$s'.format(" + args.map(x => (x, x.getClass)).mkString(",") + ")")
@@ -119,7 +111,13 @@ object StringFormatReverse extends Reverse1 {
   }
   def perform(in: Input) = format(in._1, in._2)
   
-  def unperform(in: Input, out2: Output): Iterable[Input] = formatRev(in._1, in._2, out2)
+  def unperform(in: Option[Input], out2: Output): Iterable[Input] = 
+    in match {
+    case None =>
+      List(("%s", List(out2)))
+    case Some(in) =>
+      formatRev(in._1, in._2, out2)
+  }
 
   // Parsing !
   def formatRev(s: String, args: List[Any], out: String): List[(String, List[Any])] = {
@@ -134,17 +132,6 @@ object StringFormatReverse extends Reverse1 {
     val substrings = ((ListBuffer[(Int, Int, String)](), 0) /: (splitters :+ ((s.length, s.length, "", "", "")))) {
       case ((lb, prevIndex), (startIndex, endIndex, _, _, _)) => (lb += ((prevIndex, startIndex, s.substring(prevIndex, startIndex))), endIndex)
     }._1.toList
-    // What if indexes is not reversible? For example, indexes = [1, 1]
-    //val reverseIndexes = new Array[Int](indexes.length)
-    /*i = 0
-    while (i < indexes.length) {
-      reverseIndexes(indexes(i)) = i
-      i+=1
-    }
-    def reverse(permutation: Array[Int], l: List[Any]): List[Any] = {
-      val input = l.toArray
-      (0 until input.length).toList.map(i => input(permutation(i)))
-    }*/
     
     // given the elements, put them in the right order. Provides alternatives.
     def reverse(indexes: IndexedSeq[Int], l: List[Any]): List[List[Any]] = {
@@ -158,14 +145,11 @@ object StringFormatReverse extends Reverse1 {
       // zipped {1 -> List(a), 2 -> List(b)} =>  List(List(a, b))
       // zipped {2 -> List(b), 3 -> List(c), 1 -> List(a)} =>  List(List(a, b, c))
       // zipped {1 -> List(a, c), 2 -> List(b)} =>  List(List(a, b), List(c, b))
-      //val res = 
       (List(List[Any]()) /: (argsLength to 1 by -1)) {
         case (lb, i) =>
           val maps = zipped.getOrElse(i-1, List(args(i-1)))
           maps.flatMap(pos => lb.map(pos::_)).toList.distinct
       }
-      //println(res)
-      //res
     }
     
     // Replace all splitters by regular expressions to pattern match against anything.
@@ -202,12 +186,13 @@ object StringFormatReverse extends Reverse1 {
   }
 }
 
-object IntReverse extends Reverse1 {
-  type Input = (Int, Int)
-  type Output = Int
+object IntReverse extends Reverse1[(Int, Int), Int] {
   def add(s: Int, t: Int) = s+t
   def perform(in: Input): Output = add(in._1, in._2)
-  def unperform(in: Input, out2: Output): Iterable[Input] = addRev(in._1, in._2, out2)
+  def unperform(in: Option[Input], out2: Output): Iterable[Input] = in match {
+    case None => List((out2, 0))
+    case Some(in) => addRev(in._1, in._2, out2)
+  }
   
   def addRev(s: Int, t: Int, out: Int): List[(Int, Int)] = {
     if(s + t == out) List((s, t)) else
@@ -229,13 +214,14 @@ object IntValReverse {
   def addRev(s: Int, t: Int, out: Int) = ((i: Int) => (i, out-i))
 }
 
-class ListSplit[A](p: A => Boolean) extends Reverse1 {
+class ListSplit[A](p: A => Boolean) extends Reverse1[List[A], (List[A], List[A])]{
   import Interleavings._
-  type Input = List[A]
-  type Output = (List[A], List[A])
   
   def perform(in: Input): Output = split(in)
-  def unperform(in: Input, out2: Output) = splitRev(in, out2)
+  def unperform(in: Option[Input], out2: Output) = in match {
+    case None => List(out2._1 ++ out2._2)
+    case Some(in) => splitRev(in, out2)
+  }
   
   def split(l: List[A]): (List[A], List[A]) = l match {
     case Nil => (Nil, Nil)
@@ -271,10 +257,7 @@ class ListSplit[A](p: A => Boolean) extends Reverse1 {
   }
 }
 
-object TypeSplit extends Reverse1 {
-  type Input = List[Tree]
-  type Output = (List[WebElement], List[WebAttribute], List[WebStyle])
-  import Interleavings._
+object WebTrees {
   var displayNiceDSL = true
   abstract class Tree extends Product with Serializable
   case class WebElement(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends Tree {
@@ -286,8 +269,18 @@ object TypeSplit extends Reverse1 {
   case class WebStyle(name: String, value: String) extends Tree {
     override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
   }
+}
+import WebTrees._
+
+object TypeSplit extends Reverse1[List[Tree], (List[WebElement], List[WebAttribute], List[WebStyle])] {
+  import Interleavings._
   def perform(in: Input): Output = split(in)
-  def unperform(in1: Input, out2: Output): Iterable[Input] = splitRev(in1, out2)
+  def unperform(in1: Option[Input], out2: Output): Iterable[Input] = in1 match {
+    case None =>
+      List(out2._1 ++ out2._2 ++ out2._3)
+    case Some(in1) =>
+      splitRev(in1, out2)
+  }
   
   def split(l: List[Tree]): (List[WebElement], List[WebAttribute], List[WebStyle]) = l match {
     case Nil => (Nil, Nil, Nil)
@@ -352,13 +345,13 @@ object TypeSplit extends Reverse1 {
   }
 }
 
-object WebElementAddition extends Reverse1 {
-  import TypeSplit._
-  type Input = (WebElement, List[WebElement], List[WebAttribute], List[WebStyle])
-  type Output = WebElement
+object WebElementAddition extends Reverse1[(WebElement, (List[WebElement], List[WebAttribute], List[WebStyle])), WebElement] {
   
-  def perform(in: Input) = apply(in._1, in._2, in._3, in._4)
-  def unperform(in: Input, out2: Output) = applyRev(in, out2)
+  def perform(in: Input) = apply(in._1, in._2._1, in._2._2, in._2._3)
+  def unperform(in: Option[Input], out2: Output) = in match {
+    case None => List((out2, (Nil, Nil, Nil)))
+    case Some(in) => applyRev(in, out2)
+  }
 
   def apply(elem: WebElement, children: List[WebElement], attributes: List[WebAttribute], styles: List[WebStyle]): WebElement = {
     WebElement(elem.tag, elem.children ++ children, elem.attributes ++ attributes, elem.styles ++ styles)
@@ -366,18 +359,18 @@ object WebElementAddition extends Reverse1 {
   
   def applyRev(in: Input, out: Output): List[Input] = {
     val elem = in._1
-    val children = in._2
-    val attributes = in._3
-    val styles = in._4
+    val children = in._2._1
+    val attributes = in._2._2
+    val styles = in._2._3
     // If the original element could have been not modified
     val ifOriginalElemNotModified : List[Input] = if(
         out.children.take(elem.children.length) == elem.children &&
         out.attributes.take(elem.attributes.length) == elem.attributes &&
         out.styles.take(elem.styles.length) == elem.styles) {
       List((elem,
-            out.children.drop(elem.children.length),
+            (out.children.drop(elem.children.length),
             out.attributes.drop(elem.attributes.length),
-            out.styles.drop(elem.styles.length))
+            out.styles.drop(elem.styles.length)))
       )
     } else Nil
     val ifAdditionsNotModified : List[Input] = if(
@@ -388,30 +381,26 @@ object WebElementAddition extends Reverse1 {
         out.children.dropRight(children.length),
         out.attributes.dropRight(attributes.length),
         out.styles.dropRight(styles.length)),
-           children,
+           (children,
            attributes,
-           styles
+           styles)
         ))
     } else Nil
     (ifOriginalElemNotModified ++ ifAdditionsNotModified).distinct
   }
 }
 
-// TODO: Test this.
-object WebElementComposition extends Reverse1 {
-  import TypeSplit.{WebElement, Tree, WebAttribute, WebStyle}
-  type Input = (WebElement, List[Tree])
-  type Output = WebElement
-  
-  def perform(in: Input): WebElement = {
-    val (children, attrs, styles) = TypeSplit.perform(in._2)
-    WebElementAddition.perform(in._1, children, attrs, styles)
+object WebElementComposition extends Reverse1[(WebElement, List[Tree]), WebElement] {
+  def perform(in: Input): Output = {
+    WebElementAddition.perform(in._1, TypeSplit.perform(in._2))
   }
 
-  def unperform(in: Input, out: Output): Iterable[Input] = {
-    val (c, a, s) = TypeSplit.perform(in._2)
-    WebElementAddition.unperform((in._1, c, a, s), out).flatMap{ case (elem, c, a, s) => 
-      TypeSplit.unperform(in._2, (c, a, s)).map{ s => (elem, s) }
+  def unperform(in: Option[Input], out2: Output): Iterable[Input] = in match {
+    case None => List((out2, Nil))
+    case Some(in) =>
+    val originalMiddle = TypeSplit.perform(in._2)
+    WebElementAddition.unperform((in._1, originalMiddle), out2).flatMap{ case (elem, cas) => 
+      TypeSplit.unperform(in._2, cas).map{ s => (elem, s) }
     }
   }
 }
@@ -426,22 +415,20 @@ case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Iterable[A], gRev: 
 }*/
 
 // Make sure the types agree !!
-case class Compose(a: Reverse1, b: Reverse1) extends Reverse1 {
-  type Input = b.Input
-  type Output = a.Output
-
+case class Compose[A, B, C](a: Reverse1[B, C], b: Reverse1[A, B]) extends Reverse1[A, C] {
   def perform(in: Input): Output = a.perform(b.perform(in).asInstanceOf[a.Input])
-  def unperform(in: Input, out2: Output) = {
-   val intermediate_out = b.perform(in)
-   a.unperform(intermediate_out.asInstanceOf[a.Input], out2).flatMap(x => b.unperform(in, x.asInstanceOf[b.Output]))
+  def unperform(in: Option[Input], out2: Output) = {
+   val intermediate_out = in.map(b.perform)
+   a.unperform(intermediate_out, out2).flatMap(x => b.unperform(in, x))
   }
 }
 
-class Flatten[A] extends Reverse1 {
-  type Input = List[List[A]]
-  type Output = List[A]
+class Flatten[A] extends Reverse1[List[List[A]], List[A]] {
   def perform(in: Input) = flatten(in)
-  def unperform(in: Input, out2: Output) = flattenRev(in, out2)
+  def unperform(in: Option[Input], out2: Output) = in match {
+    case None => List(List(out2))
+    case Some(in) => flattenRev(in, out2)
+  }
 
   def flatten(l: List[List[A]]): List[A] = l.flatten
   
@@ -484,11 +471,14 @@ class Flatten[A] extends Reverse1 {
   
 }
 
-case class MapReverse[A, B](f: A => B, fRev: B => List[A]) extends Reverse1 {
-  type Input = List[A]
-  type Output = List[B]
+case class MapReverse[A, B](fr: Reverse1[A, B]) extends Reverse1[List[A], List[B]] {
+  val f = fr.perform _
+  val fRev = (b: B) => fr.unperform(null.asInstanceOf[A], b).toList
   def perform(in: Input) = map(in, f)
-  def unperform(in: Input, out2: Output) = mapRev(in, f, fRev, out2)
+  def unperform(in: Option[Input], out2: Output): Iterable[Input] = in match {
+    case None => mapRev(Nil, f, fRev, out2)
+    case Some(in) => mapRev(in, f, fRev, out2)
+  }
 
   def map[A, B](l: List[A], f: A => B): List[B] = l map f
   
@@ -549,11 +539,12 @@ case class MapReverse[A, B](f: A => B, fRev: B => List[A]) extends Reverse1 {
   }// ensuring res => res.forall(sol => map(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, map(sol, f)))
 }
 
-case class FilterReverse[A](f: A => Boolean) extends Reverse1 {
-  type Input = List[A]
-  type Output = List[A]
+case class FilterReverse[A](f: A => Boolean) extends Reverse1[List[A], List[A]] {
   def perform(in: Input) = filter(in, f)
-  def unperform(in: Input, out2: Output) = filterRev(in, f, out2)
+  def unperform(in: Option[Input], out2: Output) = in match {
+    case None => filterRev(Nil, f, out2)
+    case Some(in) => filterRev(in, f, out2)
+  }
 
   def filter(l: List[A], f: A => Boolean): List[A] = l filter f
   
@@ -594,11 +585,11 @@ case class FilterReverse[A](f: A => Boolean) extends Reverse1 {
   }// ensuring res => res.forall(sol => filter(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, filter(sol, f))
 }
 
-case class FlatMap[A, B](f: A => List[B], fRev: List[B] => List[A]) extends Reverse1 {
-  type Input = List[A]
-  type Output = List[B]
+case class FlatMap[A, B](fr: Reverse1[A, List[B]]) extends Reverse1[List[A], List[B]] {
+  val f = fr.perform _
+  val fRev = (x: List[B]) => fr.unperform(None, x).toList
   def perform(in: Input) = flatMap(in, f)
-  def unperform(in: Input, out2: Output) = flatMapRev(in, f, fRev, out2)
+  def unperform(in: Option[Input], out2: Output) = flatMapRev(in.toList.flatten, f, fRev, out2)
 
   def flatMap(l: List[A], f: A => List[B]): List[B] = l.flatMap(f)
 

@@ -129,6 +129,7 @@ class ListSplitTest extends FunSuite with Matchers {
     splitRev(List(1, 2, 3, 4, 5), (List(1, 3, 5), List(2, 6, 4))) shouldEqual List(List(1, 2, 6, 3, 4, 5), List(1, 2, 3, 6, 4, 5))
   }
 }
+import WebTrees._
 
 class TypeSplitTest extends FunSuite with Matchers {
   import TypeSplit._
@@ -153,34 +154,34 @@ class WebElementAdditionTest extends FunSuite with Matchers {
   val sinit = WebElementAddition(initArg1, initArg2._1, initArg2._2, initArg2._3)
   
   // No modification
-  val reverseInit = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+  val reverseInit = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), (List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
     WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","100px")))
   )
-  reverseInit.toList shouldEqual List((initArg1, initArg2._1, initArg2._2, initArg2._3))
+  reverseInit.toList shouldEqual List((initArg1, initArg2))
   
   // Last element changed
-  val reverseInit2 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+  val reverseInit2 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), (List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
     WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","200px")))
   )
-  reverseInit2.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("display","none"))),List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px"))))
+  reverseInit2.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("display","none"))),(List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px")))))
   
   // Added a child at the beginning
-  val reverseInit3 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+  val reverseInit3 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), (List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
     WebElement("div",List(WebElement("pre",List(),List(),List()), WebElement("span",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","200px")))
   )
-  reverseInit3.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("display","none"))),List(WebElement("pre",List(),List(),List()), WebElement("span",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px"))))
+  reverseInit3.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("display","none"))),(List(WebElement("pre",List(),List(),List()), WebElement("span",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px")))))
   
   // Changed the display
-  val reverseInit4 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+  val reverseInit4 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), (List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
     WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","block"), WebStyle("width","100px"), WebStyle("height","100px")))
   )
-  reverseInit4.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("display","block"))),List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px"))))
+  reverseInit4.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("display","block"))),(List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px")))))
   
   // Added a style before the original style
-  val reverseInit5 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px"))),
+  val reverseInit5 = WebElementAddition.applyRev((WebElement("div", Nil, Nil, List(WebStyle("display", "none"))), (List(WebElement("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
     WebElement("div",List(WebElement("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("outline","1px solid black"), WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","100px")))
   )
-  reverseInit5.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("outline","1px solid black"), WebStyle("display","none"))),List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px"))))
+  reverseInit5.toList shouldEqual List((WebElement("div",List(),List(),List(WebStyle("outline","1px solid black"), WebStyle("display","none"))),(List(WebElement("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px")))))
 }
 
 class WebElementCompositionTest extends FunSuite with Matchers {
@@ -208,23 +209,19 @@ class WebElementCompositionTest extends FunSuite with Matchers {
 
 class ComposeTest extends FunSuite with Matchers {
   
-  object F extends Reverse1 {
-    type Input = Int
-    type Output = Int
+  object F extends Reverse1[Int, Int] {
     def perform(x: Int) = x - (x % 2)
-    def unperform(in: Int, x: Int) = if(x % 2 == 0) List(x, x+1) else Nil
+    def unperform(in: Option[Int], x: Int) = if(x % 2 == 0) List(x, x+1) else Nil
   }
 
-  object G extends Reverse1 {
-    type Input = Int
-    type Output = Int
+  object G extends Reverse1[Int, Int]  {
     def perform(x: Int) = x - (x % 3)
-    def unperform(in: Int, x: Int) = if(x % 3 == 0) List(x, x+1, x+2) else Nil
+    def unperform(in: Option[Int], x: Int) = if(x % 3 == 0) List(x, x+1, x+2) else Nil
   }
 
   val b = Compose(G, F)
 
-  def composeRev(i: Int) = b.unperform(0.asInstanceOf[ComposeTest.this.b.b.Input], i.asInstanceOf[ComposeTest.this.b.a.Output]).toList.asInstanceOf[List[Int]]
+  def composeRev(i: Int) = b.unperform(0, i).toList
 
   test("Reverse composing of functions") {
     val test1 = composeRev(0) shouldEqual List(0, 1, 2, 3)
@@ -256,18 +253,21 @@ class FlattenTest extends FunSuite with Matchers {
 }
 
 class MapReverseTest extends FunSuite with Matchers {
-  val f = (x: Int) => x - (x%2)
-  val fRev = (x: Int) => if(x % 2 == 0) List(x, x+1) else Nil
-  val c = MapReverse[Int, Int](f, fRev)
+  object f extends Reverse1[Int, Int] {
+    def perform(x: Int) = x - (x%2)
+    def unperform(in: Option[Int], x: Int) =
+      if(x % 2 == 0) List(x, x+1) else Nil
+  }
+  val c = MapReverse[Int, Int](f)
   import c._
   test("Reversing map") {
-    mapRev(List(1, 2, 3, 4, 5), f, fRev, List(0, 2, 2, 4, 4)) shouldEqual
+    unperform(List(1, 2, 3, 4, 5), List(0, 2, 2, 4, 4)) shouldEqual
     List(List(1, 2, 3, 4, 5))
-    mapRev(List(1, 2, 3, 4, 5), f, fRev, List(0, 4, 2, 4, 4)) shouldEqual
+    unperform(List(1, 2, 3, 4, 5), List(0, 4, 2, 4, 4)) shouldEqual
     List(List(1, 4, 3, 4, 5), List(1, 5, 3, 4, 5))
-    mapRev(List(1, 2, 3, 4, 5), f, fRev, List(0, 2, 4, 4)) should contain
+    unperform(List(1, 2, 3, 4, 5), List(0, 2, 4, 4)) should contain
     (List(1, 2, 4, 5)) //'
-    mapRev(List(1, 2, 3, 4, 5), f, fRev, List(0, 2, 2, 2, 4, 4)) shouldEqual
+    unperform(List(1, 2, 3, 4, 5), List(0, 2, 2, 2, 4, 4)) shouldEqual
     List(List(1, 2, 3, 2, 4, 5), List(1, 2, 3, 3, 4, 5))
   }
 }
@@ -275,17 +275,17 @@ class MapReverseTest extends FunSuite with Matchers {
 class FilterReverseTest extends FunSuite with Matchers {
   val isEven = (x: Int) => x % 2 == 0
   val c = FilterReverse(isEven)
-  import c._
+  import c.unperform
   test("Filter reverse") {
-    filterRev(List(1, 2, 3, 4, 8, 5), isEven, List(2, 4, 8)) shouldEqual
+    unperform(List(1, 2, 3, 4, 8, 5), List(2, 4, 8)) shouldEqual
     List(List(1, 2, 3, 4, 8, 5))
-    filterRev(List(1, 2, 3, 4, 8, 5), isEven, List(2, 8)) shouldEqual
+    unperform(List(1, 2, 3, 4, 8, 5), List(2, 8)) shouldEqual
     List(List(1, 2, 3, 8, 5))
-    filterRev(List(1, 2, 3, 4, 8, 5), isEven, List(4, 8)) shouldEqual
+    unperform(List(1, 2, 3, 4, 8, 5), List(4, 8)) shouldEqual
     List(List(1, 3, 4, 8, 5))
-    filterRev(List(1, 2, 3, 4, 8, 5), isEven, List(2, 4, 6, 8)) shouldEqual
+    unperform(List(1, 2, 3, 4, 8, 5), List(2, 4, 6, 8)) shouldEqual
     List(List(1, 2, 3, 4, 6, 8, 5))
-    filterRev(List(1, 2, 3, 4, 8, 5), isEven, List(2, 6, 4, 8)) shouldEqual
+    unperform(List(1, 2, 3, 4, 8, 5), List(2, 6, 4, 8)) shouldEqual
     List(List(1, 2, 3, 6, 4, 8, 5))
   }
 }
@@ -294,18 +294,20 @@ class FilterReverseTest extends FunSuite with Matchers {
 // Combines map and flatten directly.
 class FlatMapTest extends FunSuite with Matchers {
   
-  val f = (x: Int) => if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
-  val fRev = (lx: List[Int]) => if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
-    if(lx(0) % 4 == 0) List(lx(0))
-    else if(lx(0) % 4 == 2) List(lx(1))
-    else Nil
-  } else if(lx.length == 2 && lx(1) == lx(0) + 1) {
-    if(lx(0) % 4 == 3) List(lx(0)-1)
-    else if(lx(0) % 4 == 0) List(lx(1))
-    else Nil
-  } else Nil
+  object f extends Reverse1[Int, List[Int]] {
+    def perform(x: Int) = if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
+    def unperform(in: Option[Int], lx: List[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
+      if(lx(0) % 4 == 0) List(lx(0))
+      else if(lx(0) % 4 == 2) List(lx(1))
+      else Nil
+    } else if(lx.length == 2 && lx(1) == lx(0) + 1) {
+      if(lx(0) % 4 == 3) List(lx(0)-1)
+      else if(lx(0) % 4 == 0) List(lx(1))
+      else Nil
+    } else Nil
+  }
 
-  val c = FlatMap(f, fRev)
+  val c = FlatMap(f)
   
   // f(0) ++ f(2) == f(1) ++ f(3)
   // f(0) == [0, 1, 2]
@@ -313,29 +315,32 @@ class FlatMapTest extends FunSuite with Matchers {
   // f(2) == [3, 4]
   // f(3) == [2, 3, 4]
   
-  val fEven = (x: Int) => if(x%2 == 0) List(x/2) else Nil
-  val fEvenRev = (x: List[Int]) => if(x.length == 1) List(x(0)*2) else Nil
-  val d = FlatMap(fEven, fEvenRev)
+  object fEven extends Reverse1[Int, List[Int]] {
+     def perform(x: Int) = if(x%2 == 0) List(x/2) else Nil
+     def unperform(in: Option[Int], x: List[Int]) = if(x.length == 1) List(x(0)*2) else Nil
+  }
+ 
+  val d = FlatMap(fEven)
 
   test("Reverse flatmap - complicated") {
-    import c.flatMapRev
-    flatMapRev(Nil, f, fRev, List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3), List(0, 2))
-    flatMapRev(List(1, 3), f, fRev, List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3))
-    flatMapRev(List(0, 2), f, fRev, List(0, 1, 2, 3, 4)) shouldEqual List(List(0, 2))
-    flatMapRev(List(0, 2), f, fRev, List(0, 1, 2, 3, 4, 0, 1)) shouldEqual List(List(0, 2, 1)) // Addition at the end
-    flatMapRev(List(0, 2), f, fRev, List(0, 1, 2, 0, 1, 3, 4)) shouldEqual List(List(0, 1, 2)) // Addition in the middle
-    flatMapRev(List(0, 2), f, fRev, List(0, 1, 0, 1, 2, 3, 4)) shouldEqual List(List(1, 0, 2)) // Addition at the beg.
-    flatMapRev(List(0, 2), f, fRev, List(3, 4)) shouldEqual List(List(2)) // Deletion of beginning
-    flatMapRev(List(0, 2), f, fRev, List(0, 1, 2)) shouldEqual List(List(0)) // Deletion of end
-    flatMapRev(List(2), f, fRev, List(2, 3, 4)) shouldEqual List(List(3)) // Change
-    flatMapRev(List(0, 1, 2), f, fRev, List(0, 1, 2, 0, 1, 2, 3, 4)) shouldEqual List(List(0, 1, 3)) // Change
-    flatMapRev(List(1, 3), f, fRev, List(0, 1, 0, 1, 2, 3, 4)) shouldEqual List(List(1, 1, 3)) // Addition at beg.
+    import c.unperform
+    unperform(Nil, List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3), List(0, 2))
+    unperform(List(1, 3), List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3))
+    unperform(List(0, 2), List(0, 1, 2, 3, 4)) shouldEqual List(List(0, 2))
+    unperform(List(0, 2), List(0, 1, 2, 3, 4, 0, 1)) shouldEqual List(List(0, 2, 1)) // Addition at the end
+    unperform(List(0, 2), List(0, 1, 2, 0, 1, 3, 4)) shouldEqual List(List(0, 1, 2)) // Addition in the middle
+    unperform(List(0, 2), List(0, 1, 0, 1, 2, 3, 4)) shouldEqual List(List(1, 0, 2)) // Addition at the beg.
+    unperform(List(0, 2), List(3, 4)) shouldEqual List(List(2)) // Deletion of beginning
+    unperform(List(0, 2), List(0, 1, 2)) shouldEqual List(List(0)) // Deletion of end
+    unperform(List(2), List(2, 3, 4)) shouldEqual List(List(3)) // Change
+    unperform(List(0, 1, 2), List(0, 1, 2, 0, 1, 2, 3, 4)) shouldEqual List(List(0, 1, 3)) // Change
+    unperform(List(1, 3), List(0, 1, 0, 1, 2, 3, 4)) shouldEqual List(List(1, 1, 3)) // Addition at beg.
   }
   test("Reverse flatmap - even") {
-    import d._
+    import d.unperform
     // Keep elements producing empty lists
-    flatMapRev(List(1, 2, 3, 4, 5), fEven, fEvenRev, List(1, 2)) shouldEqual List(List(1, 2, 3, 4, 5))
-    flatMapRev(List(1, 2, 3, 4, 5), fEven, fEvenRev, List(1, 3, 2)) shouldEqual List(List(1, 2, 3, 6, 4, 5))
-    flatMapRev(List(1, 2, 3, 6, 4, 5), fEven, fEvenRev, List(1, 2)) shouldEqual List(List(1, 2, 3, 4, 5))
+    unperform(List(1, 2, 3, 4, 5), List(1, 2)) shouldEqual List(List(1, 2, 3, 4, 5))
+    unperform(List(1, 2, 3, 4, 5), List(1, 3, 2)) shouldEqual List(List(1, 2, 3, 6, 4, 5))
+    unperform(List(1, 2, 3, 6, 4, 5), List(1, 2)) shouldEqual List(List(1, 2, 3, 4, 5))
   }
 }
