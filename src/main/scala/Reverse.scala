@@ -1,5 +1,6 @@
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import shapeless.HList
+import Implicits._
 
 /* Could be used if we switched the computation from whole input to input diff */
 object Common {
@@ -12,16 +13,16 @@ object Common {
 
 /** Reverse trait
 */
-trait ~~>[A, B] extends (A => B) {
+trait ~~>[A, B]/* extends (A => B)*/ {
   type Input = A
   type Output = B
   def perform(in: Input): Output
   def unperform(in1: Option[Input], out2: Output): Iterable[Input]
-  final def apply(in: A) = perform(in)
+  //final def apply(in: A) = perform(in)
   final def unperform(in1: Input, out2: Output): Iterable[Input] = unperform(Some(in1), out2)
   final def unperform(out2: Output): Iterable[Input] = unperform(None, out2)
-  final def unapply(out: Output) = unperform(out)
-
+  //final def unapply(out: Output) = unperform(out)
+  //final def apply[C](todobefore: C ~~> A): C ~~> B = todobefore andThen this
   def andThen[C](f: B ~~> C) = Compose(f, this)
 }
 
@@ -215,8 +216,25 @@ class ListSplit[A](p: A => Boolean) extends (List[A] ~~> (List[A], List[A])) {
 object WebTrees {
   var displayNiceDSL = true
   abstract class Tree extends Product with Serializable
-  case class WebElement(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends Tree {
-    override def toString = if(displayNiceDSL) "<." + tag + (if(children.nonEmpty || attributes.nonEmpty || styles.nonEmpty) (children ++ attributes ++ styles).mkString(", ") else "") else super.toString
+  abstract class WebElement extends Tree
+  case class TextNode(text: String) extends WebElement {
+    override def toString = if(displayNiceDSL) "\"" + "\"".r.replaceAllIn("\\\\".r.replaceAllIn(text, "\\\\\\\\"), "\\\"") + "\"" else s"TextNode($text)"
+  }
+  case class Element(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends WebElement {
+    override def toString = if(displayNiceDSL) "<." + tag + (if(children.nonEmpty || attributes.nonEmpty || styles.nonEmpty) (children ++ attributes ++ styles).mkString("(", ", ", ")") else "") else {
+      if(styles.isEmpty) {
+        if(attributes.isEmpty) {
+          if(children.isEmpty) {
+            s"Element($tag)"
+          } else {
+            s"Element($tag,$children)"
+          }
+        } else {
+          s"Element($tag,$children,$attributes)"
+        }
+      } else
+      s"Element($tag,$children,$attributes,$styles)"
+    }
   }
   case class WebAttribute(name: String, value: String) extends Tree {
     override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
@@ -300,7 +318,7 @@ object TypeSplit extends (List[Tree] ~~> (List[WebElement], List[WebAttribute], 
   }
 }
 
-object WebElementAddition extends ((WebElement, (List[WebElement], List[WebAttribute], List[WebStyle])) ~~> WebElement) {
+object WebElementAddition extends ((Element, (List[WebElement], List[WebAttribute], List[WebStyle])) ~~> Element) {
   
   def perform(in: Input) = apply(in._1, in._2._1, in._2._2, in._2._3)
   def unperform(in: Option[Input], out2: Output) = in match {
@@ -308,8 +326,8 @@ object WebElementAddition extends ((WebElement, (List[WebElement], List[WebAttri
     case Some(in) => applyRev(in, out2)
   }
 
-  def apply(elem: WebElement, children: List[WebElement], attributes: List[WebAttribute], styles: List[WebStyle]): WebElement = {
-    WebElement(elem.tag, elem.children ++ children, elem.attributes ++ attributes, elem.styles ++ styles)
+  def apply(elem: Element, children: List[WebElement], attributes: List[WebAttribute], styles: List[WebStyle]): Element = {
+    Element(elem.tag, elem.children ++ children, elem.attributes ++ attributes, elem.styles ++ styles)
   }
   
   def applyRev(in: Input, out: Output): List[Input] = {
@@ -332,7 +350,7 @@ object WebElementAddition extends ((WebElement, (List[WebElement], List[WebAttri
       out.children.takeRight(children.length) == children &&
       out.attributes.takeRight(attributes.length) == attributes &&
       out.styles.takeRight(styles.length) == styles) {
-      List((WebElement(elem.tag,
+      List((Element(elem.tag,
         out.children.dropRight(children.length),
         out.attributes.dropRight(attributes.length),
         out.styles.dropRight(styles.length)),
@@ -345,19 +363,23 @@ object WebElementAddition extends ((WebElement, (List[WebElement], List[WebAttri
   }
 }
 
-object WebElementComposition extends ((WebElement, List[Tree])  ~~> WebElement) {
+object WebElementComposition extends ((Element, List[Tree])  ~~> Element) {
   def perform(in: Input): Output = {
     WebElementAddition.perform(in._1, TypeSplit.perform(in._2))
   }
 
-  def unperform(in: Option[Input], out2: Output): Iterable[Input] = in match {
-    case None => List((out2, Nil))
+  def unperform(in: Option[Input], out2: Output): Iterable[Input] = Implicits.report(s"WebElementComposition($in, $out2) = %s")(in match {
+    case None =>
+      val l = out2.children ++ out2.attributes ++ out2.styles
+      for{ i <- 0 to l.length
+        (lhs, rhs) = l.splitAt(i)
+      } yield { (perform((Element(out2.tag), lhs)), rhs)}
     case Some(in) =>
     val originalMiddle = TypeSplit.perform(in._2)
     WebElementAddition.unperform((in._1, originalMiddle), out2).flatMap{ case (elem, cas) => 
       TypeSplit.unperform(in._2, cas).map{ s => (elem, s) }
     }
-  }
+  })
 }
 /*
 case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Iterable[A], gRev: C => Iterable[B]) extends ~~> {
@@ -471,17 +493,20 @@ case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
   val f: A => B = fr.perform _
   val fRev = (in: Option[A], b: B) => fr.unperform(in, b).toList
   def perform(in: Input) = map(in)
-  def unperform(in: Option[Input], out2: Output): Iterable[Input] = in match {
+  def unperform(in: Option[Input], out2: Output): Iterable[Input] = Implicits.report(s"MapReverse.unperform($in, $out2) = %s"){
+    in match {
     case None => mapRev(Nil, out2)
     case Some(in) => mapRev(in, out2)
+  }
   }
 
   def map(l: List[A]): List[B] = l map f
   
-  def combinatorialMap(l: List[B]): List[List[A]] = {
+  def combinatorialMap(l: List[B]): List[List[A]] = report(s"combinatorialMap($l)=%s"){
     l match {
       case Nil => List(Nil)
-      case a::b => fRev(None, a).flatMap(fb => combinatorialMap(b).map(fb::_))
+      case a::b => 
+        fRev(None, a).flatMap(fb => combinatorialMap(b).map(fb::_))
     }
   }
   
@@ -519,7 +544,7 @@ case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
                mapRev(l.drop(k), out)
              } else {
                val k2 = out.indexOfSlice(expectedOut)
-               if(k2 > 0) { // Some elements were added at some point.
+               if (k2 > 0) { // Some elements were added at some point.
                  val tailSolutions = mapRev(l, out.drop(k2))
                  // Now for each of out.take(k2), we take all possible inverses.
                  combinatorialMap(out.take(k2)).flatMap(l => tailSolutions.map(l ++ _))
@@ -632,3 +657,9 @@ case class FlatMap[A, B](fr: A ~~> List[B]) extends (List[A] ~~> List[B]) {
     }
   }
 }
+
+case class Const[A](value: A) extends (Unit ~~> A) {
+  def perform(u: Unit) = value
+  def unperform(orig: Option[Unit], output: A): Stream[Unit] = Stream(())
+}
+
