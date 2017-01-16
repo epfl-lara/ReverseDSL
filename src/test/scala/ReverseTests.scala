@@ -3,10 +3,10 @@ import shapeless.syntax.zipper._
 import Matchers._
 
 class StringAppendTest extends FunSuite {
-  import StringAppend.{unperform => appendRev, _}
+  import StringAppend.{put => appendRev, _}
   def f = append(append("Hello", " "), "world")
-  def fRev(out: String): List[(String, String, String)] = appendRev(("Hello ", "world"), out).toList.flatMap(leftRight => 
-    appendRev(("Hello", " "), leftRight._1).map(lr => (lr._1, lr._2, leftRight._2))
+  def fRev(out: String): List[(String, String, String)] = appendRev(out, ("Hello ", "world")).toList.flatMap(leftRight => 
+    appendRev(leftRight._1, ("Hello", " ")).map(lr => (lr._1, lr._2, leftRight._2))
   )
   test("Hello world decomposition") {
     fRev("Hello world") shouldEqual List(("Hello", " ", "world"))
@@ -192,37 +192,37 @@ class WebElementCompositionTest extends FunSuite  {
     val initArg1 = Element("div", Nil, Nil, List(WebStyle("display", "none")))
     val initArg2 = List(WebStyle("width", "100px"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"))
     val in = (initArg1, initArg2)
-    val sinit = WebElementComposition.perform(in)
+    val sinit = WebElementComposition.get(in)
     // Verification that the function computes correctly
     sinit shouldEqual Element("div", List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px")))
     // Replacing an element in the argument's list.
-    WebElementComposition.unperform(in, Element("div", List(Element("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px")))).toList shouldEqual List((initArg1, initArg2.updated(1, Element("span"))))
+    WebElementComposition.put(Element("div", List(Element("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList shouldEqual List((initArg1, initArg2.updated(1, Element("span"))))
     // Adding an element at the end of the argument's list.
-    WebElementComposition.unperform(in, Element("div", List(Element("pre"), Element("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px")))).toList shouldEqual List((initArg1, List(WebStyle("width", "100px"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"), Element("span"))))
+    WebElementComposition.put(Element("div", List(Element("pre"), Element("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList shouldEqual List((initArg1, List(WebStyle("width", "100px"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"), Element("span"))))
     // Adding an element before one of the argument's list.
-    val r = WebElementComposition.unperform(in, Element("div", List(Element("span"), Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px")))).toList 
+    val r = WebElementComposition.put(Element("div", List(Element("span"), Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList 
     r should contain ((initArg1, List(WebStyle("width", "100px"), Element("span"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"))))
     r should have size 2
     // Replacing the main element
-    WebElementComposition.unperform(in, Element("div", List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "block"), WebStyle("width", "100px"), WebStyle("height", "100px")))).toList shouldEqual List((initArg1.copy(styles=List(WebStyle("display", "block"))), initArg2))
+    WebElementComposition.put(Element("div", List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "block"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList shouldEqual List((initArg1.copy(styles=List(WebStyle("display", "block"))), initArg2))
   }
 }
 
 class ComposeTest extends FunSuite  {
   
   object F extends ~~>[Int, Int] {
-    def perform(x: Int) = x - (x % 2)
-    def unperform(in: Option[Int], x: Int) = if(x % 2 == 0) List(x, x+1) else Nil
+    def get(x: Int) = x - (x % 2)
+    def put(x: Int, in: Option[Int]) = if(x % 2 == 0) List(x, x+1) else Nil
   }
 
   object G extends ~~>[Int, Int]  {
-    def perform(x: Int) = x - (x % 3)
-    def unperform(in: Option[Int], x: Int) = if(x % 3 == 0) List(x, x+1, x+2) else Nil
+    def get(x: Int) = x - (x % 3)
+    def put(x: Int, in: Option[Int]) = if(x % 3 == 0) List(x, x+1, x+2) else Nil
   }
 
   val b = Compose(G, F)
 
-  def composeRev(i: Int) = b.unperform(0, i).toList
+  def composeRev(i: Int) = b.put(i, 0).toList
 
   test("Reverse composing of functions") {
     val test1 = composeRev(0) shouldEqual List(0, 1, 2, 3)
@@ -255,20 +255,20 @@ class FlattenTest extends FunSuite  {
 
 class MapReverseTest extends FunSuite  {
   object f extends ~~>[Int, Int] {
-    def perform(x: Int) = x - (x%2)
-    def unperform(in: Option[Int], x: Int) =
+    def get(x: Int) = x - (x%2)
+    def put(x: Int, in: Option[Int]) =
       if(x % 2 == 0) List(x, x+1) else Nil
   }
   val c = MapReverse[Int, Int](f)
   import c._
   test("Reversing map") {
-    unperform(List(1, 2, 3, 4, 5), List(0, 2, 2, 4, 4)) shouldEqual
+    put(List(0, 2, 2, 4, 4), List(1, 2, 3, 4, 5)) shouldEqual
     List(List(1, 2, 3, 4, 5))
-    unperform(List(1, 2, 3, 4, 5), List(0, 4, 2, 4, 4)) shouldEqual
+    put(List(0, 4, 2, 4, 4), List(1, 2, 3, 4, 5)) shouldEqual
     List(List(1, 4, 3, 4, 5), List(1, 5, 3, 4, 5))
-    unperform(List(1, 2, 3, 4, 5), List(0, 2, 4, 4)) should contain
+    put(List(0, 2, 4, 4), List(1, 2, 3, 4, 5)) should contain
     (List(1, 2, 4, 5)) //'
-    unperform(List(1, 2, 3, 4, 5), List(0, 2, 2, 2, 4, 4)) shouldEqual
+    put(List(0, 2, 2, 2, 4, 4), List(1, 2, 3, 4, 5)) shouldEqual
     List(List(1, 2, 3, 2, 4, 5), List(1, 2, 3, 3, 4, 5))
   }
 }
@@ -276,17 +276,17 @@ class MapReverseTest extends FunSuite  {
 class FilterReverseTest extends FunSuite  {
   val isEven = (x: Int) => x % 2 == 0
   val c = FilterReverse(isEven)
-  import c.unperform
+  import c.put
   test("Filter reverse") {
-    unperform(List(1, 2, 3, 4, 8, 5), List(2, 4, 8)) shouldEqual
+    put(List(2, 4, 8), List(1, 2, 3, 4, 8, 5)) shouldEqual
     List(List(1, 2, 3, 4, 8, 5))
-    unperform(List(1, 2, 3, 4, 8, 5), List(2, 8)) shouldEqual
+    put(List(2, 8), List(1, 2, 3, 4, 8, 5)) shouldEqual
     List(List(1, 2, 3, 8, 5))
-    unperform(List(1, 2, 3, 4, 8, 5), List(4, 8)) shouldEqual
+    put(List(4, 8), List(1, 2, 3, 4, 8, 5)) shouldEqual
     List(List(1, 3, 4, 8, 5))
-    unperform(List(1, 2, 3, 4, 8, 5), List(2, 4, 6, 8)) shouldEqual
+    put(List(2, 4, 6, 8), List(1, 2, 3, 4, 8, 5)) shouldEqual
     List(List(1, 2, 3, 4, 6, 8, 5))
-    unperform(List(1, 2, 3, 4, 8, 5), List(2, 6, 4, 8)) shouldEqual
+    put(List(2, 6, 4, 8), List(1, 2, 3, 4, 8, 5)) shouldEqual
     List(List(1, 2, 3, 6, 4, 8, 5))
   }
 }
@@ -294,8 +294,8 @@ class FilterReverseTest extends FunSuite  {
 // Combines map and flatten directly.
 class FlatMapByComposeTest extends FunSuite  {
   object f extends ~~>[Int, List[Int]] {
-    def perform(x: Int) = if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
-    def unperform(in: Option[Int], lx: List[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
+    def get(x: Int) = if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
+    def put(lx: List[Int], in: Option[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
       if(lx(0) % 4 == 0) List(lx(0))
       else if(lx(0) % 4 == 2) List(lx(1))
       else Nil
@@ -315,42 +315,42 @@ class FlatMapByComposeTest extends FunSuite  {
   // f(3) == [2, 3, 4]
   
   object fEven extends ~~>[Int, List[Int]] {
-     def perform(x: Int) = if(x%2 == 0) List(x/2) else Nil
-     def unperform(in: Option[Int], x: List[Int]) = if(x.length == 1) List(x(0)*2) else if(x.length == 0 && in.nonEmpty) List(in.get) else Nil
+     def get(x: Int) = if(x%2 == 0) List(x/2) else Nil
+     def put(x: List[Int], in: Option[Int]) = if(x.length == 1) List(x(0)*2) else if(x.length == 0 && in.nonEmpty) List(in.get) else Nil
   }
  
   val d = MapReverse(fEven) andThen Flatten[Int]()
 
   test("Reverse flatmap - complicated") {
-    import c.unperform
-    Flatten[Int]().unperform(Some(Nil), List(0, 1, 2, 3, 4)) should contain (List(List(0, 1, 2), List(3, 4)))
-    unperform(Nil, List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3), List(0, 2))
-    unperform(List(1, 3), List(0, 1, 2, 3, 4)) should contain(List(1, 3))
-    unperform(List(0, 2), List(0, 1, 2, 3, 4)) should contain(List(0, 2))
-    unperform(List(0, 2), List(0, 1, 2, 3, 4, 0, 1)) should contain(List(0, 2, 1)) // Addition at the end
-    unperform(List(0, 2), List(0, 1, 2, 0, 1, 3, 4)) should contain(List(0, 1, 2)) // Addition in the middle
-    unperform(List(0, 2), List(0, 1, 0, 1, 2, 3, 4)) should contain(List(1, 0, 2)) // Addition at the beg.
-    unperform(List(0, 2), List(3, 4)) should contain(List(2)) // Deletion of beginning
-    unperform(List(0, 2), List(0, 1, 2)) should contain(List(0)) // Deletion of end
-    unperform(List(2), List(2, 3, 4)) should contain(List(3)) // Change
-    unperform(List(0, 1, 2), List(0, 1, 2, 0, 1, 2, 3, 4)) should contain(List(0, 1, 3)) // Change
-    unperform(List(1, 3), List(0, 1, 0, 1, 2, 3, 4)) should contain(List(1, 1, 3)) // Addition at beg.
+    import c.put
+    Flatten[Int]().put(List(0, 1, 2, 3, 4), Some(Nil)) should contain (List(List(0, 1, 2), List(3, 4)))
+    put(List(0, 1, 2, 3, 4), Nil) shouldEqual List(List(1, 3), List(0, 2))
+    put(List(0, 1, 2, 3, 4), List(1, 3)) should contain(List(1, 3))
+    put(List(0, 1, 2, 3, 4), List(0, 2)) should contain(List(0, 2))
+    put(List(0, 1, 2, 3, 4, 0, 1), List(0, 2)) should contain(List(0, 2, 1)) // Addition at the end
+    put(List(0, 1, 2, 0, 1, 3, 4), List(0, 2)) should contain(List(0, 1, 2)) // Addition in the middle
+    put(List(0, 1, 0, 1, 2, 3, 4), List(0, 2)) should contain(List(1, 0, 2)) // Addition at the beg.
+    put(List(3, 4), List(0, 2)) should contain(List(2)) // Deletion of beginning
+    put(List(0, 1, 2), List(0, 2)) should contain(List(0)) // Deletion of end
+    put(List(2, 3, 4), List(2)) should contain(List(3)) // Change
+    put(List(0, 1, 2, 0, 1, 2, 3, 4), List(0, 1, 2)) should contain(List(0, 1, 3)) // Change
+    put(List(0, 1, 0, 1, 2, 3, 4), List(1, 3)) should contain(List(1, 1, 3)) // Addition at beg.
   }
   test("Reverse flatmap - even") {
-    import d.unperform
+    import d.put
 
     // Keep elements producing empty lists
-    unperform(List(1, 2, 3, 4, 5), List(1, 2)) should contain(List(1, 2, 3, 4, 5))
-    unperform(List(1, 2, 3, 4, 5), List(1, 3, 2)) should contain(List(1, 2, 3, 6, 4, 5))
-    unperform(List(1, 2, 3, 6, 4, 5), List(1, 2)) should contain(List(1, 2, 3, 4, 5))
+    put(List(1, 2), List(1, 2, 3, 4, 5)) should contain(List(1, 2, 3, 4, 5))
+    put(List(1, 3, 2), List(1, 2, 3, 4, 5)) should contain(List(1, 2, 3, 6, 4, 5))
+    put(List(1, 2), List(1, 2, 3, 6, 4, 5)) should contain(List(1, 2, 3, 4, 5))
   }
 }
 
 // Combines map and flatten directly.
 class FlatMapTest extends FunSuite  {
   object f extends ~~>[Int, List[Int]] {
-    def perform(x: Int) = if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
-    def unperform(in: Option[Int], lx: List[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
+    def get(x: Int) = if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
+    def put(lx: List[Int], in: Option[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
       if(lx(0) % 4 == 0) List(lx(0))
       else if(lx(0) % 4 == 2) List(lx(1))
       else Nil
@@ -370,32 +370,32 @@ class FlatMapTest extends FunSuite  {
   // f(3) == [2, 3, 4]
   
   object fEven extends ~~>[Int, List[Int]] {
-     def perform(x: Int) = if(x%2 == 0) List(x/2) else Nil
-     def unperform(in: Option[Int], x: List[Int]) = if(x.length == 1) List(x(0)*2) else Nil
+     def get(x: Int) = if(x%2 == 0) List(x/2) else Nil
+     def put(x: List[Int], in: Option[Int]) = if(x.length == 1) List(x(0)*2) else Nil
   }
  
   val d = FlatMap(fEven)
 
   test("Reverse flatmap - complicated") {
-    import c.unperform
-    unperform(Nil, List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3), List(0, 2))
-    unperform(List(1, 3), List(0, 1, 2, 3, 4)) shouldEqual List(List(1, 3))
-    unperform(List(0, 2), List(0, 1, 2, 3, 4)) shouldEqual List(List(0, 2))
-    unperform(List(0, 2), List(0, 1, 2, 3, 4, 0, 1)) shouldEqual List(List(0, 2, 1)) // Addition at the end
-    unperform(List(0, 2), List(0, 1, 2, 0, 1, 3, 4)) shouldEqual List(List(0, 1, 2)) // Addition in the middle
-    unperform(List(0, 2), List(0, 1, 0, 1, 2, 3, 4)) shouldEqual List(List(1, 0, 2)) // Addition at the beg.
-    unperform(List(0, 2), List(3, 4)) shouldEqual List(List(2)) // Deletion of beginning
-    unperform(List(0, 2), List(0, 1, 2)) shouldEqual List(List(0)) // Deletion of end
-    unperform(List(2), List(2, 3, 4)) shouldEqual List(List(3)) // Change
-    unperform(List(0, 1, 2), List(0, 1, 2, 0, 1, 2, 3, 4)) shouldEqual List(List(0, 1, 3)) // Change
-    unperform(List(1, 3), List(0, 1, 0, 1, 2, 3, 4)) shouldEqual List(List(1, 1, 3)) // Addition at beg.
+    import c.put
+    put(List(0, 1, 2, 3, 4), Nil) shouldEqual List(List(1, 3), List(0, 2))
+    put(List(0, 1, 2, 3, 4), List(1, 3)) shouldEqual List(List(1, 3))
+    put(List(0, 1, 2, 3, 4), List(0, 2)) shouldEqual List(List(0, 2))
+    put(List(0, 1, 2, 3, 4, 0, 1), List(0, 2)) shouldEqual List(List(0, 2, 1)) // Addition at the end
+    put(List(0, 1, 2, 0, 1, 3, 4), List(0, 2)) shouldEqual List(List(0, 1, 2)) // Addition in the middle
+    put(List(0, 1, 0, 1, 2, 3, 4), List(0, 2)) shouldEqual List(List(1, 0, 2)) // Addition at the beg.
+    put(List(3, 4), List(0, 2)) shouldEqual List(List(2)) // Deletion of beginning
+    put(List(0, 1, 2), List(0, 2)) shouldEqual List(List(0)) // Deletion of end
+    put(List(2, 3, 4), List(2)) shouldEqual List(List(3)) // Change
+    put(List(0, 1, 2, 0, 1, 2, 3, 4), List(0, 1, 2)) shouldEqual List(List(0, 1, 3)) // Change
+    put(List(0, 1, 0, 1, 2, 3, 4), List(1, 3)) shouldEqual List(List(1, 1, 3)) // Addition at beg.
   }
   test("Reverse flatmap - even") {
-    import d.unperform
+    import d.put
     // Keep elements producing empty lists
-    unperform(List(1, 2, 3, 4, 5), List(1, 2)) shouldEqual List(List(1, 2, 3, 4, 5))
-    unperform(List(1, 2, 3, 4, 5), List(1, 3, 2)) shouldEqual List(List(1, 2, 3, 6, 4, 5))
-    unperform(List(1, 2, 3, 6, 4, 5), List(1, 2)) shouldEqual List(List(1, 2, 3, 4, 5))
+    put(List(1, 2), List(1, 2, 3, 4, 5)) shouldEqual List(List(1, 2, 3, 4, 5))
+    put(List(1, 3, 2), List(1, 2, 3, 4, 5)) shouldEqual List(List(1, 2, 3, 6, 4, 5))
+    put(List(1, 2), List(1, 2, 3, 6, 4, 5)) shouldEqual List(List(1, 2, 3, 4, 5))
   }
 }
 
@@ -403,8 +403,8 @@ class PizzaTest extends FunSuite {
    import WebBuilder._
    import Implicits._
    object TN extends (String ~~> List[Tree]) {
-     def perform(s: String) = List(TextNode(s))
-     def unperform(s: Option[String], out: List[Tree]): Iterable[String] = report(s"TN.unperform($s, $out) = %s"){
+     def get(s: String) = List(TextNode(s))
+     def put(out: List[Tree], s: Option[String]): Iterable[String] = report(s"TN.put($s, $out) = %s"){
        out match {
        case List(TextNode(i)) => List(i)
        case _ => Nil
@@ -416,13 +416,23 @@ class PizzaTest extends FunSuite {
        MapReverse(<.li(TN)): (List[String] ~~> List[Element])
      ): ((Unit, List[String]) ~~> Element))
    test("It can creat pizzas forms") {
-     pizzasCreator.perform(List("Margharita", "Sudjuk")).toString shouldEqual
+     pizzasCreator.get(List("Margharita", "Sudjuk")).toString shouldEqual
       """<.ul(<.li("Margharita"), <.li("Sudjuk"))"""
    }
    test("It can find pizzas from an updated list of pizzas") {
      val expectedResult = Element("ul", Element("li", TextNode("Margharita")::Nil)::Element("li", TextNode("Salami")::Nil)::Element("li", TextNode("Sudjuk")::Nil)::Nil)
      val original = List("Margharita", "Sudjuk")
-     pizzasCreator.unperform(Some(original), expectedResult) should contain (
+     pizzasCreator.put(expectedResult, Some(original)) should contain (
+     List("Margharita", "Salami", "Sudjuk"))
+   }
+   val pizzasCreator2: (List[String] ~~> Element) =
+     FilterReverse((s: String) => s.startsWith("S")) andThen (<.ul(
+       MapReverse(<.li(TN)): (List[String] ~~> List[Element])
+     ): ((Unit, List[String]) ~~> Element))
+   test("it can deal with filters") {
+     val expectedResult = Element("ul", Element("li", TextNode("Salami")::Nil)::Element("li", TextNode("Sudjuk")::Nil)::Nil)
+     val original = List("Margharita", "Sudjuk")
+     pizzasCreator2.put(expectedResult, Some(original)) should contain (
      List("Margharita", "Salami", "Sudjuk"))
    }
 }

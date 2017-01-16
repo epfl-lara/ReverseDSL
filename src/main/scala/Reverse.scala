@@ -11,17 +11,17 @@ object Common {
   }
 }
 
-/** Reverse trait
+/** Lense trait
 */
 trait ~~>[A, B]/* extends (A => B)*/ {
   type Input = A
   type Output = B
-  def perform(in: Input): Output
-  def unperform(in1: Option[Input], out2: Output): Iterable[Input]
-  //final def apply(in: A) = perform(in)
-  final def unperform(in1: Input, out2: Output): Iterable[Input] = unperform(Some(in1), out2)
-  final def unperform(out2: Output): Iterable[Input] = unperform(None, out2)
-  //final def unapply(out: Output) = unperform(out)
+  def get(in: Input): Output
+  def put(out2: Output, in1: Option[Input]): Iterable[Input]
+  //final def apply(in: A) = get(in)
+  final def put(out2: Output, in1: Input): Iterable[Input] = put(out2, Some(in1))
+  final def put(out2: Output): Iterable[Input] = put(out2, None)
+  //final def unapply(out: Output) = put(out)
   //final def apply[C](todobefore: C ~~> A): C ~~> B = todobefore andThen this
   def andThen[C](f: B ~~> C) = Compose(f, this)
 }
@@ -29,9 +29,9 @@ trait ~~>[A, B]/* extends (A => B)*/ {
 object StringAppend extends  ((String, String) ~~> String) {
   def append(s: String, t: String): String = s+t
   
-  def perform(st: Input): Output = append(st._1, st._2)
+  def get(st: Input): Output = append(st._1, st._2)
   
-  def unperform(st: Option[Input], out: Output): Iterable[Input] = {
+  def put(out: Output, st: Option[Input]): Iterable[Input] = {
     st match {
       case None => List((out, "")).distinct
       case Some(st) =>
@@ -41,7 +41,7 @@ object StringAppend extends  ((String, String) ~~> String) {
         val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
         val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
         //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
-        (keepFirstIntact ++ keepSecondIntact).filter(res => perform(res._1, res._2) == out).sortBy{ case (s, t) =>
+        (keepFirstIntact ++ keepSecondIntact).filter(res => get(res._1, res._2) == out).sortBy{ case (s, t) =>
           if(s.length > 0 && t.length > 0) {
             if(s(s.length - 1) == ' ' && t(0) == ' ') 10
             else if(s(s.length - 1) != ' ' && t(0) != ' ') 10
@@ -65,9 +65,9 @@ object StringFormatReverse extends ((String, List[Any]) ~~> String) {
     //println(s"Calling '$s'.format(" + args.map(x => (x, x.getClass)).mkString(",") + ")")
     s.format(args: _*)
   }
-  def perform(in: Input) = format(in._1, in._2)
+  def get(in: Input) = format(in._1, in._2)
   
-  def unperform(in: Option[Input], out2: Output): Iterable[Input] = 
+  def put(out2: Output, in: Option[Input]): Iterable[Input] = 
     in match {
     case None =>
       List(("%s", List(out2)))
@@ -144,8 +144,8 @@ object StringFormatReverse extends ((String, List[Any]) ~~> String) {
 
 object IntReverse extends ((Int, Int) ~~> Int) {
   def add(s: Int, t: Int) = s+t
-  def perform(in: Input): Output = add(in._1, in._2)
-  def unperform(in: Option[Input], out2: Output): Iterable[Input] = in match {
+  def get(in: Input): Output = add(in._1, in._2)
+  def put(out2: Output, in: Option[Input]): Iterable[Input] = in match {
     case None => List((out2, 0))
     case Some(in) => addRev(in._1, in._2, out2)
   }
@@ -173,8 +173,8 @@ object IntValReverse {
 class ListSplit[A](p: A => Boolean) extends (List[A] ~~> (List[A], List[A])) {
   import Interleavings._
   
-  def perform(in: Input): Output = split(in)
-  def unperform(in: Option[Input], out2: Output) = in match {
+  def get(in: Input): Output = split(in)
+  def put(out2: Output, in: Option[Input]) = in match {
     case None => List(out2._1 ++ out2._2)
     case Some(in) => splitRev(in, out2)
   }
@@ -247,8 +247,8 @@ import WebTrees._
 
 object TypeSplit extends (List[Tree] ~~> (List[WebElement], List[WebAttribute], List[WebStyle])) {
   import Interleavings._
-  def perform(in: Input): Output = split(in)
-  def unperform(in1: Option[Input], out2: Output): Iterable[Input] = in1 match {
+  def get(in: Input): Output = split(in)
+  def put(out2: Output, in1: Option[Input]): Iterable[Input] = in1 match {
     case None =>
       List(out2._1 ++ out2._2 ++ out2._3)
     case Some(in1) =>
@@ -320,8 +320,8 @@ object TypeSplit extends (List[Tree] ~~> (List[WebElement], List[WebAttribute], 
 
 object WebElementAddition extends ((Element, (List[WebElement], List[WebAttribute], List[WebStyle])) ~~> Element) {
   
-  def perform(in: Input) = apply(in._1, in._2._1, in._2._2, in._2._3)
-  def unperform(in: Option[Input], out2: Output) = in match {
+  def get(in: Input) = apply(in._1, in._2._1, in._2._2, in._2._3)
+  def put(out2: Output, in: Option[Input]) = in match {
     case None => List((out2, (Nil, Nil, Nil)))
     case Some(in) => applyRev(in, out2)
   }
@@ -364,20 +364,20 @@ object WebElementAddition extends ((Element, (List[WebElement], List[WebAttribut
 }
 
 object WebElementComposition extends ((Element, List[Tree])  ~~> Element) {
-  def perform(in: Input): Output = {
-    WebElementAddition.perform(in._1, TypeSplit.perform(in._2))
+  def get(in: Input): Output = {
+    WebElementAddition.get(in._1, TypeSplit.get(in._2))
   }
 
-  def unperform(in: Option[Input], out2: Output): Iterable[Input] = Implicits.report(s"WebElementComposition($in, $out2) = %s")(in match {
+  def put(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"WebElementComposition($in, $out2) = %s")(in match {
     case None =>
       val l = out2.children ++ out2.attributes ++ out2.styles
       for{ i <- 0 to l.length
         (lhs, rhs) = l.splitAt(i)
-      } yield { (perform((Element(out2.tag), lhs)), rhs)}
+      } yield { (get((Element(out2.tag), lhs)), rhs)}
     case Some(in) =>
-    val originalMiddle = TypeSplit.perform(in._2)
-    WebElementAddition.unperform((in._1, originalMiddle), out2).flatMap{ case (elem, cas) => 
-      TypeSplit.unperform(in._2, cas).map{ s => (elem, s) }
+    val originalMiddle = TypeSplit.get(in._2)
+    WebElementAddition.put(out2, (in._1, originalMiddle)).flatMap{ case (elem, cas) => 
+      TypeSplit.put(cas, in._2).map{ s => (elem, s) }
     }
   })
 }
@@ -385,24 +385,24 @@ object WebElementComposition extends ((Element, List[Tree])  ~~> Element) {
 case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Iterable[A], gRev: C => Iterable[B]) extends ~~> {
   type Input = A
   type Output = C
-  def perform(in: Input) = g(f(in))
+  def get(in: Input) = g(f(in))
   
-  def unperform(in: Input, out2: Output) = 
+  def put(in: Input, out2: Output) = 
     gRev(out2).flatMap(b => fRev(b))
 }*/
 
 // Make sure the types agree !!
 case class Compose[A, B, C](a: B ~~> C, b: A ~~> B) extends (A ~~> C) {
-  def perform(in: Input): Output = a.perform(b.perform(in).asInstanceOf[a.Input])
-  def unperform(in: Option[Input], out2: Output) = {
-   val intermediate_out = in.map(b.perform)
-   a.unperform(intermediate_out, out2).flatMap(x => b.unperform(in, x))
+  def get(in: Input): Output = a.get(b.get(in).asInstanceOf[a.Input])
+  def put(out2: Output, in: Option[Input]) = {
+   val intermediate_out = in.map(b.get)
+   a.put(out2, intermediate_out).flatMap(x => b.put(x, in))
   }
 }
 
 case class Flatten[A]() extends (List[List[A]] ~~> List[A]) {
-  def perform(in: Input) = flatten(in)
-  def unperform(in: Option[Input], out2: Output) = in match {
+  def get(in: Input) = flatten(in)
+  def put(out2: Output, in: Option[Input]) = in match {
     case None => List(List(out2))
     case Some(in) => flattenRev(in, out2)
   }
@@ -490,10 +490,10 @@ case class Flatten[A]() extends (List[List[A]] ~~> List[A]) {
 }
 
 case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
-  val f: A => B = fr.perform _
-  val fRev = (in: Option[A], b: B) => fr.unperform(in, b).toList
-  def perform(in: Input) = map(in)
-  def unperform(in: Option[Input], out2: Output): Iterable[Input] = Implicits.report(s"MapReverse.unperform($in, $out2) = %s"){
+  val f: A => B = fr.get _
+  val fRev = (in: Option[A], b: B) => fr.put(b, in).toList
+  def get(in: Input) = map(in)
+  def put(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"MapReverse.put($in, $out2) = %s"){
     in match {
     case None => mapRev(Nil, out2)
     case Some(in) => mapRev(in, out2)
@@ -561,8 +561,8 @@ case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
 }
 
 case class FilterReverse[A](f: A => Boolean) extends (List[A] ~~> List[A]) {
-  def perform(in: Input) = filter(in, f)
-  def unperform(in: Option[Input], out2: Output) = in match {
+  def get(in: Input) = filter(in, f)
+  def put(out2: Output, in: Option[Input]) = in match {
     case None => filterRev(Nil, f, out2)
     case Some(in) => filterRev(in, f, out2)
   }
@@ -607,10 +607,10 @@ case class FilterReverse[A](f: A => Boolean) extends (List[A] ~~> List[A]) {
 }
 
 case class FlatMap[A, B](fr: A ~~> List[B]) extends (List[A] ~~> List[B]) {
-  val f = fr.perform _
-  val fRev = (x: List[B]) => fr.unperform(None, x).toList
-  def perform(in: Input) = flatMap(in, f)
-  def unperform(in: Option[Input], out2: Output) = flatMapRev(in.toList.flatten, f, fRev, out2)
+  val f = fr.get _
+  val fRev = (x: List[B]) => fr.put(x, None).toList // TODO: replace None by something clever.
+  def get(in: Input) = flatMap(in, f)
+  def put(out2: Output, in: Option[Input]) = flatMapRev(in.toList.flatten, f, fRev, out2)
 
   def flatMap(l: List[A], f: A => List[B]): List[B] = l.flatMap(f)
 
@@ -659,7 +659,7 @@ case class FlatMap[A, B](fr: A ~~> List[B]) extends (List[A] ~~> List[B]) {
 }
 
 case class Const[A](value: A) extends (Unit ~~> A) {
-  def perform(u: Unit) = value
-  def unperform(orig: Option[Unit], output: A): Stream[Unit] = Stream(())
+  def get(u: Unit) = value
+  def put(output: A, orig: Option[Unit]): Stream[Unit] = Stream(())
 }
 
