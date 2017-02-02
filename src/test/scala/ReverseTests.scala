@@ -256,8 +256,14 @@ class FlattenTest extends FunSuite  {
 class MapReverseTest extends FunSuite  {
   object f extends ~~>[Int, Int] {
     def get(x: Int) = x - (x%2)
-    def put(x: Int, in: Option[Int]) =
-      if(x % 2 == 0) List(x, x+1) else Nil
+    def put(y: Int, in: Option[Int]) =
+      if(y % 2 == 0) {
+        in match {
+          case Some(x) if get(x) == y => List(x)
+          case _ =>
+           List(y, y+1)
+        }
+      } else Nil
   }
   val c = MapReverse[Int, Int](f)
   import c._
@@ -276,8 +282,8 @@ class MapReverseTest extends FunSuite  {
 class FilterReverseTest extends FunSuite  {
   val isEven = (x: Int) => x % 2 == 0
   val c = FilterReverse(isEven)
-  import c.put
   test("Filter reverse") {
+    import c.put
     put(List(2, 4, 8), List(1, 2, 3, 4, 8, 5)) shouldEqual
     List(List(1, 2, 3, 4, 8, 5))
     put(List(2, 8), List(1, 2, 3, 4, 8, 5)) shouldEqual
@@ -288,6 +294,12 @@ class FilterReverseTest extends FunSuite  {
     List(List(1, 2, 3, 4, 6, 8, 5))
     put(List(2, 6, 4, 8), List(1, 2, 3, 4, 8, 5)) shouldEqual
     List(List(1, 2, 3, 6, 4, 8, 5))
+  }
+  
+  test("Filter reverse with strings") {
+    val d = FilterReverse((s: String) => s.startsWith("S"))
+    import d.put
+    put(List("Salami", "Sudjuk"), List("Margharita", "Sudjuk")).toList should contain (List("Margharita", "Salami", "Sudjuk"))
   }
 }
 
@@ -399,10 +411,32 @@ class FlatMapTest extends FunSuite  {
   }
 }
 
+class PairTest extends FunSuite {
+  object f extends ~~>[Int, Int] {
+    def get(x: Int) = x - (x%2)
+    def put(y: Int, in: Option[Int]) =
+      if(y % 2 == 0) {
+        in match {
+          case Some(x) if get(x) == y => List(x)
+          case _ =>
+           List(y, y+1)
+        }
+      } else Nil
+  }
+  
+  val c = Pair(f, f)
+
+  test("Reverse pair") {
+    c.get((0, 3)) shouldEqual ((0, 2))
+    c.put((0, 2)).toList.sorted shouldEqual (List((0, 2), (0, 3), (1, 2), (1, 3)))
+    c.put((0, 2), Some((0, 3))).toList.sorted shouldEqual (List((0, 3))) 
+  }
+}
+
 class PizzaTest extends FunSuite {
    import WebBuilder._
-   import Implicits._
-   object TN extends (String ~~> List[Tree]) {
+   import Implicits.{RemoveUnit => _, _}
+   /*object TN extends (String ~~> List[Tree]) {
      def get(s: String) = List(TextNode(s))
      def put(out: List[Tree], s: Option[String]): Iterable[String] = report(s"TN.put($s, $out) = %s"){
        out match {
@@ -433,6 +467,31 @@ class PizzaTest extends FunSuite {
      val expectedResult = Element("ul", Element("li", TextNode("Salami")::Nil)::Element("li", TextNode("Sudjuk")::Nil)::Nil)
      val original = List("Margharita", "Sudjuk")
      pizzasCreator2.put(expectedResult, Some(original)) should contain (
+     List("Margharita", "Salami", "Sudjuk"))
+   }
+   */
+   val ul = Element("ul")
+   val li = Element("li")
+
+   def pizzasCreator3Raw(l: List[String]) = {
+     val filtered = l.filter((s: String)=> s.startsWith("S"))
+     val mapped = filtered.map((x: String) => li(List(TextNode(x))))
+     val result = ul(mapped)
+     result
+   }
+   
+   def pizzasCreator3(l: Id[List[String]]) = {
+     val filtered = l.filter((s: String)=> s.startsWith("S"))
+     val mapped = filtered.map((x: Id[String]) => li(List(CastUp[String, TextNode, Tree](TextNode(x)))))
+     val result = ul(mapped)
+     result
+   }
+   test("it can use standard methods") {
+     val expectedResult = Element("ul", Element("li", TextNode("Salami")::Nil)::Element("li", TextNode("Sudjuk")::Nil)::Nil)
+     val original = List("Margharita", "Sudjuk")
+     pizzasCreator3Raw(original) shouldEqual Element("ul", Element("li", TextNode("Sudjuk")::Nil)::Nil)
+     pizzasCreator3(Id()).get(original) shouldEqual Element("ul", Element("li", TextNode("Sudjuk")::Nil)::Nil)
+     pizzasCreator3(Id()).put(expectedResult, Some(original)) should contain (
      List("Margharita", "Salami", "Sudjuk"))
    }
 }

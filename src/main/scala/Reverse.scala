@@ -220,6 +220,14 @@ object WebTrees {
   case class TextNode(text: String) extends WebElement {
     override def toString = if(displayNiceDSL) "\"" + "\"".r.replaceAllIn("\\\\".r.replaceAllIn(text, "\\\\\\\\"), "\\\"") + "\"" else s"TextNode($text)"
   }
+  object TextNode {
+    def apply[A](f: (A ~~> String)): (A ~~> TextNode) = new (A ~~> TextNode) {
+      def get(a: A) = TextNode(f.get(a))
+      def put(t: TextNode, in: Option[A]): Iterable[A] = {
+        f.put(t.text, in)
+      }
+    }
+  }
   case class Element(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends WebElement {
     override def toString = if(displayNiceDSL) "<." + tag + (if(children.nonEmpty || attributes.nonEmpty || styles.nonEmpty) (children ++ attributes ++ styles).mkString("(", ", ", ")") else "") else {
       if(styles.isEmpty) {
@@ -235,6 +243,11 @@ object WebTrees {
       } else
       s"Element($tag,$children,$attributes,$styles)"
     }
+    
+    def apply[A](f: (A ~~> List[Tree])): (A ~~> Element) = {
+      Pair(Const(this), f) andThen WebElementComposition
+    }
+    def apply(l: List[Tree]): Element = WebElementComposition.get((this, l))
   }
   case class WebAttribute(name: String, value: String) extends Tree {
     override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
@@ -400,6 +413,17 @@ case class Compose[A, B, C](a: B ~~> C, b: A ~~> B) extends (A ~~> C) {
   }
 }
 
+case class Pair[A, B, C, D](a: A ~~> B, b: C ~~> D) extends ((A, C) ~~> (B, D)) {
+  def get(in: Input): Output = (a.get(in._1), b.get(in._2))
+  def put(out2: Output, in: Option[Input]) = {
+    val ina = in.map(_._1)
+    val inb = in.map(_._2)
+    val ini1 = a.put(out2._1, ina)
+    val ini2 = b.put(out2._2, inb)
+    for{i <- ini1; j <- ini2} yield (i, j)
+  }
+}
+
 case class Flatten[A]() extends (List[List[A]] ~~> List[A]) {
   def get(in: Input) = flatten(in)
   def put(out2: Output, in: Option[Input]) = in match {
@@ -493,7 +517,7 @@ case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
   val f: A => B = fr.get _
   val fRev = (in: Option[A], b: B) => fr.put(b, in).toList
   def get(in: Input) = map(in)
-  def put(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"MapReverse.put($in, $out2) = %s"){
+  def put(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"MapReverse.put($out2, $in) = %s"){
     in match {
     case None => mapRev(Nil, out2)
     case Some(in) => mapRev(in, out2)
@@ -562,15 +586,16 @@ case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
 
 case class FilterReverse[A](f: A => Boolean) extends (List[A] ~~> List[A]) {
   def get(in: Input) = filter(in, f)
-  def put(out2: Output, in: Option[Input]) = in match {
+  def put(out2: Output, in: Option[Input]) = Implicits.report(s"FilterReverse.put($out2, $in) = %s"){in match {
     case None => filterRev(Nil, f, out2)
     case Some(in) => filterRev(in, f, out2)
+  }
   }
 
   def filter(l: List[A], f: A => Boolean): List[A] = l filter f
   
   def filterRev(l: List[A], f: A => Boolean, out: List[A]): List[List[A]] = {
-    if(l.filter(f) == out) List(l) else
+    if (l.filter(f) == out) List(l) else
     (l match {
       case Nil => 
         if(out forall f) List(out) else Nil
@@ -663,3 +688,14 @@ case class Const[A](value: A) extends (Unit ~~> A) {
   def put(output: A, orig: Option[Unit]): Stream[Unit] = Stream(())
 }
 
+case class Id[A]() extends (A ~~> A) {
+  def get(a: A) = a
+  def put(out: A, orig: Option[A]) = Stream(out)
+}
+
+case class CastUp[A, B, B2 >: B](f: A ~~> B) extends (A ~~> B2) {
+  def get(a: A) = f.get(a)
+  def put(out: B2, orig: Option[A]) = {
+    f.put(out.asInstanceOf[B], orig)
+  }
+}

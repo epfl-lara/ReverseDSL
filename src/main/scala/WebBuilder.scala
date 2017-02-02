@@ -1,5 +1,5 @@
 import scala.language.dynamics
-import shapeless.{::, HList, HNil}
+import shapeless.{:: => #:, HList, HNil}
 
 object Implicits {
   var debug = false
@@ -40,31 +40,31 @@ object Implicits {
     }
   }
   
-  implicit class AugmentedReverseHNil[A, B](r: ((A :: HNil) ~~> B)) {
-    def apply[BA](arg1: BA ~~> A): ((BA :: HNil) ~~> B) = {
-      new ((BA :: HNil) ~~> B) {
-        def get(in: (BA :: HNil)) = r.get(arg1.get(in.head) :: HNil)
-        def put(out: B, in: Option[(BA :: HNil)]): Iterable[(BA :: HNil)] = {
+  implicit class AugmentedReverseHNil[A, B](r: ((A #: HNil) ~~> B)) {
+    def apply[BA](arg1: BA ~~> A): ((BA #: HNil) ~~> B) = {
+      new ((BA #: HNil) ~~> B) {
+        def get(in: (BA #: HNil)) = r.get(arg1.get(in.head) :: HNil)
+        def put(out: B, in: Option[(BA #: HNil)]): Iterable[(BA #: HNil)] = {
           val init_ba = in.map(_.head)
-          val middle = in.map{ case init_ba :: HNil => (arg1.get(init_ba) :: HNil) }
-          for{ a::b <- r.put(out, middle)
+          val middle = in.map{ case init_ba #: HNil => (arg1.get(init_ba) :: HNil) }
+          for{ a #: b <- r.put(out, middle)
                ba <- arg1.put(a, init_ba)} yield {
-            ba :: HNil
+            ba:: HNil
           }
         }
       }
     }
   }
   
-  implicit class AugmentedReverseHCons[A, B, R <: ::[_, _]](r: ((A :: R) ~~> B)) {
-    def apply[BA, BR <: ::[_, _]](arg1: BA ~~> A, arg2: BR ~~> R): ((BA :: BR) ~~> B) = {
-      new ((BA :: BR) ~~> B) {
-        def get(in: (BA :: BR)) = r.get(arg1.get(in.head) :: arg2.get(in.tail))
-        def put(out: B, in: Option[(BA :: BR)]): Iterable[(BA :: BR)] = {
+  implicit class AugmentedReverseHCons[A, B, R <: #:[_, _]](r: ((A #: R) ~~> B)) {
+    def apply[BA, BR <: #:[_, _]](arg1: BA ~~> A, arg2: BR ~~> R): ((BA #: BR) ~~> B) = {
+      new ((BA #: BR) ~~> B) {
+        def get(in: (BA #: BR)) = r.get(arg1.get(in.head) :: arg2.get(in.tail))
+        def put(out: B, in: Option[(BA #: BR)]): Iterable[(BA #: BR)] = {
           val init_ba = in.map(_.head)
           val init_bb = in.map(_.tail)
-          val middle = in.map{ case init_ba :: init_bb => (arg1.get(init_ba) :: arg2.get(init_bb)) }
-          for{ a::b <- r.put(out, middle)
+          val middle = in.map{ case init_ba #: init_bb => (arg1.get(init_ba) :: arg2.get(init_bb)) }
+          for{ a #: b <- r.put(out, middle)
                ba <- arg1.put(a, init_ba)
                bb <- arg2.put(b, init_bb) } yield {
             ba :: bb
@@ -72,7 +72,7 @@ object Implicits {
         }
       }
     }
-    /*def apply[BA, BR <: ::[_, _]](args: BA ~~> A, arg2: BR ~~> R): ((BA :: BR) ~~> B) = {
+    /*def apply[BA, BR <: #:[_, _]](args: BA ~~> A, arg2: BR ~~> R): ((BA #: BR) ~~> B) = {
     
     }*/
   }
@@ -105,6 +105,63 @@ object Implicits {
     def put(out: D, a: Option[A]): Iterable[A] = 
       try { r.put(out.asInstanceOf[B], a) } catch { case _: Exception => Nil }
   }
+  
+  implicit class ListProducer[A, B](a: A ~~> List[B]) {
+    def filter(f: B => Boolean): (A ~~> List[B]) = {
+      a andThen FilterReverse(f)
+    }
+    def map[C](f: B ~~> C): (A ~~> List[C]) = {
+      a andThen MapReverse(f)
+    }
+    def map[C](f: Id[B] => (B ~~> C)): A ~~> List[C] = {
+      a andThen MapReverse(f(Id[B]()))
+    }
+  }
+  def reverselistiterable[A](l: List[Iterable[A]]): Iterable[List[A]] = report(s"reverselistiterable($l)=%s"){
+    l match {
+      case Nil => Stream(Nil)
+      case a::b => 
+        a.flatMap(fb => reverselistiterable(b).map(fb::_))
+    }
+  }
+  
+  def intersect[A](l: List[Iterable[A]]): Stream[A] = {
+    l match {
+      case Nil => Stream.empty
+      case head::Nil => head.toStream
+      case head::tail => if (l.exists(_.isEmpty)) Stream.empty else {
+        val e = head.head
+        if (l.forall(x => x.exists(f => f == e))) {
+          e #:: {
+            intersect(l.map(ll => ll.filter(_ != e)))
+          }
+        } else {
+          intersect(l.map(ll => ll.filter(_ != e)))
+        }
+      }
+    }
+  }
+  
+  /*implicit def listOfTransformToTransformOfList[A, B](a: List[A ~~> B]): (List[A] ~~> List[B]) = new (List[A] ~~> List[B]) {
+    def get(in: List[A]) = a.zip(in).map{ case (ela, i) => ela.get(i) }
+    
+    def put(out: List[B], in1: Option[List[A]]): Iterable[List[A]] = {
+      val in1l = in1 match { case None => out.map(_ => None: Option[A]) case Some(l) => l.map(Some(_): Option[A]) }
+      val iterables = out.zip(in1l).zip(a) map {
+        case ((o, i), a) => a.put(o, i)
+      }
+      reverselistiterable(iterables)
+    }
+  }*/
+  implicit def listOfTransformToTransformOfList[A, B](a: List[A ~~> B]): (A ~~> List[B]) = new (A ~~> List[B]) {
+    def get(i: A) = a.map{ case ela => ela.get(i) }
+    
+    def put(out: List[B], in1: Option[A]): Iterable[A] = {
+      intersect(a.zip(out).map{ case (ela, o) => ela.put(o, in1) })
+    }
+  }
+  
+  
   /*implicit def generalize[A, B, C <: A, D >: B](r: A ~~> B): (C ~~> D) = new (C ~~> D) {
     def get(a: C) = r.get(a): D
 
