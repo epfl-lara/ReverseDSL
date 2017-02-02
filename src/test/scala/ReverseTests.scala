@@ -519,6 +519,33 @@ class DuplicateTest extends FunSuite {
      duplicate2(Id()).put(Element("div", Element("span")::Element("pre")::Nil), Some(Element("span"))).toList shouldEqual (List(Element("pre")))
      duplicate2(Id()).put(Element("div", Element("span")::Element("pre")::Nil), Some(Element("pre"))).toList shouldEqual (List(Element("span")))
      duplicate2(Id()).put(Element("div", Element("br")::Element("pre")::Nil), Some(Element("span"))).toList shouldEqual (List(Element("br"), Element("pre")))
+     //duplicate2(Id()).put(Element("div", Element("br")::Element("pre")::Element("span")::Nil), Some(Element("span"))).toList shouldEqual (List(Element("br"), Element("pre")))
+   }
+}
+
+class ReproduceTest extends FunSuite {
+   import WebBuilder._
+   import Implicits.{RemoveUnit => _, _}
+   
+   def reproduce(d: (Int, WebElement)) = 
+     Element("div", List.fill(d._1)(d._2))
+   def reproduce2(d: Id[(Int, WebElement)]): ((Int, WebElement) ~~> Element) =
+     Element("div", Listfill(d))
+     
+   test("it can reproduce and un-reproduce") {
+     reproduce((3, Element("pre"))) shouldEqual Element("div", Element("pre")::Element("pre")::Element("pre")::Nil)
+     reproduce2(Id()).get((3, Element("pre"))) shouldEqual Element("div", Element("pre")::Element("pre")::Element("pre")::Nil)
+     reproduce2(Id()).put(Element("div", Element("span")::Element("span")::Nil)).toList shouldEqual (List((2, Element("span"))))
+   }
+   
+   test("it can un-reproduce partially") {
+     reproduce2(Id()).put(Element("div", Element("span")::Element("pre")::Nil)).toList shouldEqual (List((2, Element("span")), (2, Element("pre"))))
+     reproduce2(Id()).put(Element("div", Element("span")::Element("pre")::Nil), (2, Element("pre"))).toList shouldEqual
+       (List((2, Element("span"))))
+     reproduce2(Id()).put(Element("div", Element("span")::Element("pre")::Nil), (3, Element("pre"))).toList shouldEqual
+       (List((2, Element("span"))))
+     reproduce2(Id()).put(Element("div", Element("pre")::Element("pre")::Element("span")::Nil), (2, Element("pre"))).toList shouldEqual
+       (List((3, Element("span"))))
    }
 }
 

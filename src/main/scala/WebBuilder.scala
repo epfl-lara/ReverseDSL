@@ -118,6 +118,30 @@ object Implicits {
       a andThen MapReverse(f(Id[B]()))
     }
   }
+  implicit class TupleProducer[A, B, C](f: A ~~> (B, C)) {
+    def _1: (A ~~> B) = new (A ~~> B) {
+      def get(a: A): B = f.get(a)._1
+      def put(out: B, in: Option[A]) = {
+        in.map(f.get) match {
+          case Some((b, c)) =>
+            f.put((out, c), in)
+          case None =>     
+            Nil
+        }
+      }
+    }
+    def _2: (A ~~> C) = new (A ~~> C) {
+      def get(a: A): C = f.get(a)._2
+      def put(out: C, in: Option[A]) = {
+        in.map(f.get) match {
+          case Some((b, c)) =>
+            f.put((b, out), in)
+          case None =>     
+            Nil
+        }
+      }
+    }
+  }
   def reverselistiterable[A](l: List[Iterable[A]]): Iterable[List[A]] = report(s"reverselistiterable($l)=%s"){
     l match {
       case Nil => Stream(Nil)
@@ -179,8 +203,31 @@ object Implicits {
       val res = intersect(argForIntersect)
       res #::: in1.map(aEl => intersectLight(argForIntersect, aEl)).getOrElse(Stream.empty)
     }
-  }
+  } 
   
+  def Listfill[B, C](n: C ~~> (Int, B)) = new (C ~~> List[B]) {
+    def get(c: C): List[B] = {
+      val (i, b) = n.get(c)
+      List.fill(i)(b)
+    }
+    def put(out: List[B], in: Option[C]) = {
+      (in map n.get) match {
+        case Some((i, b)) =>
+          if (out.forall(e => e == b)) {
+            n.put((out.length, b), in)
+          } else {
+            val newCandidates = out.filter(e => e != b).distinct.toStream
+            for{ possibleOut <- newCandidates
+                 cInput <- n.put((out.length, possibleOut), in)
+            } yield cInput
+          }
+        case None => // No hint on the initial output.
+          for{ possibleOut <- out.distinct.toStream
+               cInput <- n.put((out.length, possibleOut), in)
+          } yield cInput
+      }
+    }
+  }
   
   /*implicit def generalize[A, B, C <: A, D >: B](r: A ~~> B): (C ~~> D) = new (C ~~> D) {
     def get(a: C) = r.get(a): D
