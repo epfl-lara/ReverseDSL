@@ -153,7 +153,6 @@ object Implicits {
         if (headhead == orig)
         intersectLight(head.tail::tail, orig, first)
         else if(!first || tail.exists(i => i.forall(e => e != headhead))) {
-          println(s"Adding element $headhead")
           headhead #:: intersectLight(l.map(ll => ll.filter(_ != headhead)), orig, first)
         } else { // It was already taken into account in intersect.
           intersectLight(l.map(ll => ll.filter(_ != headhead)), orig, first)

@@ -496,7 +496,10 @@ class PizzaTest extends FunSuite {
    }
 }
 
-
+/**
+This test focuses on the task of updating the result containing the duplication of an object.
+It tests that the object which was not there before is given the priority to represent all the changes.
+*/
 class DuplicateTest extends FunSuite {
    import WebBuilder._
    import Implicits.{RemoveUnit => _, _}
@@ -515,6 +518,7 @@ class DuplicateTest extends FunSuite {
    test("it can un-duplicate partially") {
      duplicate2(Id()).put(Element("div", Element("span")::Element("pre")::Nil), Some(Element("span"))).toList shouldEqual (List(Element("pre")))
      duplicate2(Id()).put(Element("div", Element("span")::Element("pre")::Nil), Some(Element("pre"))).toList shouldEqual (List(Element("span")))
+     duplicate2(Id()).put(Element("div", Element("br")::Element("pre")::Nil), Some(Element("span"))).toList shouldEqual (List(Element("br"), Element("pre")))
    }
 }
 
