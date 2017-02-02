@@ -496,6 +496,28 @@ class PizzaTest extends FunSuite {
    }
 }
 
+
+class DuplicateTest extends FunSuite {
+   import WebBuilder._
+   import Implicits.{RemoveUnit => _, _}
+   
+   def duplicate(d: WebElement) = 
+     Element("div", d::d::Nil)
+   def duplicate2(d: Id[WebElement]) =
+     Element("div", d::d::Nil)
+     
+   test("it can duplicate and un-duplicate") {
+     duplicate(Element("pre")) shouldEqual Element("div", Element("pre")::Element("pre")::Nil)
+     duplicate2(Id()).get(Element("pre")) shouldEqual Element("div", Element("pre")::Element("pre")::Nil)
+     duplicate2(Id()).put(Element("div", Element("span")::Element("span")::Nil)) should contain (Element("span"))
+   }
+   
+   test("it can un-duplicate partially") {
+     duplicate2(Id()).put(Element("div", Element("span")::Element("pre")::Nil), Some(Element("span"))).toList shouldEqual (List(Element("pre")))
+     duplicate2(Id()).put(Element("div", Element("span")::Element("pre")::Nil), Some(Element("pre"))).toList shouldEqual (List(Element("span")))
+   }
+}
+
 /**
 Future work: If cannot revert a function, abstract it using one more argument !
 

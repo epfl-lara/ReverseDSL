@@ -228,6 +228,16 @@ object WebTrees {
       }
     }
   }
+  object Element {
+    def apply[A](tag: String, f: A ~~> List[WebElement]): (A ~~> Element) = {
+      new (A ~~> Element) {
+        def get(a: A) = Element(tag, f.get(a))
+        def put(e: Element, in: Option[A]): Iterable[A] = Implicits.report(s"Element.put($e, $in) = %s") {
+          f.put(e.children, in)
+        }
+      }
+    }
+  }
   case class Element(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends WebElement {
     override def toString = if(displayNiceDSL) "<." + tag + (if(children.nonEmpty || attributes.nonEmpty || styles.nonEmpty) (children ++ attributes ++ styles).mkString("(", ", ", ")") else "") else {
       if(styles.isEmpty) {

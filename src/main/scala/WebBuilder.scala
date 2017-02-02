@@ -14,7 +14,7 @@ object Implicits {
     def apply[BA](arg1: BA ~~> A): (BA ~~> B) = {
       new (BA ~~> B) {
         def get(in: BA) = r.get(arg1.get(in))
-        def put(out: B, in: Option[BA]) = {
+        def put(out: B, in: Option[BA]) = report(s"AugmentedReverse1.put($out, $in) = %s"){
           val middle = in.map(arg1.get)
           for{ a <- r.put(out, middle)
                ba <- arg1.put(a, in)} yield { ba }
@@ -26,7 +26,7 @@ object Implicits {
     def apply[BA, BB](arg1: BA ~~> A, arg2: BB ~~> B): (BA, BB) ~~> C = {
       new ((BA, BB) ~~> C) {
         def get(in: (BA, BB)) = r.get(arg1.get(in._1), arg2.get(in._2))
-        def put(out: C, in: Option[(BA, BB)]) = {
+        def put(out: C, in: Option[(BA, BB)]) = report(s"AugmentedReverse2.put($out, $in) = %s"){
           val init_ba = in.map(_._1)
           val init_bb = in.map(_._2)
           val middle = in.map{ case (init_ba, init_bb) => (arg1.get(init_ba), arg2.get(init_bb)) }
@@ -102,8 +102,9 @@ object Implicits {
   implicit def generalize[A, B, D >: B](r: A ~~> B): (A ~~> D) = new (A ~~> D) {
     def get(a: A): D = r.get(a): D
 
-    def put(out: D, a: Option[A]): Iterable[A] = 
+    def put(out: D, a: Option[A]): Iterable[A] =  report(s"generalize.put($out, $a) = %s") {
       try { r.put(out.asInstanceOf[B], a) } catch { case _: Exception => Nil }
+    }
   }
   
   implicit class ListProducer[A, B](a: A ~~> List[B]) {
@@ -125,7 +126,7 @@ object Implicits {
     }
   }
   
-  def intersect[A](l: List[Iterable[A]]): Stream[A] = {
+  def intersect[A](l: List[Iterable[A]]): Stream[A] = report(s"intersect(${l.map(_.toList)}) = %s"){
     l match {
       case Nil => Stream.empty
       case head::Nil => head.toStream
@@ -139,6 +140,24 @@ object Implicits {
           intersect(l.map(ll => ll.filter(_ != e)))
         }
       }
+    }
+  }
+  
+  /** All elements not equal to origin which do not appear everywhere.*/
+  def intersectLight[A](l: List[Iterable[A]], orig: A, first: Boolean = true): Stream[A] = report(s"intersectLight(${l.map(_.toList)}, $orig) = %s"){
+    l match {
+      case Nil => Stream.empty
+      case Nil::tail => intersectLight(tail, orig, false)
+      case head::tail =>
+        val headhead = head.head      
+        if (headhead == orig)
+        intersectLight(head.tail::tail, orig, first)
+        else if(!first || tail.exists(i => i.forall(e => e != headhead))) {
+          println(s"Adding element $headhead")
+          headhead #:: intersectLight(l.map(ll => ll.filter(_ != headhead)), orig, first)
+        } else { // It was already taken into account in intersect.
+          intersectLight(l.map(ll => ll.filter(_ != headhead)), orig, first)
+        }
     }
   }
   
@@ -156,8 +175,10 @@ object Implicits {
   implicit def listOfTransformToTransformOfList[A, B](a: List[A ~~> B]): (A ~~> List[B]) = new (A ~~> List[B]) {
     def get(i: A) = a.map{ case ela => ela.get(i) }
     
-    def put(out: List[B], in1: Option[A]): Iterable[A] = {
-      intersect(a.zip(out).map{ case (ela, o) => ela.put(o, in1) })
+    def put(out: List[B], in1: Option[A]): Iterable[A] = report(s"listOfTransformToTransformOfList.put($out, $in1) = %s"){
+      val argForIntersect: List[Iterable[A]] = a.zip(out).map{ case (ela, o) => ela.put(o, in1) }
+      val res = intersect(argForIntersect)
+      res #::: in1.map(aEl => intersectLight(argForIntersect, aEl)).getOrElse(Stream.empty)
     }
   }
   
