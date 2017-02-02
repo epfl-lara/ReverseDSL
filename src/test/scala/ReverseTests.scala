@@ -8,7 +8,7 @@ class StringAppendTest extends FunSuite {
     in._1 + in._2
   }
   import Implicits._
-  def doubleAppend2(in: Id[(String, String)]): ((String, String) ~~> String) = {
+  def doubleAppend2(in: Id[(String, String)]) = {
     in._1 + in._2
   }
   
@@ -22,7 +22,7 @@ class StringAppendTest extends FunSuite {
     d.put("Hello aworld", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "aworld"), ("Hello a", "world")))
   }
   
-  def tripleAppend2(in: Id[((String, String), String)]): (((String, String), String) ~~> String) = {
+  def tripleAppend2(in: Id[((String, String), String)]) = {
     in._1._1 + in._1._2 + in._2
   }
   
@@ -41,7 +41,7 @@ class StringAppendTest extends FunSuite {
   }
   
   test("Use of a variable twice") {
-    def doubleAppend2(in: Id[(String, String)]): ((String, String) ~~> String) = {
+    def doubleAppend2(in: Id[(String, String)]) = {
       in._1 + in._2 + in._1
     }
     val d = doubleAppend2(Id())
@@ -50,6 +50,7 @@ class StringAppendTest extends FunSuite {
     d.put("Hello World", Some(("Hello", " "))).toList shouldEqual List(("World", " "))
     d.put("World Hello", Some(("Hello", " "))).toList shouldEqual List(("World", " "))
     d.put("Big World", Some(("Hello", " "))).toList shouldEqual List()
+    d.put("Big Big", Some(("Hello", " "))).toList shouldEqual List() // Interesting: It cannot support two changes at a time.
     d.put("Hello  Hello", Some(("Hello", " "))).toList shouldEqual List(("Hello", "  "), ("Hello ", " "), (" Hello", " "))
     d.put("  Hello ", Some((" ", "Hello"))).toList shouldEqual List(("  ", "Hello"), (" ", " Hello"))
     d.put(" Hello  ", Some((" ", "Hello"))).toList shouldEqual List(("  ", "Hello"), (" ", "Hello "))
@@ -75,7 +76,7 @@ class StringAppendTest extends FunSuite {
 class StringFormatReverseTest extends FunSuite  {
   //import StringFormatReverse._
   import Implicits._
-  def format(in: Id[(String, List[Any])]): ((String, List[Any]) ~~> String) = {
+  def format(in: Id[(String, List[Any])]) = {
     in._1.format(in._2)
   }
   
