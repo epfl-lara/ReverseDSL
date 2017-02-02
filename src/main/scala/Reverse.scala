@@ -31,7 +31,7 @@ object StringAppend extends  ((String, String) ~~> String) {
   
   def get(st: Input): Output = append(st._1, st._2)
   
-  def put(out: Output, st: Option[Input]): Iterable[Input] = {
+  def put(out: Output, st: Option[Input]): Iterable[Input] = report(s"StringAppend.put($out, $st) = %s"){
     st match {
       case None => List((out, "")).distinct
       case Some(st) =>
@@ -425,7 +425,7 @@ case class Compose[A, B, C](a: B ~~> C, b: A ~~> B) extends (A ~~> C) {
 
 case class Pair[A, B, C, D](a: A ~~> B, b: C ~~> D) extends ((A, C) ~~> (B, D)) {
   def get(in: Input): Output = (a.get(in._1), b.get(in._2))
-  def put(out2: Output, in: Option[Input]) = {
+  def put(out2: Output, in: Option[Input]) = report(s"Pair.put($out2, $in) = %s"){
     val ina = in.map(_._1)
     val inb = in.map(_._2)
     val ini1 = a.put(out2._1, ina)

@@ -4,7 +4,59 @@ import Matchers._
 
 class StringAppendTest extends FunSuite {
   import StringAppend.{put => appendRev, _}
-  def f = append(append("Hello", " "), "world")
+  def doubleAppend(in: (String, String)): String = {
+    in._1 + in._2
+  }
+  import Implicits._
+  def doubleAppend2(in: Id[(String, String)]): ((String, String) ~~> String) = {
+    in._1 + in._2
+  }
+  
+  test("Double decomposition") {
+    doubleAppend(("Hello ", "world")) shouldEqual "Hello world"
+    val d = doubleAppend2(Id())
+    d.get(("Hello ", "world")) shouldEqual "Hello world"
+    d.put("Hello world", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "world")))
+    d.put("Hello Buddy", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "Buddy")))
+    d.put("Hello  world", ("Hello ", "world")).toList shouldEqual (List(("Hello  ", "world"), ("Hello ", " world")))
+    d.put("Hello aworld", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "aworld"), ("Hello a", "world")))
+  }
+  
+  def tripleAppend2(in: Id[((String, String), String)]): (((String, String), String) ~~> String) = {
+    in._1._1 + in._1._2 + in._2
+  }
+  
+  test("Triple decomposition") {
+    val t = tripleAppend2(Id())
+
+    def tRev(i: String) = t.put(i, Option((("Hello", " "), "world"))).toList.map(ab_c => (ab_c._1._1, ab_c._1._2, ab_c._2))
+    tRev("Hello world") shouldEqual List(("Hello", " ", "world"))
+    tRev("Hello Buddy") shouldEqual List(("Hello", " ", "Buddy"))
+    tRev("Hello big world") shouldEqual List(("Hello"," ","big world"), ("Hello"," big ","world"), ("Hello big"," ","world"))
+    tRev("Hello a-world") shouldEqual List(("Hello"," ","a-world"), ("Hello"," a-","world"))
+    tRev("Hello-a world") shouldEqual List(("Hello-a"," ","world"), ("Hello","-a ","world"))
+    tRev("Hello  world") shouldEqual List(("Hello","  ","world"), ("Hello "," ","world"), ("Hello"," "," world"))
+    tRev("Hi world") shouldEqual List(("Hi"," ","world"))
+    tRev("Hi Buddy") shouldEqual List()
+  }
+  
+  test("Use of a variable twice") {
+    def doubleAppend2(in: Id[(String, String)]): ((String, String) ~~> String) = {
+      in._1 + in._2 + in._1
+    }
+    val d = doubleAppend2(Id())
+    d.get(("Hello", " ")) shouldEqual "Hello Hello"
+    d.put("Hello Hello", Some(("Hello", " "))).toList shouldEqual List(("Hello", " "))
+    d.put("Hello World", Some(("Hello", " "))).toList shouldEqual List(("World", " "))
+    d.put("World Hello", Some(("Hello", " "))).toList shouldEqual List(("World", " "))
+    d.put("Big World", Some(("Hello", " "))).toList shouldEqual List()
+    d.put("Hello  Hello", Some(("Hello", " "))).toList shouldEqual List(("Hello", "  "), ("Hello ", " "), (" Hello", " "))
+    d.put("  Hello ", Some((" ", "Hello"))).toList shouldEqual List(("  ", "Hello"), (" ", " Hello"))
+    d.put(" Hello  ", Some((" ", "Hello"))).toList shouldEqual List(("  ", "Hello"), (" ", "Hello "))
+  }
+  
+  // Old tests
+  /*def f = append(append("Hello", " "), "world")
   def fRev(out: String): List[(String, String, String)] = appendRev(out, ("Hello ", "world")).toList.flatMap(leftRight => 
     appendRev(leftRight._1, ("Hello", " ")).map(lr => (lr._1, lr._2, leftRight._2))
   )
@@ -17,12 +69,20 @@ class StringAppendTest extends FunSuite {
     fRev("Hello  world") shouldEqual List(("Hello","  ","world"), ("Hello "," ","world"), ("Hello"," "," world"))
     fRev("Hi world") shouldEqual List(("Hi"," ","world"))
     fRev("Hi Buddy") shouldEqual List()
-  }
+  }*/
 }
 
 class StringFormatReverseTest extends FunSuite  {
-  import StringFormatReverse._
+  //import StringFormatReverse._
+  import Implicits._
+  def format(in: Id[(String, List[Any])]): ((String, List[Any]) ~~> String) = {
+    in._1.format(in._2)
+  }
+  
   test("Formatting reverse decomposition") {
+    val f = format(Id())
+    def formatRev(s: String, args: List[Any], output: String) =
+      f.put(output, Some((s, args)))
     formatRev("%s %s %d", List("Hello", "world", 42), "Hello buddy 42") shouldEqual List(("%s %s %d", List("Hello", "buddy", 42)))
     formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello, obscure world!") should contain (("%s, %s %s!", List("Hello", "obscure", "world")))
     formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello,clear world!") should contain (("%s,%s %s!", List("Hello", "clear", "world")))
@@ -31,6 +91,16 @@ class StringFormatReverseTest extends FunSuite  {
     formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should contain(("Hello %1$s! %1$s is ok?", List("Mikael")))
     formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should not contain (("Hello %1$s! %1$s is ok?", List("Marion")))
   }
+  /*
+  test("Formatting reverse decomposition") {
+    formatRev("%s %s %d", List("Hello", "world", 42), "Hello buddy 42") shouldEqual List(("%s %s %d", List("Hello", "buddy", 42)))
+    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello, obscure world!") should contain (("%s, %s %s!", List("Hello", "obscure", "world")))
+    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello,clear world!") should contain (("%s,%s %s!", List("Hello", "clear", "world")))
+    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Good bye,awesome friend!") should contain (("%s,%s %s!", List("Good bye", "awesome", "friend")))
+    formatRev("%2$s,%3$s %1$s!", List("world", "Hello", "obscure"), "Hello,clear world!") should contain (("%2$s,%3$s %1$s!", List("world", "Hello", "clear")))
+    formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should contain(("Hello %1$s! %1$s is ok?", List("Mikael")))
+    formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should not contain (("Hello %1$s! %1$s is ok?", List("Marion")))
+  }*/
 }
 
 
