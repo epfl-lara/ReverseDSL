@@ -73,8 +73,52 @@ class StringAppendTest extends FunSuite {
   }*/
 }
 
+
+class ListAppendTest extends FunSuite {
+  def doubleAppend(in: (List[Int], List[Int])): List[Int] = {
+    in._1 ++ in._2
+  }
+  import Implicits._
+  def doubleAppend2(in: Id[(List[Int], List[Int])]) = {
+    in._1 ++ in._2
+  }
+  
+  test("Double decomposition") {
+    doubleAppend((List(1, 2), List(3, 4, 5))) shouldEqual List(1, 2, 3, 4, 5)
+    val d = doubleAppend2(Id())
+    d.get((List(1, 2), List(3, 4, 6))) shouldEqual List(1, 2, 3, 4, 6)
+    d.put(List(1, 2, 3, 4, 5), (List(1, 2), List(4, 5))).toList shouldEqual (List((List(1, 2), List(3, 4, 5)), (List(1, 2, 3), List(4, 5))))
+    d.put(List(1, 2, 4, 5, 3), (List(1, 2), List(4, 5))).toList shouldEqual (List((List(1, 2), List(4, 5, 3))))
+  }
+  
+  def tripleAppend2(in: Id[(List[Int], List[Int], List[Int])]) = {
+    in._1 ++ in._2 ++ in._3
+  }
+  
+  test("Triple decomposition") {
+    val t = tripleAppend2(Id())
+
+    def tRev(i: List[Int]) = t.put(i, Option((List(1, 2), List(), List(4)))).toList
+    tRev(List(1, 2, 4)) shouldEqual List((List(1, 2), List(), List(4)))
+    tRev(List(1, 2, 3, 4)) shouldEqual List((List(1, 2), List(), List(3, 4)), (List(1, 2), List(3), List(4)), (List(1, 2, 3), List(), List(4)))
+    tRev(List(3, 1, 2, 4)) shouldEqual List((List(3, 1, 2), List(), List(4)))
+  }
+  
+  test("Use of a variable twice") {
+    def doubleAppend2(in: Id[(List[Int], List[Int])]) = {
+      in._1 ++ in._2 ++ in._1
+    }
+    val d = doubleAppend2(Id())
+    d.get((List(1, 3), List(2))) shouldEqual List(1, 3, 2, 1, 3)
+    d.put(List(1, 3, 2, 1, 3), Some((List(1, 3), List(2)))).toList shouldEqual List((List(1, 3), List(2)))
+    d.put(List(1, 4, 2, 1, 3), Some((List(1, 3), List(2)))).toList shouldEqual List((List(1, 4), List(2)))
+    d.put(List(1, 3, 3, 1, 3), Some((List(1, 3), List(2)))).toList shouldEqual List((List(1, 3), List(3)))
+    d.put(List(1, 3, 4, 5, 1, 3), Some((List(1, 3), List(2)))).toList shouldEqual List((List(1, 3), List(4, 5)))
+    d.put(List(1, 3, 1, 3, 1, 3, 1, 3, 1), Some((List(1, 3, 1), List(3)))).toList shouldEqual List((List(1, 3, 1, 3, 1), List(3)), (List(1, 3, 1), List(3, 1, 3)))
+  }
+}
+
 class StringFormatReverseTest extends FunSuite  {
-  //import StringFormatReverse._
   import Implicits._
   def format(in: Id[(String, List[Any])]) = {
     in._1.format(in._2)
@@ -92,16 +136,6 @@ class StringFormatReverseTest extends FunSuite  {
     formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should contain(("Hello %1$s! %1$s is ok?", List("Mikael")))
     formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should not contain (("Hello %1$s! %1$s is ok?", List("Marion")))
   }
-  /*
-  test("Formatting reverse decomposition") {
-    formatRev("%s %s %d", List("Hello", "world", 42), "Hello buddy 42") shouldEqual List(("%s %s %d", List("Hello", "buddy", 42)))
-    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello, obscure world!") should contain (("%s, %s %s!", List("Hello", "obscure", "world")))
-    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello,clear world!") should contain (("%s,%s %s!", List("Hello", "clear", "world")))
-    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Good bye,awesome friend!") should contain (("%s,%s %s!", List("Good bye", "awesome", "friend")))
-    formatRev("%2$s,%3$s %1$s!", List("world", "Hello", "obscure"), "Hello,clear world!") should contain (("%2$s,%3$s %1$s!", List("world", "Hello", "clear")))
-    formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should contain(("Hello %1$s! %1$s is ok?", List("Mikael")))
-    formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should not contain (("Hello %1$s! %1$s is ok?", List("Marion")))
-  }*/
 }
 
 

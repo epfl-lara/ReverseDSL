@@ -108,17 +108,6 @@ object Implicits extends ImplicitTuples {
     }
   }
   
-  implicit class ListProducer[A, B](a: A ~~> List[B]) {
-    def filter(f: B => Boolean): (A ~~> List[B]) = {
-      a andThen FilterReverse(f)
-    }
-    def map[C](f: B ~~> C): (A ~~> List[C]) = {
-      a andThen MapReverse(f)
-    }
-    def map[C](f: Id[B] => (B ~~> C)): A ~~> List[C] = {
-      a andThen MapReverse(f(Id[B]()))
-    }
-  }
   implicit def removeDuplicateArgument[A, C](f: (A, A) ~~> C): (A ~~> C) = new (A ~~> C) {
     def get(a: A) = f.get((a, a))
     def put(c: C, init: Option[A]) = report(s"removeDuplicateArguments.put($c, $init) = %s") {
@@ -147,6 +136,35 @@ object Implicits extends ImplicitTuples {
       }).toList
     }
   }*/
+  
+  implicit class ListProducer[A, B](a: A ~~> List[B]) {
+    def filter(f: B => Boolean): (A ~~> List[B]) = {
+      a andThen FilterReverse(f)
+    }
+    def map[C](f: B ~~> C): (A ~~> List[C]) = {
+      a andThen MapReverse(f)
+    }
+    def map[C](f: Id[B] => (B ~~> C)): A ~~> List[C] = {
+      a andThen MapReverse(f(Id[B]()))
+    }
+    
+    def ++(f: A ~~> List[B]): (A ~~> List[B]) = new ((A, A) ~~> List[B]) {
+      def get(in: (A, A)) = a.get(in._1) ++ f.get(in._2)
+      def put(out: List[B], in: Option[(A, A)]) = {
+        (in map (x => (a.get(x._1), f.get(x._2)))) match {
+          case None => for{ in1 <- a.put(out, in.map(_._1)); in2 <- f.put(out, in.map(_._1)) } yield (in1, in2)
+          case Some((initOut1, initOut2)) =>
+              if (initOut1 ++ initOut2 == out) in.toList
+              else {
+                val keepFirstIntact: Iterable[(A, A)] = (if(out.length >= initOut1.length) f.put(out.drop(initOut1.length), in.map(_._2)).map((in.get._1, _: A)) else Nil)
+                val keepSecondIntact: Iterable[(A, A)] = (if(out.length >= initOut2.length) a.put(out.take(out.length - initOut2.length), in.map(_._1)).map((_: A, in.get._2)) else Nil)
+                //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
+                (keepFirstIntact ++ keepSecondIntact).filter(res => get(res) == out)
+              }
+        }
+      }
+    }
+  }
   implicit class StringProducer[A](f: (A ~~> String)) {
     /*def +[B](other: (B ~~> String)): ((A, B) ~~> String) = {
       Pair(f, other) andThen StringAppend
