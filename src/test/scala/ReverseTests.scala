@@ -22,14 +22,14 @@ class StringAppendTest extends FunSuite {
     d.put("Hello aworld", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "aworld"), ("Hello a", "world")))
   }
   
-  def tripleAppend2(in: Id[((String, String), String)]) = {
-    in._1._1 + in._1._2 + in._2
+  def tripleAppend2(in: Id[(String, String, String)]) = {
+    in._1 + in._2 + in._3
   }
   
   test("Triple decomposition") {
     val t = tripleAppend2(Id())
 
-    def tRev(i: String) = t.put(i, Option((("Hello", " "), "world"))).toList.map(ab_c => (ab_c._1._1, ab_c._1._2, ab_c._2))
+    def tRev(i: String) = t.put(i, Option(("Hello", " ", "world"))).toList
     tRev("Hello world") shouldEqual List(("Hello", " ", "world"))
     tRev("Hello Buddy") shouldEqual List(("Hello", " ", "Buddy"))
     tRev("Hello big world") shouldEqual List(("Hello"," ","big world"), ("Hello"," big ","world"), ("Hello big"," ","world"))

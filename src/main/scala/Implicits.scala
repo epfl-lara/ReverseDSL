@@ -1,7 +1,8 @@
 import scala.language.dynamics
 import shapeless.{:: => #:, HList, HNil}
+import scala.language.implicitConversions
 
-object Implicits {
+object Implicits extends ImplicitTuples {
   var debug = false
   def report[A](s: =>String)(a: =>A): A = {
     if (debug) println(s.replaceAll("%s$", "[to compute]"))
@@ -118,30 +119,6 @@ object Implicits {
       a andThen MapReverse(f(Id[B]()))
     }
   }
-  implicit class TupleProducer[A, B, C](f: A ~~> (B, C)) {
-    def _1: (A ~~> B) = new (A ~~> B) {
-      def get(a: A): B = f.get(a)._1
-      def put(out: B, in: Option[A]) = report(s"_1.put($out, $in) = %s")  {
-        in.map(f.get) match {
-          case Some((b, c)) =>
-            f.put((out, c), in)
-          case None =>     
-            Nil
-        }
-      }
-    }
-    def _2: (A ~~> C) = new (A ~~> C) {
-      def get(a: A): C = f.get(a)._2
-      def put(out: C, in: Option[A]) = report(s"_2.put($out, $in) = %s") {
-        in.map(f.get) match {
-          case Some((b, c)) =>
-            f.put((b, out), in)
-          case None =>     
-            Nil
-        }
-      }
-    }
-  }
   implicit def removeDuplicateArgument[A, C](f: (A, A) ~~> C): (A ~~> C) = new (A ~~> C) {
     def get(a: A) = f.get((a, a))
     def put(c: C, init: Option[A]) = report(s"removeDuplicateArguments.put($c, $init) = %s") {
@@ -156,7 +133,7 @@ object Implicits {
       }).toList
     }
   }
-  implicit def removeDuplicateArgument3[A, C](f: ((A, A), A) ~~> C): (A ~~> C) = new (A ~~> C) {
+  /*implicit def removeDuplicateArgument3[A, C](f: ((A, A), A) ~~> C): (A ~~> C) = new (A ~~> C) {
     def get(a: A) = f.get(((a, a), a))
     def put(c: C, init: Option[A]) = report(s"removeDuplicateArgument3.put($c, $init) = %s") {
       val p = f.put(c, (init zip init zip init).headOption)
@@ -169,12 +146,12 @@ object Implicits {
           result
       }).toList
     }
-  }
+  }*/
   implicit class StringProducer[A](f: (A ~~> String)) {
     /*def +[B](other: (B ~~> String)): ((A, B) ~~> String) = {
       Pair(f, other) andThen StringAppend
     }*/
-    def +(other: =>(A ~~> String)): (A ~~> String) = {
+    def +(other: (A ~~> String)): (A ~~> String) = {
       Pair(f, other) andThen StringAppend
     }
     /*def format[B](other: (B ~~> List[Any])): ((A, B) ~~> String) = {
@@ -184,6 +161,7 @@ object Implicits {
       Pair(f, other) andThen StringFormatReverse
     }
   }
+  
   def reverselistiterable[A](l: List[Iterable[A]]): Iterable[List[A]] = report(s"reverselistiterable($l)=%s"){
     l match {
       case Nil => Stream(Nil)
