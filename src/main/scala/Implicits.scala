@@ -294,27 +294,6 @@ object Implicits extends ImplicitTuples {
       }
     }
 
-    /*def substring(start: Int, end: (A ~~> Int)) = new (A ~~> String) {
-      def get(in: A) = f.get(in).substring(start, end.get(in))
-      def put(out: String, in1: Option[A]) = report("substring.put($out, $in1) %s") {
-        in1 match {
-          case Some(a) =>
-            val s = f.get(a)
-            val e = end.get(a)
-            f.put(s.substring(0, start) + out + s.substring(e), in1) ++ {
-              // Find other ends?
-              Nil
-            }
-          case None =>
-            f.put(" " * start + out, None)
-        }
-      }
-    }*/
-/*
-    def substring(start: (A ~~> Int), end: Int): (A ~~> String) = {
-    
-    }
-    */
     def substring(start: (A ~~> Int), end: (A ~~> Int)): (A ~~> String) = new ((A, A, A) ~~> String) {
       def get(in: (A, A, A)) = f.get(in._1).substring(start.get(in._2), end.get(in._3))
       def put(out: String, in1: Option[(A, A, A)]) = report("substring.put($out, $in1) %s") {
@@ -338,14 +317,88 @@ object Implicits extends ImplicitTuples {
         }
       }
     }
-    /*
-    def substring(start: Int): (A ~~> String) = {
     
+    def indexOfSlice(substring: String) = new (A ~~> Int) {
+      def get(a: A) = f.get(a).indexOfSlice(substring)
+      def put(out: Int, in1: Option[A]) = in1 match {
+        case None => Nil
+        case Some(a) =>
+          val s = f.get(a)
+          val i = s.indexOfSlice(substring)
+          if(i == out) List(a)
+          else if(i == -1) { // The substring was not there before. Return all the possible insertions.
+            for{i <- (0 to s.length).toStream
+                (k1, k2) = s.splitAt(i)
+                c = k1+substring+k2
+                sol <- f.put(c, in1)
+            } yield sol
+            
+          } else {
+            if (out == -1) { // The substring should disappear.
+              f.put(s.take(i) + s.drop(i+substring.length), in1)
+            } else if(out >= 0 && out <= s.length - substring.length) { // Move the substring in the original string so that the index is the right one.
+              // Caution: May not be ok if appears multiple times.
+              val previousS = s.take(i) + s.drop(i+substring.length)
+              val (k1, k2) = previousS.splitAt(out)
+              
+              f.put(k1 + substring + k2, in1)
+            } else {
+              Nil
+            }
+          }
+      }
     }
-
-    def substring(start: (A ~~> Int)): (A ~~> String) = {
     
-    }*/
+    def indexOfSlice(substring: A ~~> String): (A ~~> Int) = new ((A, A) ~~> Int) {
+      def get(a: (A, A)) = f.get(a._1).indexOfSlice(substring.get(a._2))
+      def put(out: Int, in1: Option[(A, A)]) = in1 match {
+        case None => Nil
+        case Some(a@(a1, a2)) =>
+          val s = f.get(a1)
+          val sub = substring.get(a2)
+          val i = s.indexOfSlice(sub)
+          val subput = substring.put(sub, in1.map(_._2))
+          if(i == out) List(a)
+          else if(i == -1) { // The substring was not there before. Return all the possible insertions.
+            for{
+                i <- (0 to s.length).toStream
+                (k1, k2) = s.splitAt(i)
+                c = k1+sub+k2
+                m1 <- f.put(c, in1.map(_._1))
+                m2 <- subput
+            } yield (m1, m2)
+          } else {
+            if (out == -1) { // The substring should disappear.
+              val fput = f.put(s.take(i) + s.drop(i+sub.length), in1.map(_._1))
+              for{m1 <- fput
+                  m2 <- subput} yield (m1, m2)
+            } else if(out >= 0 && out <= s.length - sub.length) { // Move the substring in the original string so that the index is the right one.
+              // Caution: May not be ok if appears multiple times.
+              val previousS = s.take(i) + s.drop(i+sub.length)
+              val (k1, k2) = previousS.splitAt(out)
+              val fput = f.put(k1 + sub + k2, in1.map(_._1))
+              (for{
+                  m1 <- fput
+                  m2 <- subput
+              } yield (m1, m2)) ++ {
+                val maybe = s.substring(out)
+                val originalf = f.put(s, in1.map(_._1))
+                for{ i <- (1 to maybe.length).toStream
+                     prefix = maybe.substring(0, i)
+                     outpossible = s.indexOfSlice(prefix)
+                     if outpossible == out
+                     m1 <- originalf
+                     m2 <- substring.put(prefix, in1.map(_._2))
+                } yield {
+                  (m1, m2)
+                }
+              }
+            } else {
+              Nil
+            }
+          }
+      }
+    }
   }
   
   def reverselistiterable[A](l: List[Iterable[A]]): Iterable[List[A]] = report(s"reverselistiterable($l)=%s"){

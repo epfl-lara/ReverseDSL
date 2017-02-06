@@ -695,6 +695,47 @@ class StringSubstringTest extends FunSuite {
   }
 }
 
+class IndexOfSliceTest extends FunSuite {
+  import Implicits._
+  test("it can move strings") {
+    def action(d: String) = {
+      d.indexOfSlice("a b")
+    }
+    def action1[A](d: (A ~~> String)) = {
+      d.indexOfSlice("a b")
+    }
+    val ac = action1(Id())
+    action("This is a better string") shouldEqual 8
+    ac.get("This is a better string") shouldEqual 8
+    ac.put(7, Some("This is a better string")).head shouldEqual "This isa b etter string"
+    ac.put(8, Some("This is a better string")).head shouldEqual "This is a better string"
+    ac.put(9, Some("This is a better string")).head shouldEqual "This is ea btter string"
+    ac.put(-1, Some("This is a better string")).head shouldEqual "This is etter string"
+    ac.put(0, Some("No a and b")).head shouldEqual "a bNo a and b"
+    ac.put(-1, Some("No a and b")).head shouldEqual "No a and b"
+  }
+  test("it can change the pattern") {
+    def action(d: (String, String)) = {
+      d._1.indexOfSlice(d._2)
+    }
+    def action1[A](d: (A ~~> (String, String))) = {
+      d._1.indexOfSlice(d._2)
+    }
+    val ac = action1(Id())
+    action(("This is a better string", "a b")) shouldEqual 8
+    ac.get(("This is a better string", "a b")) shouldEqual 8
+    ac.put(7, Some(("This is a better string", "a b"))).head shouldEqual ("This isa b etter string", "a b")
+    ac.put(7, Some(("This is a better string", "a b"))) should contain("This is a better string", " a")
+    ac.put(8, Some(("This is a better string", "a b"))).head shouldEqual ("This is a better string", "a b")
+    ac.put(9, Some(("This is a better string", "a b"))).head shouldEqual ("This is ea btter string", "a b")
+    ac.put(9, Some(("This is a better string", "a b"))) should contain ("This is a better string", " b")
+    ac.put(-1, Some(("This is a better string", "a b"))).head shouldEqual ("This is etter string", "a b")
+    ac.put(0, Some(("No a and b", "a b"))).head shouldEqual ("a bNo a and b", "a b")
+    ac.put(-1, Some(("No a and b", "a b"))).head shouldEqual ("No a and b", "a b")
+    
+  }
+}
+
 /**
 Future work: If cannot revert a function, abstract it using one more argument !
 
