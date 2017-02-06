@@ -726,9 +726,11 @@ class IndexOfSliceTest extends FunSuite {
     ac.get(("This is a better string", "a b")) shouldEqual 8
     ac.put(7, Some(("This is a better string", "a b"))).head shouldEqual ("This isa b etter string", "a b")
     ac.put(7, Some(("This is a better string", "a b"))) should contain("This is a better string", " a")
+    ac.put(7, Some(("This is a better string", "a b"))) should not contain("This is a better string", " ")
     ac.put(8, Some(("This is a better string", "a b"))).head shouldEqual ("This is a better string", "a b")
     ac.put(9, Some(("This is a better string", "a b"))).head shouldEqual ("This is ea btter string", "a b")
     ac.put(9, Some(("This is a better string", "a b"))) should contain ("This is a better string", " b")
+    ac.put(9, Some(("This is a better string", "a b"))) should not contain ("This is a better string", " ")
     ac.put(-1, Some(("This is a better string", "a b"))).head shouldEqual ("This is etter string", "a b")
     ac.put(0, Some(("No a and b", "a b"))).head shouldEqual ("a bNo a and b", "a b")
     ac.put(-1, Some(("No a and b", "a b"))).head shouldEqual ("No a and b", "a b")
