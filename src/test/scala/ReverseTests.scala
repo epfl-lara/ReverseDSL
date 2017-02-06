@@ -17,9 +17,9 @@ class StringAppendTest extends FunSuite {
     val d = doubleAppend2(Id())
     d.get(("Hello ", "world")) shouldEqual "Hello world"
     d.put("Hello world", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "world")))
-    d.put("Hello Buddy", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "Buddy")))
-    d.put("Hello  world", ("Hello ", "world")).toList shouldEqual (List(("Hello  ", "world"), ("Hello ", " world")))
-    d.put("Hello aworld", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "aworld"), ("Hello a", "world")))
+    d.put("Hello Buddy", ("Hello ", "world")).toList.take(1) shouldEqual (List(("Hello ", "Buddy")))
+    d.put("Hello  world", ("Hello ", "world")).toList.take(1) shouldEqual (List(("Hello  ", "world")/*, ("Hello ", " world")*/))
+    d.put("Hello aworld", ("Hello ", "world")).toList.take(1) shouldEqual (List(("Hello ", "aworld")/*, ("Hello a", "world")*/))
   }
   
   def tripleAppend2(in: Id[(String, String, String)]) = {
@@ -31,13 +31,28 @@ class StringAppendTest extends FunSuite {
 
     def tRev(i: String) = t.put(i, Option(("Hello", " ", "world"))).toList
     tRev("Hello world") shouldEqual List(("Hello", " ", "world"))
-    tRev("Hello Buddy") shouldEqual List(("Hello", " ", "Buddy"))
-    tRev("Hello big world") shouldEqual List(("Hello"," ","big world"), ("Hello"," big ","world"), ("Hello big"," ","world"))
-    tRev("Hello a-world") shouldEqual List(("Hello"," ","a-world"), ("Hello"," a-","world"))
-    tRev("Hello-a world") shouldEqual List(("Hello-a"," ","world"), ("Hello","-a ","world"))
-    tRev("Hello  world") shouldEqual List(("Hello","  ","world"), ("Hello "," ","world"), ("Hello"," "," world"))
-    tRev("Hi world") shouldEqual List(("Hi"," ","world"))
-    tRev("Hi Buddy") shouldEqual List()
+    tRev("Hello Buddy").take(1) shouldEqual List(("Hello", " ", "Buddy"))
+    tRev("Hello big world").take(2).toSet shouldEqual Set(/*("Hello"," ","big world"), */("Hello"," big ","world"), ("Hello big"," ","world"))
+    tRev("Hello underworld").take(1) shouldEqual List(("Hello"," ","underworld")/*, ("Hello"," under","world")*/)
+    tRev("Hello      world").take(1) shouldEqual List(("Hello","      ","world")/*, ("Hello     "," ","world"), ("Hello"," ","     world")*/)
+    tRev("Helloooooo world").take(1) shouldEqual List(("Helloooooo"," ","world")/*, ("Hello","ooooo ","world")*/)
+    tRev("Hi world").take(1) shouldEqual List(("Hi"," ","world"))
+    t.put("Hi Buddy", Option(("Hello", " ", "world"))).take(1) shouldEqual List(("Hi", " ", "Buddy"))
+  }
+    
+  test("Concatenates a variable with itself") {
+    def doubleAppend2(in: Id[String]) = {
+      in + in
+    }
+    val d = doubleAppend2(Id())
+    d.put("HelloBig", Some("Big")).head shouldEqual "Hello"
+    d.put("BigHello", Some("Big")).head shouldEqual "Hello"
+    
+    d.put("HelloBig", Some("Hello")).head shouldEqual "Big"
+    d.put("BigHello", Some("Hello")).head shouldEqual "Big"
+
+    d.put("HelloHello", Some("Big")).head shouldEqual "Hello"
+    d.put("BigBig", Some("Hello")).head shouldEqual "Big"
   }
   
   test("Use of a variable twice") {
@@ -47,30 +62,16 @@ class StringAppendTest extends FunSuite {
     val d = doubleAppend2(Id())
     d.get(("Hello", " ")) shouldEqual "Hello Hello"
     d.put("Hello Hello", Some(("Hello", " "))).toList shouldEqual List(("Hello", " "))
-    d.put("Hello World", Some(("Hello", " "))).toList shouldEqual List(("World", " "))
-    d.put("World Hello", Some(("Hello", " "))).toList shouldEqual List(("World", " "))
-    d.put("Big World", Some(("Hello", " "))).toList shouldEqual List()
-    d.put("Big Big", Some(("Hello", " "))).toList shouldEqual List() // Interesting: It cannot support two changes at a time.
-    d.put("Hello  Hello", Some(("Hello", " "))).toList shouldEqual List(("Hello", "  "), ("Hello ", " "), (" Hello", " "))
-    d.put("  Hello ", Some((" ", "Hello"))).toList shouldEqual List(("  ", "Hello"), (" ", " Hello"))
-    d.put(" Hello  ", Some((" ", "Hello"))).toList shouldEqual List(("  ", "Hello"), (" ", "Hello "))
+    d.put("Hello World", Some(("Hello", " "))).head shouldEqual (("World", " "))
+    d.put("a b", Some(("a", " "))).take(1) shouldEqual List(("b", " "))
+    d.put("World Hello", Some(("Hello", " "))).head shouldEqual (("World", " "))
+    d.put("Big World", Some(("Hello", " "))).take(2).toSet shouldEqual Set(("World", " "), ("Big", " "))
+    d.put("Big Big", Some(("Hello", " "))).head shouldEqual (("Big", " "))
+    
+    d.put("Hello  Hello", Some(("Hello", " "))).take(1).toSet shouldEqual Set(("Hello", "  "))//, (" Hello", " "))
+    d.put("  Hello ", Some((" ", "Hello"))).take(1).toSet shouldEqual Set(("  ", "Hello"))
+    d.put(" Hello  ", Some((" ", "Hello"))).take(1).toSet shouldEqual Set(("  ", "Hello")) // Maybe we are missing other important solutions, but how to find them?
   }
-  
-  // Old tests
-  /*def f = append(append("Hello", " "), "world")
-  def fRev(out: String): List[(String, String, String)] = appendRev(out, ("Hello ", "world")).toList.flatMap(leftRight => 
-    appendRev(leftRight._1, ("Hello", " ")).map(lr => (lr._1, lr._2, leftRight._2))
-  )
-  test("Hello world decomposition") {
-    fRev("Hello world") shouldEqual List(("Hello", " ", "world"))
-    fRev("Hello Buddy") shouldEqual List(("Hello", " ", "Buddy"))
-    fRev("Hello big world") shouldEqual List(("Hello"," ","big world"), ("Hello"," big ","world"), ("Hello big"," ","world"))
-    fRev("Hello a-world") shouldEqual List(("Hello"," ","a-world"), ("Hello"," a-","world"))
-    fRev("Hello-a world") shouldEqual List(("Hello-a"," ","world"), ("Hello","-a ","world"))
-    fRev("Hello  world") shouldEqual List(("Hello","  ","world"), ("Hello "," ","world"), ("Hello"," "," world"))
-    fRev("Hi world") shouldEqual List(("Hi"," ","world"))
-    fRev("Hi Buddy") shouldEqual List()
-  }*/
 }
 
 
@@ -87,8 +88,8 @@ class ListAppendTest extends FunSuite {
     doubleAppend((List(1, 2), List(3, 4, 5))) shouldEqual List(1, 2, 3, 4, 5)
     val d = doubleAppend2(Id())
     d.get((List(1, 2), List(3, 4, 6))) shouldEqual List(1, 2, 3, 4, 6)
-    d.put(List(1, 2, 3, 4, 5), (List(1, 2), List(4, 5))).toList shouldEqual (List((List(1, 2), List(3, 4, 5)), (List(1, 2, 3), List(4, 5))))
-    d.put(List(1, 2, 4, 5, 3), (List(1, 2), List(4, 5))).toList shouldEqual (List((List(1, 2), List(4, 5, 3))))
+    d.put(List(1, 2, 3, 4, 5), (List(1, 2), List(4, 5))).take(2).toList shouldEqual (List((List(1, 2), List(3, 4, 5)), (List(1, 2, 3), List(4, 5))))
+    d.put(List(1, 2, 4, 5, 3), (List(1, 2), List(4, 5))).take(1).toList shouldEqual (List((List(1, 2), List(4, 5, 3))))
   }
   
   def tripleAppend2(in: Id[(List[Int], List[Int], List[Int])]) = {
@@ -100,8 +101,8 @@ class ListAppendTest extends FunSuite {
 
     def tRev(i: List[Int]) = t.put(i, Option((List(1, 2), List(), List(4)))).toList
     tRev(List(1, 2, 4)) shouldEqual List((List(1, 2), List(), List(4)))
-    tRev(List(1, 2, 3, 4)) shouldEqual List((List(1, 2), List(), List(3, 4)), (List(1, 2), List(3), List(4)), (List(1, 2, 3), List(), List(4)))
-    tRev(List(3, 1, 2, 4)) shouldEqual List((List(3, 1, 2), List(), List(4)))
+    tRev(List(1, 2, 3, 4)).take(3) shouldEqual List((List(1, 2), List(), List(3, 4)), (List(1, 2), List(3), List(4)), (List(1, 2, 3), List(), List(4)))
+    tRev(List(3, 1, 2, 4)).take(1) shouldEqual List((List(3, 1, 2), List(), List(4)))
   }
   
   test("Use of a variable twice") {
@@ -111,10 +112,14 @@ class ListAppendTest extends FunSuite {
     val d = doubleAppend2(Id())
     d.get((List(1, 3), List(2))) shouldEqual List(1, 3, 2, 1, 3)
     d.put(List(1, 3, 2, 1, 3), Some((List(1, 3), List(2)))).toList shouldEqual List((List(1, 3), List(2)))
-    d.put(List(1, 4, 2, 1, 3), Some((List(1, 3), List(2)))).toList shouldEqual List((List(1, 4), List(2)))
-    d.put(List(1, 3, 3, 1, 3), Some((List(1, 3), List(2)))).toList shouldEqual List((List(1, 3), List(3)))
-    d.put(List(1, 3, 4, 5, 1, 3), Some((List(1, 3), List(2)))).toList shouldEqual List((List(1, 3), List(4, 5)))
-    d.put(List(1, 3, 1, 3, 1, 3, 1, 3, 1), Some((List(1, 3, 1), List(3)))).toList shouldEqual List((List(1, 3, 1, 3, 1), List(3)), (List(1, 3, 1), List(3, 1, 3)))
+    d.put(List(1, 4, 2, 1, 3), Some((List(1, 3), List(2)))).take(1).toList shouldEqual List((List(1, 4), List(2)))
+    d.put(List(1, 3, 3, 1, 3), Some((List(1, 3), List(2)))) should contain ((List(1, 3), List(3)))
+    d.put(List(1, 3, 4, 5, 1, 3), Some((List(1, 3), List(2)))) should contain ((List(1, 3), List(4, 5)))
+    val r = d.put(List(1, 3, 1, 3, 1, 3, 1, 3, 1), Some((List(1, 3, 1), List(3))))
+    r should contain (List(1, 3, 1, 3, 1), List(3))
+    r should contain (List(1, 3, 1), List(3, 1, 3))
+    d.put(List(2, 2, 2), Some(List(1), List(2))) should contain((List(2), List(2)))
+    d.put(List(3, 2, 2, 3, 2), Some(List(1), List(2))) should contain((List(3, 2), List(2)))
   }
 }
 
@@ -617,7 +622,7 @@ class DuplicateTest extends FunSuite {
    test("it can duplicate and un-duplicate") {
      duplicate(Element("pre")) shouldEqual Element("div", Element("pre")::Element("pre")::Nil)
      duplicate2(Id()).get(Element("pre")) shouldEqual Element("div", Element("pre")::Element("pre")::Nil)
-     duplicate2(Id()).put(Element("div", Element("span")::Element("span")::Nil)) should contain (Element("span"))
+     duplicate2(Id()).put(Element("div", Element("span")::Element("span")::Nil)) shouldEqual List(Element("span"))
    }
    
    test("it can un-duplicate partially") {

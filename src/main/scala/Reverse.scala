@@ -38,16 +38,46 @@ object StringAppend extends  ((String, String) ~~> String) {
       val s = st._1
       val t = st._2
       if (s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
-        val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
-        val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
+        //val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
+        //val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
+        /*val modifyBoth: Iterable[Input] = for{(kFirst1, kFirst2) <- keepFirstIntact
+          (kSecond1, kSecond2) <- keepSecondIntact
+        } yield (kSecond1, kFirst2)*/
+        val parsing: List[(String, String)] = for{i <- (0 to out.length).reverse.toList
+            //if i != s.length && out.length - i != t.length
+            (start, end) = out.splitAt(i)
+          } yield (start, end)
+        //println("KeepFirstIntact:" + keepFirstIntact.toList.mkString(","))
+        //println("keepSecondIntact:" + keepSecondIntact.toList.mkString(","))
         //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
-        (keepFirstIntact ++ keepSecondIntact).filter(res => get(res._1, res._2) == out).sortBy{ case (s, t) =>
-          if(s.length > 0 && t.length > 0) {
-            if(s(s.length - 1) == ' ' && t(0) == ' ') 10
-            else if(s(s.length - 1) != ' ' && t(0) != ' ') 10
-            else 0
-          } else 5
+        val res = (/*keepFirstIntact ++ keepSecondIntact ++ modifyBoth ++ */parsing).filter(res => get(res._1, res._2) == out).sortBy{ case (is, it) =>
+          val value = if (is.length > 0 && it.length > 0) {
+            val isEnd = is(is.length - 1)
+            val itStart = it(0)
+            if(is == s || it == t) {
+               // That's very good to split and keep one of the two
+              // unless there was a space/nonspace split before which does not exist anymore.
+              if (s.length > 0 && t.length > 0 &&
+                 ((s(s.length - 1).isSpaceChar != t(0).isSpaceChar) ==
+                 (isEnd.isSpaceChar == itStart.isSpaceChar))) {
+                7
+              } else 0
+            }
+            else if (isEnd.isSpaceChar && itStart.isSpaceChar) 10 // That's awful to split at a space.
+            else if (! isEnd.isSpaceChar && ! itStart.isSpaceChar) {
+              if(isEnd.isLower != itStart.isLower) 5
+              else 10// That's awful to split at a non-space
+            }
+            else 2
+          } else {
+            if (is == s || it == t) 1 // That's very good to split and keep one of the two.
+            else 6
+          }
+          if(Implicits.debug) println((is, it) + " -> " + value)
+          value
         }
+        if(Implicits.debug) println((" " * Implicits.indentation) + s"rev-append($out, ($s, $t)) = " + res.toList)
+        res
       }
     }
   }// ensuring { ress => ress.forall(res => append(res._1, res._2) == out) }
@@ -428,9 +458,20 @@ case class Pair[A, B, C, D](a: A ~~> B, b: C ~~> D) extends ((A, C) ~~> (B, D)) 
   def put(out2: Output, in: Option[Input]) = report(s"Pair.put($out2, $in) = %s"){
     val ina = in.map(_._1)
     val inb = in.map(_._2)
-    val ini1 = a.put(out2._1, ina)
-    val ini2 = b.put(out2._2, inb)
+    val ini1 = a.put(out2._1, ina).toList
+    val ini2 = b.put(out2._2, inb).toList
+    if(Implicits.debug) println(" " * Implicits.indentation + "pairini1:"+ini1.mkString(","))
+    if(Implicits.debug) println(" " * Implicits.indentation + "pairini2:"+ini2.mkString(","))
+    val res = 
     for{i <- ini1; j <- ini2} yield (i, j)
+    /*if (res.forall{ x => get(x) != out2}) {
+      res.foreach(r => {
+        println(s"get($r) = " + get(r))
+      })
+      println(s"Was looking for $out2")
+      throw new Exception("Nothing forwards to " + out2 + " in " + res.mkString(","))
+    }*/
+    res
   }
 }
 

@@ -1,6 +1,29 @@
 
 
 trait ImplicitTuples {
+  object RecomposeTuples {
+    def unapply[A](t: (A, A)): List[A] = {
+      val a = t._1
+      val b = t._2
+      t match {
+        case ((a1, a2, a3, a4),
+              (b1, b2, b3, b4)) => List(a, b,
+              (a1, a2, a3, b4).asInstanceOf[A],
+              (a1, a2, b3, b4).asInstanceOf[A],
+              (a1, b2, b3, b4).asInstanceOf[A]
+              )  : List[A]
+        case ((a1, a2, a3),
+              (b1, b2, b3)) => List(a, b,
+              (a1, a2, b3).asInstanceOf[A],
+              (a1, b2, b3).asInstanceOf[A])  : List[A]
+        case ((a1, a2),
+              (b1, b2)) => List(a, b,
+              (a1, b2).asInstanceOf[A])  : List[A]
+        case _ => List(a, b)
+      }
+    }
+  }
+  
   class TupleProducer[A, Tuple, C](
       val f: A ~~> Tuple, val get0: Tuple => C, val put0: ((Tuple, C)) => Tuple, val index: Int)
     extends (A ~~> C) {

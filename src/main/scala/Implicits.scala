@@ -4,10 +4,20 @@ import scala.language.implicitConversions
 
 object Implicits extends ImplicitTuples {
   var debug = false
-  def report[A](s: =>String)(a: =>A): A = {
-    if (debug) println(s.replaceAll("%s$", "[to compute]"))
-    val res = a
-    if (debug) println(s.replaceAll("%s$", a.toString.replaceAll("\\$", "\\\\\\$")))
+  var indentation = 0
+  def report[A](s: =>String, force: Boolean = false)(a: =>A): A = {
+    if (debug || force) println((" " * indentation) + s.replaceAll("%s$", "[to compute]"))
+    indentation += 1
+    val res = try {
+      a
+    } catch {
+      case e: Exception =>
+      indentation -= 1
+      println((" " * indentation) + s.replaceAll("%s$", "[was computing]"))
+      throw e
+    }
+    indentation -= 1
+    if (debug || force) println((" " * indentation) + s.replaceAll("%s$", a.toString.replaceAll("\\$", "\\\\\\$")))
     res
   }
 
@@ -112,14 +122,32 @@ object Implicits extends ImplicitTuples {
     def get(a: A) = f.get((a, a))
     def put(c: C, init: Option[A]) = report(s"removeDuplicateArguments.put($c, $init) = %s") {
       val p = f.put(c, (init zip init).headOption)
-      val result = p.toStream.flatMap{ case (a, b) => List(a, b) }.distinct
-      // If one of the suggested a is not the one in init, init is filtered out.
-      (init match {
+      val result: Stream[A] = p.toStream.flatMap{
+        case (a, b) => RecomposeTuples.unapply((a, b))
+      }.distinct
+      if(debug) println((" "*indentation) + " result:"+result/*.take(2)*/.toList)
+      
+      val result2 = init match {
         case Some(i) => 
           if (result.exists(_ != i)) result.filter(_ != i) else result
         case None =>
           result
-      }).toList
+      }
+      
+      if(debug) println((" "*indentation) +  " result2:"+result2.toList/*.take(2)*/)
+      
+      def reorderStreamWorkingFirst(s: Stream[A]): Stream[A] = {
+        val head = s.take(3)
+        val tail = s.drop(3)
+        head.filter(x => get(x) == c) #::: head.filterNot(x => get(x) == c) #::: tail
+        //s
+      }
+      // If one of the suggested a is not the one in init, init is filtered out.
+      val realresult =
+      reorderStreamWorkingFirst(result2).distinct.toList
+      
+      if(debug) println((" "*indentation) +  " realResult:"+realresult/*.take(2)*/)
+      realresult
     }
   }
   /*implicit def removeDuplicateArgument3[A, C](f: ((A, A), A) ~~> C): (A ~~> C) = new (A ~~> C) {
@@ -150,7 +178,7 @@ object Implicits extends ImplicitTuples {
     
     def ++(f: A ~~> List[B]): (A ~~> List[B]) = new ((A, A) ~~> List[B]) {
       def get(in: (A, A)) = a.get(in._1) ++ f.get(in._2)
-      def put(out: List[B], in: Option[(A, A)]) = {
+      def put(out: List[B], in: Option[(A, A)]) = report(s"++.put($out, $in) = %s") {
         (in map (x => (a.get(x._1), f.get(x._2)))) match {
           case None => for{ in1 <- a.put(out, in.map(_._1)); in2 <- f.put(out, in.map(_._1)) } yield (in1, in2)
           case Some((initOut1, initOut2)) =>
@@ -158,12 +186,42 @@ object Implicits extends ImplicitTuples {
               else {
                 val keepFirstIntact: Iterable[(A, A)] = (if(out.length >= initOut1.length) f.put(out.drop(initOut1.length), in.map(_._2)).map((in.get._1, _: A)) else Nil)
                 val keepSecondIntact: Iterable[(A, A)] = (if(out.length >= initOut2.length) a.put(out.take(out.length - initOut2.length), in.map(_._1)).map((_: A, in.get._2)) else Nil)
-                //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
-                (keepFirstIntact ++ keepSecondIntact).filter(res => get(res) == out)
+                /*val modifyBoth: Iterable[(A, A)] = for{(kFirst1, kFirst2) <- keepFirstIntact
+                  (kSecond1, kSecond2) <- keepSecondIntact
+                } yield (kSecond1, kFirst2)*/
+                val parsing: Iterable[(A, A)] = for{i <- (0 until out.length).reverse.toIterable
+                  (start, end) = out.splitAt(i)
+                  aputs = a.put(start, in.map(_._1))
+                  fputs = f.put(end,   in.map(_._2))
+                  //_ = println(s"split:$i, out=${(start, end)}\naputs: ${aputs.mkString(",")}\nfputs: ${fputs.mkString(",")}")
+                  astart <- aputs
+                  fend <- fputs
+                } yield (astart, fend)
+                // List(1, 2), List(1)
+                //println("KeepFirstIntact:" + keepFirstIntact.toList.mkString(","))
+                //println("keepSecondIntact:" + keepSecondIntact.toList.mkString(","))
+                (keepFirstIntact ++ keepSecondIntact/* ++ modifyBoth*/ ++ parsing).filter(res => {
+                  //println(s"? get($res) -> ${get(res)}")
+                  if(get(res) == out) {
+                    //println("True: " + out)
+                    true
+                  } else {
+                    //println("false: Expecting " + out)
+                    false
+                  }
+                })
               }
         }
       }
     }
+    /*def headOption = new (A ~~> Option[B]) {
+      def get(in: A) = a.get(in).headOption
+      def put(out: Option[B], in: Option[A]) = {
+        in match {
+          case None => out.toList
+        }
+      }
+    }*/
   }
   implicit class StringProducer[A](f: (A ~~> String)) {
     /*def +[B](other: (B ~~> String)): ((A, B) ~~> String) = {
