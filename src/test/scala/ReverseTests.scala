@@ -659,6 +659,42 @@ class ReproduceTest extends FunSuite {
    }
 }
 
+class StringLengthTest extends FunSuite {
+  import Implicits._
+  test("it can extend or reduce a string") {
+    def action(d: String) = {
+      d.length
+    }
+    def action1[A](d: A ~~> String) = {
+      d.length
+    }
+    action("abcde") shouldEqual 5
+    val ac = action1(Id())
+    ac.get("abcde") shouldEqual 5
+    ac.put(5, Some("abcde")).toList shouldEqual List("abcde")
+    ac.put(4, Some("abcde")).toList shouldEqual List("abcd")
+    ac.put(6, Some("abcde")).toList shouldEqual List("abcdea")
+    ac.put(11, Some("abcde")).toList shouldEqual List("abcdeabcdea")
+  }
+}
+
+class StringSubstringTest extends FunSuite {
+  import Implicits._
+  test("it can rebuild a string") {
+    def action(d: (String, Int, Int)) = {
+      d._1.substring(d._2, d._3)
+    }
+    def action1[A](d: A ~~> (String, Int, Int)) = {
+      d._1.substring(d._2, d._3)
+    }
+    action(("abcde", 1, 3)) shouldEqual "bc"
+    val ac = action1(Id())
+    ac.get(("abcde", 1, 3)) shouldEqual "bc"
+    ac.put("bc", Some(("abcde", 1, 3))).take(1).toList shouldEqual List(("abcde", 1, 3))
+    ac.put("bck", Some(("abcde", 1, 3))).take(1).toList shouldEqual List(("abckde", 1, 4))
+  }
+}
+
 /**
 Future work: If cannot revert a function, abstract it using one more argument !
 

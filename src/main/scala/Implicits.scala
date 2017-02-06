@@ -150,6 +150,39 @@ object Implicits extends ImplicitTuples {
       realresult
     }
   }
+  
+  implicit def removeDuplicateArgument3[A, C](f: (A, A, A) ~~> C): (A ~~> C) = new (A ~~> C) {
+    def get(a: A) = f.get((a, a, a))
+    def put(c: C, init: Option[A]) = report(s"removeDuplicateArguments3.put($c, $init) = %s") {
+      val p = f.put(c, (init map { x => (x, x, x) }).headOption)
+      val result: Stream[A] = p.toStream.flatMap{
+        case (a, b, c) => RecomposeTuples.unapply3((a, b, c))
+      }.distinct
+      if(debug) println((" "*indentation) + " result:"+result/*.take(2)*/.toList)
+      
+      val result2 = init match {
+        case Some(i) => 
+          if (result.exists(_ != i)) result.filter(_ != i) else result
+        case None =>
+          result
+      }
+      
+      if(debug) println((" "*indentation) +  " result2:"+result2.toList/*.take(2)*/)
+      
+      def reorderStreamWorkingFirst(s: Stream[A]): Stream[A] = {
+        /*val head = s.take(3)
+        val tail = s.drop(3)
+        head.filter(x => get(x) == c) #::: head.filterNot(x => get(x) == c) #::: tail*/
+        s
+      }
+      // If one of the suggested a is not the one in init, init is filtered out.
+      val realresult =
+      reorderStreamWorkingFirst(result2).distinct.toList
+      
+      if(debug) println((" "*indentation) +  " realResult:"+realresult/*.take(2)*/)
+      realresult
+    }
+  }
   /*implicit def removeDuplicateArgument3[A, C](f: ((A, A), A) ~~> C): (A ~~> C) = new (A ~~> C) {
     def get(a: A) = f.get(((a, a), a))
     def put(c: C, init: Option[A]) = report(s"removeDuplicateArgument3.put($c, $init) = %s") {
@@ -236,6 +269,83 @@ object Implicits extends ImplicitTuples {
     def format(other: (A ~~> List[Any])): (A ~~> String) = {
       Pair(f, other) andThen StringFormatReverse
     }
+    
+    def length = new (A ~~> Int) {
+      def get(in: A) = f.get(in).length
+      def put(out: Int, in1: Option[A]) = {
+        in1 match {
+          case Some(a) =>
+            val s = f.get(a)
+            if(s.length == out) List(a) else {
+              f.put((s * ((out + s.length - 1) / s.length)).take(out), in1)
+            }
+          case None => f.put("?" * out, in1)
+        }
+      }
+    }
+    
+    def substring(start: Int, end: Int) = new (A ~~> String) {
+      def get(in: A) = f.get(in).substring(start, end)
+      def put(out: String, in1: Option[A]) = {
+        (in1 map f.get) match {
+          case None => f.put(" " * start + out, None)
+          case Some(s) => f.put(s.substring(0, start) + out + s.substring(end), in1)
+        }
+      }
+    }
+
+    /*def substring(start: Int, end: (A ~~> Int)) = new (A ~~> String) {
+      def get(in: A) = f.get(in).substring(start, end.get(in))
+      def put(out: String, in1: Option[A]) = report("substring.put($out, $in1) %s") {
+        in1 match {
+          case Some(a) =>
+            val s = f.get(a)
+            val e = end.get(a)
+            f.put(s.substring(0, start) + out + s.substring(e), in1) ++ {
+              // Find other ends?
+              Nil
+            }
+          case None =>
+            f.put(" " * start + out, None)
+        }
+      }
+    }*/
+/*
+    def substring(start: (A ~~> Int), end: Int): (A ~~> String) = {
+    
+    }
+    */
+    def substring(start: (A ~~> Int), end: (A ~~> Int)): (A ~~> String) = new ((A, A, A) ~~> String) {
+      def get(in: (A, A, A)) = f.get(in._1).substring(start.get(in._2), end.get(in._3))
+      def put(out: String, in1: Option[(A, A, A)]) = report("substring.put($out, $in1) %s") {
+        in1 match {
+          case Some((a1, a2, a3)) =>
+            val s = f.get(a1)
+            val b = start.get(a2)
+            val e = end.get(a3)
+            val newStart = b
+            val newEnd = b + out.length
+            val startA = start.put(newStart, in1.map(_._2))
+            val endA = end.put(newEnd, in1.map(_._3))
+            val fputs = f.put(s.substring(0, b) + out + s.substring(e), in1.map(_._1))
+            for{x <- fputs;
+                y <- startA;
+                z <- endA
+            } yield (x, y, z)
+          case None =>
+            //f.put(" " * start + out, None)
+            Nil
+        }
+      }
+    }
+    /*
+    def substring(start: Int): (A ~~> String) = {
+    
+    }
+
+    def substring(start: (A ~~> Int)): (A ~~> String) = {
+    
+    }*/
   }
   
   def reverselistiterable[A](l: List[Iterable[A]]): Iterable[List[A]] = report(s"reverselistiterable($l)=%s"){
