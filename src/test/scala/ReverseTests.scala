@@ -1,6 +1,8 @@
 import org.scalatest._
 import shapeless.syntax.zipper._
 import Matchers._
+import scala.reflect.runtime.universe.TypeTag
+
 
 class StringAppendTest extends FunSuite {
   import StringAppend.{put => appendRev, _}
@@ -684,7 +686,7 @@ class StringSubstringTest extends FunSuite {
     def action(d: (String, Int, Int)) = {
       d._1.substring(d._2, d._3)
     }
-    def action1[A](d: A ~~> (String, Int, Int)) = {
+    def action1[A: TypeTag](d: A ~~> (String, Int, Int)) = {
       d._1.substring(d._2, d._3)
     }
     action(("abcde", 1, 3)) shouldEqual "bc"
@@ -718,7 +720,7 @@ class IndexOfSliceTest extends FunSuite {
     def action(d: (String, String)) = {
       d._1.indexOfSlice(d._2)
     }
-    def action1[A](d: (A ~~> (String, String))) = {
+    def action1[A: TypeTag](d: (A ~~> (String, String))) = {
       d._1.indexOfSlice(d._2)
     }
     val ac = action1(Id())
@@ -735,6 +737,37 @@ class IndexOfSliceTest extends FunSuite {
     ac.put(0, Some(("No a and b", "a b"))).head shouldEqual ("a bNo a and b", "a b")
     ac.put(-1, Some(("No a and b", "a b"))).head shouldEqual ("No a and b", "a b")
     
+  }
+}
+
+class DistanceTest extends FunSuite {
+  import Distances._
+  case class Direct(a: Any, b: Option[Direct])
+  test("should evaluate sizes correctly") {
+    size("12345") shouldEqual 7
+    size(12345) shouldEqual 5
+    size(-12345) shouldEqual 6
+    size(true) shouldEqual 4
+    size(false) shouldEqual 5
+    size(List(1, 2)) shouldEqual 10
+    size(None) shouldEqual 4
+    size(Direct("12345", None)) shouldEqual 21
+    size(Direct(17, None)) shouldEqual 16
+    size(Some(Direct(17, None))) shouldEqual 22
+    size(Direct("12345", Some(Direct(17, None)))) shouldEqual 39
+  }
+  test("should evaluate edition distances correctly") {
+    distance('1', '2') shouldEqual 1
+    distance(true, false) shouldEqual 4
+    distance("0", "12") shouldEqual 2
+    distance(0, 12) shouldEqual 2
+    distance(List(1, 2, 3), List(1, 3)) shouldEqual 1
+    distance("", "1") shouldEqual 1
+    distance("0", "01") shouldEqual 1
+    distance("10", "0") shouldEqual 1
+    distance(12345, 54321) shouldEqual 4
+    distance(Direct(123, None), Direct(128, None)) shouldEqual 1
+    distance(Direct(123, None), Direct(123, Some(Direct(1, None)))) shouldEqual 25 // Maybe we should keep the None when rewriting?
   }
 }
 
