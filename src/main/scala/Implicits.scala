@@ -256,6 +256,11 @@ object Implicits extends ImplicitTuples {
       }
     }*/
   }
+  implicit class RegexEnhancer(e: scala.util.matching.Regex) {
+    def replaceAllIn[I](s: I ~~> String, f: List[String] ~~> String): (I ~~> String) = 
+      s andThen RegexReplaceAllInReverse(e, f)
+  }
+  
   implicit class StringProducer[A](f: (A ~~> String)) {
     /*def +[B](other: (B ~~> String)): ((A, B) ~~> String) = {
       Pair(f, other) andThen StringAppend

@@ -146,6 +146,62 @@ class StringFormatReverseTest extends FunSuite  {
 }
 
 
+class RegexReplaceAllInReverseTest extends FunSuite  {
+  import Implicits._
+  
+  val f1 = new (List[String] ~~> String) {
+    def get(in: List[String]) = in(0)
+    def put(out: String, in: Option[List[String]]): Iterable[List[String]] = in match {
+      case None => List(List(out))
+      case Some(in) => List(out +: in.tail)
+    }
+    
+  }
+  val f2 = new (List[String] ~~> String) {
+    def get(in: List[String]) = in(1)
+    def put(out: String, in: Option[List[String]]): Iterable[List[String]] = in match {
+      case None => List(List(out, out))
+      case Some(in) => List(in.take(1) ++ List(out) ++ in.drop(2))
+    }
+  }
+  val sentence = "My name is Mikaël[me kah el], my last name is Mayer[mah ee er]"
+  val regex = """(?<=\s|^)(\p{L}+)\[([^\]]*)\]""".r
+  def matcherToSubgroups = (m: scala.util.matching.Regex.Match) => m.subgroups
+  def replacerDisplay0(in: String): String =
+    regex.replaceAllIn(in, matcherToSubgroups andThen f1.get)
+  def replacerSpeech0(in: String): String =
+    regex.replaceAllIn(in, matcherToSubgroups andThen f2.get)
+    
+  def replacerDisplay(in: Id[String] = Id()): (String ~~> String) =
+    regex.replaceAllIn(in, f1)
+  def replacerSpeech(in: Id[String] = Id()): (String ~~> String) =
+    regex.replaceAllIn(in, f2)
+  
+  test("Formatting reverse decomposition") {
+    val display = replacerDisplay().get(sentence)
+    val speech = replacerSpeech().get(sentence)
+    
+    display shouldEqual "My name is Mikaël, my last name is Mayer"
+    speech shouldEqual "My name is me kah el, my last name is mah ee er"
+    
+    def displayRev(s: String) = replacerDisplay().put(s, Some(sentence))
+    def speechRev(s: String) = replacerSpeech().put(s, Some(sentence))
+    //Constants (adding " and ")
+    displayRev("My name is Mikaël, and my last name is Mayer").toList.take(1) shouldEqual List("My name is Mikaël[me kah el], and my last name is Mayer[mah ee er]")
+    speechRev("My name is me kah el, and my last name is mah ee er").toList.take(1) shouldEqual List("My name is Mikaël[me kah el], and my last name is Mayer[mah ee er]")
+
+    // Replaced values (replacing Mikael => Marion and me kah el to mi ka el)
+    displayRev("My name is Marion, my last name is Cichella Mayer").toList.distinct shouldEqual List("My name is Marion[me kah el], my last name is Cichella Mayer[mah ee er]")
+    speechRev("My name is mi ka el, my last name is mah ee er").toList.distinct shouldEqual List("My name is Mikaël[mi ka el], my last name is Mayer[mah ee er]")
+    
+    // Ambiguity
+    displayRev("My name is Mikaël of course, my last name is Mayer").toList.take(2) shouldEqual List("My name is Mikaël[me kah el] of course, my last name is Mayer[mah ee er]", "My name is Mikaël of course[me kah el], my last name is Mayer[mah ee er]")
+    speechRev("My name is me kah el of course, my last name is mah ee er").toList.take(2) shouldEqual List("My name is Mikaël[me kah el] of course, my last name is Mayer[mah ee er]", "My name is Mikaël[me kah el of course], my last name is Mayer[mah ee er]")
+  }
+}
+
+
+
 class IntReverseTest extends FunSuite  {
   import IntReverse._
 
