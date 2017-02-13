@@ -10,3 +10,9 @@ libraryDependencies ++= Seq(
 )
 
 //scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature")
+
+resolvers += "Sonatype OSS Releases" at "https://oss.sonatype.org/content/repositories/releases"
+
+resolvers += "uuverifiers" at "http://logicrunch.it.uu.se:4096/~wv/maven"
+
+libraryDependencies += "ch.epfl.lara" %% "inox" % "1.0.1"
