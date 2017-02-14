@@ -2,27 +2,111 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import shapeless.HList
 import Implicits._
 
+import inox._
+import inox.trees._
+import inox.trees.dsl._
+
 /** Lense trait
 */
 trait ~~>[A, B]/* extends (A => B)*/ {
   type Input = A
   type Output = B
-  def get(in: Input): Output
-  def put(out2: Output, in1: Option[Input]): Iterable[Input]
+  def get(in: A): B
+  def put(out2: B, in1: Option[A]): Iterable[A]
+  def put(out2: Identifier, inId: Identifier, in1: Option[A]): Constraint[A]
+
   //final def apply(in: A) = get(in)
-  final def put(out2: Output, in1: Input): Iterable[Input] = put(out2, Some(in1))
-  final def put(out2: Output): Iterable[Input] = put(out2, None)
+  final def put(out2: B, in1: A): Iterable[A] = put(out2, Some(in1))
+  final def put(out2: B): Iterable[A] = put(out2, None)
   //final def unapply(out: Output) = put(out)
   //final def apply[C](todobefore: C ~~> A): C ~~> B = todobefore andThen this
-  def andThen[C](f: B ~~> C) = Compose(f, this)
+  //def andThen[C](f: B ~~> C) = Compose(f, this)
 }
 
+object StringReverse extends ((String, String) ~~> String) {
+  import ImplicitTuples._
+  def append(s: String, t: String): String = s+t
+
+  def get(in: (String, String)): String = append(in._1, in._2)
+
+  def put(out: Output, st: Option[Input]): Iterable[Input] = report(s"StringAppend.put($out, $st) = %s"){
+    st match {
+      case None => List((out, "")).distinct
+      case Some(st) =>
+        val s = st._1
+        val t = st._2
+        if (s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
+        //val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
+        //val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
+        /*val modifyBoth: Constraint[Input] = for{(kFirst1, kFirst2) <- keepFirstIntact
+          (kSecond1, kSecond2) <- keepSecondIntact
+        } yield (kSecond1, kFirst2)*/
+        val parsing: List[(String, String)] = for{i <- (0 to out.length).reverse.toList
+                                                  //if i != s.length && out.length - i != t.length
+                                                  (start, end) = out.splitAt(i)
+        } yield (start, end)
+          //println("KeepFirstIntact:" + keepFirstIntact.toList.mkString(","))
+          //println("keepSecondIntact:" + keepSecondIntact.toList.mkString(","))
+          //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
+          val res = (/*keepFirstIntact ++ keepSecondIntact ++ modifyBoth ++ */parsing).filter(res => get(res._1, res._2) == out).sortBy{ case (is, it) =>
+            val value = if (is.length > 0 && it.length > 0) {
+              val isEnd = is(is.length - 1)
+              val itStart = it(0)
+              if(is == s || it == t) {
+                // That's very good to split and keep one of the two
+                // unless there was a space/nonspace split before which does not exist anymore.
+                if (s.length > 0 && t.length > 0 &&
+                  ((s(s.length - 1).isSpaceChar != t(0).isSpaceChar) ==
+                    (isEnd.isSpaceChar == itStart.isSpaceChar))) {
+                  7
+                } else 0
+              }
+              else if (isEnd.isSpaceChar && itStart.isSpaceChar) 10 // That's awful to split at a space.
+              else if (! isEnd.isSpaceChar && ! itStart.isSpaceChar) {
+                if(isEnd.isLower != itStart.isLower) 5
+                else 10// That's awful to split at a non-space
+              }
+              else 2
+            } else {
+              if (is == s || it == t) 1 // That's very good to split and keep one of the two.
+              else 6
+            }
+            if(Implicits.debug) println((is, it) + " -> " + value)
+            value
+          }
+          if(Implicits.debug) println((" " * Implicits.indentation) + s"rev-append($out, ($s, $t)) = " + res.toList)
+          res
+        }
+    }
+  }// ensuring { ress => ress.forall(res => append(res._1, res._2) == out) }
+  val startsWith : Identifier = FreshIdentifier("startsWith")
+  val endsWith : Identifier = FreshIdentifier("endsWith")
+  val removeStart : Identifier = FreshIdentifier("removeStart")
+  val removeEnd : Identifier = FreshIdentifier("removeEnd")
+  val maybe : Identifier = FreshIdentifier("maybe")
+
+  override def put(out2: Identifier, inId: Identifier, in1: Option[(String, String)]): Constraint[(String, String)] = {
+    val i = Variable(inId, T(tuple2)(StringType, StringType), Set())
+    val o = Variable(out2, StringType, Set())
+    val expr = in1 match {
+      case None =>
+        i.getField(_1)+i.getField(_2) === o
+      case Some((a, b)) =>
+        E(endsWith)(o, E(b)) && i.getField(_1) === E(removeEnd)(o, E(a)) && E(maybe)(i.getField(_2) === E(b)) ||
+          E(startsWith)(o, E(a)) && i.getField(_2) === E(removeStart)(o, E(a)) && E(maybe)(i.getField(_1) === E(a)) ||
+          i.getField(_1)+i.getField(_2) === o
+    }
+    FormulaBasedConstraint[(String, String)](expr)
+  }
+}
+
+/*
 object StringAppend extends  ((String, String) ~~> String) {
   def append(s: String, t: String): String = s+t
   
   def get(st: Input): Output = append(st._1, st._2)
   
-  def put(out: Output, st: Option[Input]): Iterable[Input] = report(s"StringAppend.put($out, $st) = %s"){
+  def put(out: Output, st: Option[Input]): Constraint[Input] = report(s"StringAppend.put($out, $st) = %s"){
     st match {
       case None => List((out, "")).distinct
       case Some(st) =>
@@ -31,7 +115,7 @@ object StringAppend extends  ((String, String) ~~> String) {
       if (s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
         //val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
         //val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
-        /*val modifyBoth: Iterable[Input] = for{(kFirst1, kFirst2) <- keepFirstIntact
+        /*val modifyBoth: Constraint[Input] = for{(kFirst1, kFirst2) <- keepFirstIntact
           (kSecond1, kSecond2) <- keepSecondIntact
         } yield (kSecond1, kFirst2)*/
         val parsing: List[(String, String)] = for{i <- (0 to out.length).reverse.toList
@@ -89,7 +173,7 @@ object StringFormatReverse extends ((String, List[Any]) ~~> String) {
   }
   def get(in: Input) = format(in._1, in._2)
   
-  def put(out2: Output, in: Option[Input]): Iterable[Input] = 
+  def put(out2: Output, in: Option[Input]): Constraint[Input] =
     in match {
     case None =>
       List(("%s", List(out2)))
@@ -168,7 +252,7 @@ import scala.util.matching.Regex
 case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) extends (String ~~> String) {
   import java.util.regex.Pattern
   def get(in: String): String = regex.replaceAllIn(in, m => f.get(m.subgroups))
-  def put(out: String, in: Option[String]): Iterable[String] = {
+  def put(out: String, in: Option[String]): Constraint[String] = {
      in match {
        case None => Nil // Maybe something better than Nil?
        case Some(in) => // Let's figure out where f did some replacement.
@@ -197,7 +281,7 @@ case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) ex
            List(ss.zip(mm).map{ case (a, b) => a + b.matched}.mkString + ss.last)
            case None => Nil
          }
-         val replacedContentSolutions: Iterable[String] = ifReplacedContentChanged.unapplySeq(out) match {
+         val replacedContentSolutions: Constraint[String] = ifReplacedContentChanged.unapplySeq(out) match {
            case Some(ss) => 
              // Need to compute the values of f now and put back the content into them.
              val unplexedResult = mm.zip(ss) map { case (m, s) =>
@@ -329,7 +413,7 @@ case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) ex
 object IntReverse extends ((Int, Int) ~~> Int) {
   def add(s: Int, t: Int) = s+t
   def get(in: Input): Output = add(in._1, in._2)
-  def put(out2: Output, in: Option[Input]): Iterable[Input] = in match {
+  def put(out2: Output, in: Option[Input]): Constraint[Input] = in match {
     case None => List((out2, 0))
     case Some(in) => addRev(in._1, in._2, out2)
   }
@@ -407,7 +491,7 @@ object WebTrees {
   object TextNode {
     def apply[A](f: (A ~~> String)): (A ~~> TextNode) = new (A ~~> TextNode) {
       def get(a: A) = TextNode(f.get(a))
-      def put(t: TextNode, in: Option[A]): Iterable[A] = {
+      def put(t: TextNode, in: Option[A]): Constraint[A] = {
         f.put(t.text, in)
       }
     }
@@ -416,7 +500,7 @@ object WebTrees {
     def apply[A](tag: String, f: A ~~> List[WebElement]): (A ~~> Element) = {
       new (A ~~> Element) {
         def get(a: A) = Element(tag, f.get(a))
-        def put(e: Element, in: Option[A]): Iterable[A] = Implicits.report(s"Element.put($e, $in) = %s") {
+        def put(e: Element, in: Option[A]): Constraint[A] = Implicits.report(s"Element.put($e, $in) = %s") {
           f.put(e.children, in)
         }
       }
@@ -455,7 +539,7 @@ import WebTrees._
 object TypeSplit extends (List[Tree] ~~> (List[WebElement], List[WebAttribute], List[WebStyle])) {
   import Interleavings._
   def get(in: Input): Output = split(in)
-  def put(out2: Output, in1: Option[Input]): Iterable[Input] = in1 match {
+  def put(out2: Output, in1: Option[Input]): Constraint[Input] = in1 match {
     case None =>
       List(out2._1 ++ out2._2 ++ out2._3)
     case Some(in1) =>
@@ -575,7 +659,7 @@ object WebElementComposition extends ((Element, List[Tree])  ~~> Element) {
     WebElementAddition.get(in._1, TypeSplit.get(in._2))
   }
 
-  def put(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"WebElementComposition($in, $out2) = %s")(in match {
+  def put(out2: Output, in: Option[Input]): Constraint[Input] = Implicits.report(s"WebElementComposition($in, $out2) = %s")(in match {
     case None =>
       val l = out2.children ++ out2.attributes ++ out2.styles
       for{ i <- 0 to l.length
@@ -589,7 +673,7 @@ object WebElementComposition extends ((Element, List[Tree])  ~~> Element) {
   })
 }
 /*
-case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Iterable[A], gRev: C => Iterable[B]) extends ~~> {
+case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Constraint[A], gRev: C => Constraint[B]) extends ~~> {
   type Input = A
   type Output = C
   def get(in: Input) = g(f(in))
@@ -722,7 +806,7 @@ case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
   val f: A => B = fr.get _
   val fRev = (in: Option[A], b: B) => fr.put(b, in).toList
   def get(in: Input) = map(in)
-  def put(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"MapReverse.put($out2, $in) = %s"){
+  def put(out2: Output, in: Option[Input]): Constraint[Input] = Implicits.report(s"MapReverse.put($out2, $in) = %s"){
     in match {
     case None => mapRev(Nil, out2)
     case Some(in) => mapRev(in, out2)
@@ -903,4 +987,4 @@ case class CastUp[A, B, B2 >: B](f: A ~~> B) extends (A ~~> B2) {
   def put(out: B2, orig: Option[A]) = {
     f.put(out.asInstanceOf[B], orig)
   }
-}
+}*/

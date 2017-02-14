@@ -1,6 +1,86 @@
 import scala.reflect.runtime.universe.TypeTag
+import inox._
+import inox.trees._
+import inox.trees.dsl._
 
-trait ImplicitTuples {
+object ImplicitTuples {
+  val tuple2 : Identifier = FreshIdentifier("Tuple2")
+  val tuple3 : Identifier = FreshIdentifier("Tuple3")
+  val tuple4 : Identifier = FreshIdentifier("Tuple4")
+  val tuple5 : Identifier = FreshIdentifier("Tuple5")
+  val tuple6 : Identifier = FreshIdentifier("Tuple6")
+  val tuple7 : Identifier = FreshIdentifier("Tuple7")
+  val tuple8 : Identifier = FreshIdentifier("Tuple8")
+  val tuple9 : Identifier = FreshIdentifier("Tuple9")
+  val tuple10: Identifier = FreshIdentifier("Tuple10")
+  val tuple11: Identifier = FreshIdentifier("Tuple11")
+  val tuple12: Identifier = FreshIdentifier("Tuple12")
+  val tuple13: Identifier = FreshIdentifier("Tuple13")
+  val tuple14: Identifier = FreshIdentifier("Tuple14")
+  val tuple15: Identifier = FreshIdentifier("Tuple15")
+  val tuple16: Identifier = FreshIdentifier("Tuple16")
+  val tuple17: Identifier = FreshIdentifier("Tuple17")
+  val tuple18: Identifier = FreshIdentifier("Tuple18")
+  val tuple19: Identifier = FreshIdentifier("Tuple19")
+  val tuple20: Identifier = FreshIdentifier("Tuple20")
+  val tuple21: Identifier = FreshIdentifier("Tuple21")
+  val tuple22: Identifier = FreshIdentifier("Tuple22")
+  val _tupleTypes = List(tuple2, tuple3, tuple4, tuple5, tuple6, tuple7, tuple8, tuple9, tuple10, tuple11, tuple12,
+    tuple13, tuple14, tuple15, tuple16, tuple17, tuple18, tuple19, tuple20, tuple21, tuple22)
+
+  val _1 : Identifier = FreshIdentifier("_1")
+  val _2 : Identifier = FreshIdentifier("_2")
+  val _3 : Identifier = FreshIdentifier("_3")
+  val _4 : Identifier = FreshIdentifier("_4")
+  val _5 : Identifier = FreshIdentifier("_5")
+  val _6 : Identifier = FreshIdentifier("_6")
+  val _7 : Identifier = FreshIdentifier("_7")
+  val _8 : Identifier = FreshIdentifier("_8")
+  val _9 : Identifier = FreshIdentifier("_9")
+  val _10: Identifier = FreshIdentifier("_10")
+  val _11: Identifier = FreshIdentifier("_11")
+  val _12: Identifier = FreshIdentifier("_12")
+  val _13: Identifier = FreshIdentifier("_13")
+  val _14: Identifier = FreshIdentifier("_14")
+  val _15: Identifier = FreshIdentifier("_15")
+  val _16: Identifier = FreshIdentifier("_16")
+  val _17: Identifier = FreshIdentifier("_17")
+  val _18: Identifier = FreshIdentifier("_18")
+  val _19: Identifier = FreshIdentifier("_19")
+  val _20: Identifier = FreshIdentifier("_20")
+  val _21: Identifier = FreshIdentifier("_21")
+  val _22: Identifier = FreshIdentifier("_22")
+  val _tupleIdentifiers: List[Identifier] = List(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22)
+  /* The type `T(list)(tp)` is a shorthand for `ADTType(list, Seq(tp))`. */
+
+  type ADTConstructor = inox.trees.dsl.trees.ADTConstructor
+
+  def createTupleConstructor(i: Int): ADTConstructor = {
+    mkConstructor(_tupleTypes(i-2))((1 to i).map("B" + _) : _*)(None) { case s => _tupleIdentifiers.zip(s).map{ case (id, tp) => ValDef(id, tp) } }
+  }
+
+  val tuple2Constructor: ADTConstructor  = createTupleConstructor(2)
+  val tuple3Constructor: ADTConstructor  = createTupleConstructor(3)
+  val tuple4Constructor: ADTConstructor  = createTupleConstructor(4)
+  val tuple5Constructor: ADTConstructor = createTupleConstructor(5)
+  val tuple6Constructor: ADTConstructor  = createTupleConstructor(6)
+  val tuple7Constructor: ADTConstructor  = createTupleConstructor(7)
+  val tuple8Constructor: ADTConstructor  = createTupleConstructor(8)
+  val tuple9Constructor: ADTConstructor  = createTupleConstructor(9)
+  val tuple10Constructor: ADTConstructor = createTupleConstructor(10)
+  val tuple11Constructor: ADTConstructor = createTupleConstructor(11)
+  val tuple12Constructor: ADTConstructor = createTupleConstructor(12)
+  val tuple13Constructor: ADTConstructor = createTupleConstructor(13)
+  val tuple14Constructor: ADTConstructor = createTupleConstructor(14)
+  val tuple15Constructor: ADTConstructor = createTupleConstructor(15)
+  val tuple16Constructor: ADTConstructor = createTupleConstructor(16)
+  val tuple17Constructor: ADTConstructor = createTupleConstructor(17)
+  val tuple18Constructor: ADTConstructor = createTupleConstructor(18)
+  val tuple19Constructor: ADTConstructor = createTupleConstructor(19)
+  val tuple20Constructor: ADTConstructor = createTupleConstructor(20)
+  val tuple21Constructor: ADTConstructor = createTupleConstructor(21)
+  val tuple22Constructor: ADTConstructor = createTupleConstructor(22)
+/*
   object RecomposeTuples {
     def unapply[A](t: (A, A)): List[A] = {
       val a = t._1
@@ -47,13 +127,13 @@ trait ImplicitTuples {
       val f: A ~~> Tuple, val get0: Tuple => C, val put0: ((Tuple, C)) => Tuple, val index: Int)
     extends (A ~~> C) {
     def get(in: A): C = get0(f.get(in))
-    def put(out: C, in1: Option[A]): Iterable[A] = Implicits.report(s"_$index.put($out, $in1) = %s")  {
+    def put(out: C, in1: Option[A]): Constraint[A] = ???/*Implicits.report(s"_$index.put($out, $in1) = %s")  {
       in1.map(f.get) match {
         case Some(outOrig) =>
           f.put(put0(outOrig, out), in1)
         case None => Nil
       }
-    }
+    }*/
   }
   
   implicit class Tuple2Producer[A: TypeTag, B1: TypeTag, B2: TypeTag]
@@ -370,5 +450,5 @@ trait ImplicitTuples {
     def _20= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21, B22), B20](f, _._20,x => x._1.copy(_20= x._2),20)
     def _21= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21, B22), B21](f, _._21,x => x._1.copy(_21= x._2),21)
     def _22= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21, B22), B22](f, _._22,x => x._1.copy(_22= x._2),22)
-  }
+  }*/
 }

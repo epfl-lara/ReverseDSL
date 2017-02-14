@@ -2,7 +2,8 @@ import scala.language.dynamics
 import shapeless.{:: => #:, HList, HNil}
 import scala.language.implicitConversions
 
-object Implicits extends ImplicitTuples {
+object Implicits {
+  import ImplicitTuples._
   var debug = false
   var indentation = 0
   def report[A](s: =>String, force: Boolean = false)(a: =>A): A = {
@@ -20,7 +21,7 @@ object Implicits extends ImplicitTuples {
     if (debug || force) println((" " * indentation) + s.replaceAll("%s$", a.toString.replaceAll("\\$", "\\\\\\$")))
     res
   }
-
+/*
   implicit class AugmentedReverse1[A, B](r: (A ~~> B)) {
     def apply[BA](arg1: BA ~~> A): (BA ~~> B) = {
       new (BA ~~> B) {
@@ -499,4 +500,5 @@ object Implicits extends ImplicitTuples {
     def put(a: Option[C], out: D): Iterable[C] = 
       try { r.put(a.asInstanceOf[A], out).asInstanceOf[Iterable[C]] } catch { case _: Exception => Nil }
   }*/
+  */
 }

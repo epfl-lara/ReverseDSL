@@ -3,7 +3,7 @@ import shapeless.syntax.zipper._
 import Matchers._
 import scala.reflect.runtime.universe.TypeTag
 
-
+/*
 class StringAppendTest extends FunSuite {
   import StringAppend.{put => appendRev, _}
   def doubleAppend(in: (String, String)): String = {
@@ -826,7 +826,7 @@ class DistanceTest extends FunSuite {
     distance(Direct(123, None), Direct(123, Some(Direct(1, None)))) shouldEqual 25 // Maybe we should keep the None when rewriting?
   }
 }
-
+*/
 /**
 Future work: If cannot revert a function, abstract it using one more argument !
 

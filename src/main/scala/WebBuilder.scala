@@ -1,6 +1,6 @@
 import scala.language.dynamics
 import shapeless.{:: => #:, HList, HNil}
-
+/*
 object WebBuilder {
   import WebTrees._
   
@@ -15,4 +15,4 @@ object WebBuilder {
     val li = apply("li")
     def selectDynamic(name: String) = apply(name)
   }
-}
+}*/
