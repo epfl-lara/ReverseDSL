@@ -59,27 +59,29 @@ object ImplicitTuples {
     mkConstructor(_tupleTypes(i-2))((1 to i).map("B" + _) : _*)(None) { case s => _tupleIdentifiers.zip(s).map{ case (id, tp) => ValDef(id, tp) } }
   }
 
-  val tuple2Constructor: ADTConstructor  = createTupleConstructor(2)
-  val tuple3Constructor: ADTConstructor  = createTupleConstructor(3)
-  val tuple4Constructor: ADTConstructor  = createTupleConstructor(4)
-  val tuple5Constructor: ADTConstructor = createTupleConstructor(5)
-  val tuple6Constructor: ADTConstructor  = createTupleConstructor(6)
-  val tuple7Constructor: ADTConstructor  = createTupleConstructor(7)
-  val tuple8Constructor: ADTConstructor  = createTupleConstructor(8)
-  val tuple9Constructor: ADTConstructor  = createTupleConstructor(9)
-  val tuple10Constructor: ADTConstructor = createTupleConstructor(10)
-  val tuple11Constructor: ADTConstructor = createTupleConstructor(11)
-  val tuple12Constructor: ADTConstructor = createTupleConstructor(12)
-  val tuple13Constructor: ADTConstructor = createTupleConstructor(13)
-  val tuple14Constructor: ADTConstructor = createTupleConstructor(14)
-  val tuple15Constructor: ADTConstructor = createTupleConstructor(15)
-  val tuple16Constructor: ADTConstructor = createTupleConstructor(16)
-  val tuple17Constructor: ADTConstructor = createTupleConstructor(17)
-  val tuple18Constructor: ADTConstructor = createTupleConstructor(18)
-  val tuple19Constructor: ADTConstructor = createTupleConstructor(19)
-  val tuple20Constructor: ADTConstructor = createTupleConstructor(20)
-  val tuple21Constructor: ADTConstructor = createTupleConstructor(21)
-  val tuple22Constructor: ADTConstructor = createTupleConstructor(22)
+  val allTupleConstructors = (2::2::(2 to 22).toList) map createTupleConstructor
+
+  val tuple2Constructor: ADTConstructor  = allTupleConstructors(2)
+  val tuple3Constructor: ADTConstructor  = allTupleConstructors(3)
+  val tuple4Constructor: ADTConstructor  = allTupleConstructors(4)
+  val tuple5Constructor: ADTConstructor  = allTupleConstructors(5)
+  val tuple6Constructor: ADTConstructor  = allTupleConstructors(6)
+  val tuple7Constructor: ADTConstructor  = allTupleConstructors(7)
+  val tuple8Constructor: ADTConstructor  = allTupleConstructors(8)
+  val tuple9Constructor: ADTConstructor  = allTupleConstructors(9)
+  val tuple10Constructor: ADTConstructor = allTupleConstructors(10)
+  val tuple11Constructor: ADTConstructor = allTupleConstructors(11)
+  val tuple12Constructor: ADTConstructor = allTupleConstructors(12)
+  val tuple13Constructor: ADTConstructor = allTupleConstructors(13)
+  val tuple14Constructor: ADTConstructor = allTupleConstructors(14)
+  val tuple15Constructor: ADTConstructor = allTupleConstructors(15)
+  val tuple16Constructor: ADTConstructor = allTupleConstructors(16)
+  val tuple17Constructor: ADTConstructor = allTupleConstructors(17)
+  val tuple18Constructor: ADTConstructor = allTupleConstructors(18)
+  val tuple19Constructor: ADTConstructor = allTupleConstructors(19)
+  val tuple20Constructor: ADTConstructor = allTupleConstructors(20)
+  val tuple21Constructor: ADTConstructor = allTupleConstructors(21)
+  val tuple22Constructor: ADTConstructor = allTupleConstructors(22)
 /*
   object RecomposeTuples {
     def unapply[A](t: (A, A)): List[A] = {
@@ -121,40 +123,49 @@ object ImplicitTuples {
         case _ => List(a, b, c)
       }
     }
-  }
+  }*/
   
-  class TupleProducer[A: TypeTag, Tuple: TypeTag, C: TypeTag](
+  class TupleProducer[A: Constrainable, Tuple: Constrainable, C: Constrainable](
       val f: A ~~> Tuple, val get0: Tuple => C, val put0: ((Tuple, C)) => Tuple, val index: Int)
     extends (A ~~> C) {
     def get(in: A): C = get0(f.get(in))
-    def put(out: C, in1: Option[A]): Constraint[A] = ???/*Implicits.report(s"_$index.put($out, $in1) = %s")  {
+    def put(out: C, in1: Option[A]): Iterable[A] = Implicits.report(s"_$index.put($out, $in1) = %s")  {
       in1.map(f.get) match {
         case Some(outOrig) =>
           f.put(put0(outOrig, out), in1)
         case None => Nil
       }
-    }*/
+    }
+    override def put(idC: Identifier, idA: Identifier, in1: Option[A]): Constraint[A] = {
+      var varC = Variable(idC, implicitly[Constrainable[C]].getType, Set())
+      var varA = Variable(idA, implicitly[Constrainable[A]].getType, Set())
+      val selector = _tupleIdentifiers(index-1)
+      var idTuple = FreshIdentifier("t", true)
+      var varTuple = Variable(idTuple, implicitly[Constrainable[Tuple]].getType, Set())
+      val expr = varTuple.getField(selector) === varC && f.put(idTuple, idA, in1).formula
+      Constraint(expr)
+    }
   }
-  
-  implicit class Tuple2Producer[A: TypeTag, B1: TypeTag, B2: TypeTag]
+
+  implicit class Tuple2Producer[A: Constrainable, B1: Constrainable, B2: Constrainable]
                         (f: A ~~> (B1, B2)) {
     def _1 = new TupleProducer[A, (B1, B2), B1](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2), B2](f, _._2, x => x._1.copy(_2 = x._2), 2)
   }
-  implicit class Tuple3Producer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag]
+  /*implicit class Tuple3Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable]
                         (f: A ~~> (B1, B2, B3)) {
     def _1 = new TupleProducer[A, (B1, B2, B3), B1](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3), B2](f, _._2, x => x._1.copy(_2 = x._2), 2)
     def _3 = new TupleProducer[A, (B1, B2, B3), B3](f, _._3, x => x._1.copy(_3 = x._2), 3)
   }
-  implicit class Tuple4Producer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag]
+  implicit class Tuple4Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4), B1](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4), B2](f, _._2, x => x._1.copy(_2 = x._2), 2)
     def _3 = new TupleProducer[A, (B1, B2, B3, B4), B3](f, _._3, x => x._1.copy(_3 = x._2), 3)
     def _4 = new TupleProducer[A, (B1, B2, B3, B4), B4](f, _._4, x => x._1.copy(_4 = x._2), 4)
   }
-  implicit class Tuple5Producer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag]
+  implicit class Tuple5Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5), B1](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5), B2](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -162,7 +173,7 @@ object ImplicitTuples {
     def _4 = new TupleProducer[A, (B1, B2, B3, B4, B5), B4](f, _._4, x => x._1.copy(_4 = x._2), 4)
     def _5 = new TupleProducer[A, (B1, B2, B3, B4, B5), B5](f, _._5, x => x._1.copy(_5 = x._2), 5)
   }
-  implicit class Tuple6Producer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag]
+  implicit class Tuple6Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6), B1](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6), B2](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -171,7 +182,7 @@ object ImplicitTuples {
     def _5 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6), B5](f, _._5, x => x._1.copy(_5 = x._2), 5)
     def _6 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6), B6](f, _._6, x => x._1.copy(_6 = x._2), 6)
   }
-  implicit class Tuple7Producer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag]
+  implicit class Tuple7Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7), B1](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7), B2](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -181,7 +192,7 @@ object ImplicitTuples {
     def _6 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7), B6](f, _._6, x => x._1.copy(_6 = x._2), 6)
     def _7 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7), B7](f, _._7, x => x._1.copy(_7 = x._2), 7)
   }
-  implicit class Tuple8Producer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag]
+  implicit class Tuple8Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8), B1](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8), B2](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -192,7 +203,7 @@ object ImplicitTuples {
     def _7 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8), B7](f, _._7, x => x._1.copy(_7 = x._2), 7)
     def _8 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8), B8](f, _._8, x => x._1.copy(_8 = x._2), 8)
   }
-  implicit class Tuple9Producer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag]
+  implicit class Tuple9Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9), B1](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9), B2](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -204,7 +215,7 @@ object ImplicitTuples {
     def _8 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9), B8](f, _._8, x => x._1.copy(_8 = x._2), 8)
     def _9 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9), B9](f, _._9, x => x._1.copy(_9 = x._2), 9)
   }
-  implicit class Tuple10roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag]
+  implicit class Tuple10roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -217,7 +228,7 @@ object ImplicitTuples {
     def _9 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10), B9 ](f, _._9, x => x._1.copy(_9 = x._2), 9)
     def _10= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10), B10](f, _._10,x => x._1.copy(_10= x._2),10)
   }
-  implicit class Tuple11roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag]
+  implicit class Tuple11roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -231,7 +242,7 @@ object ImplicitTuples {
     def _10= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11), B10](f, _._10,x => x._1.copy(_10= x._2),10)
     def _11= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11), B11](f, _._11,x => x._1.copy(_11= x._2),11)
   }
-  implicit class Tuple12roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag]
+  implicit class Tuple12roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -246,7 +257,7 @@ object ImplicitTuples {
     def _11= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12), B11](f, _._11,x => x._1.copy(_11= x._2),11)
     def _12= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12), B12](f, _._12,x => x._1.copy(_12= x._2),12)
   }
-  implicit class Tuple13roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag]
+  implicit class Tuple13roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -262,7 +273,7 @@ object ImplicitTuples {
     def _12= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13), B12](f, _._12,x => x._1.copy(_12= x._2),12)
     def _13= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13), B13](f, _._13,x => x._1.copy(_13= x._2),13)
   }
-  implicit class Tuple14roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag, B14: TypeTag]
+  implicit class Tuple14roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -279,7 +290,7 @@ object ImplicitTuples {
     def _13= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14), B13](f, _._13,x => x._1.copy(_13= x._2),13)
     def _14= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14), B14](f, _._14,x => x._1.copy(_14= x._2),14)
   }
-  implicit class Tuple15roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag, B14: TypeTag, B15: TypeTag]
+  implicit class Tuple15roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -297,7 +308,7 @@ object ImplicitTuples {
     def _14= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15), B14](f, _._14,x => x._1.copy(_14= x._2),14)
     def _15= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15), B15](f, _._15,x => x._1.copy(_15= x._2),15)
   }
-  implicit class Tuple16roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag, B14: TypeTag, B15: TypeTag, B16: TypeTag]
+  implicit class Tuple16roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -316,7 +327,7 @@ object ImplicitTuples {
     def _15= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16), B15](f, _._15,x => x._1.copy(_15= x._2),15)
     def _16= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16), B16](f, _._16,x => x._1.copy(_16= x._2),16)
   }
-  implicit class Tuple17roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag, B14: TypeTag, B15: TypeTag, B16: TypeTag, B17: TypeTag]
+  implicit class Tuple17roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -336,7 +347,7 @@ object ImplicitTuples {
     def _16= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17), B16](f, _._16,x => x._1.copy(_16= x._2),16)
     def _17= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17), B17](f, _._17,x => x._1.copy(_17= x._2),17)
   }
-  implicit class Tuple18roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag, B14: TypeTag, B15: TypeTag, B16: TypeTag, B17: TypeTag, B18: TypeTag]
+  implicit class Tuple18roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -357,7 +368,7 @@ object ImplicitTuples {
     def _17= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18), B17](f, _._17,x => x._1.copy(_17= x._2),17)
     def _18= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18), B18](f, _._18,x => x._1.copy(_18= x._2),18)
   }
-  implicit class Tuple19roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag, B14: TypeTag, B15: TypeTag, B16: TypeTag, B17: TypeTag, B18: TypeTag, B19: TypeTag]
+  implicit class Tuple19roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable, B19: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -379,7 +390,7 @@ object ImplicitTuples {
     def _18= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19), B18](f, _._18,x => x._1.copy(_18= x._2),18)
     def _19= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19), B19](f, _._19,x => x._1.copy(_19= x._2),19)
   }
-  implicit class Tuple20roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag, B14: TypeTag, B15: TypeTag, B16: TypeTag, B17: TypeTag, B18: TypeTag, B19: TypeTag, B20: TypeTag]
+  implicit class Tuple20roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable, B19: Constrainable, B20: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -402,7 +413,7 @@ object ImplicitTuples {
     def _19= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20), B19](f, _._19,x => x._1.copy(_19= x._2),19)
     def _20= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20), B20](f, _._20,x => x._1.copy(_20= x._2),20)
   }
-  implicit class Tuple21roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag, B14: TypeTag, B15: TypeTag, B16: TypeTag, B17: TypeTag, B18: TypeTag, B19: TypeTag, B20: TypeTag, B21: TypeTag]
+  implicit class Tuple21roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable, B19: Constrainable, B20: Constrainable, B21: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)
@@ -426,7 +437,7 @@ object ImplicitTuples {
     def _20= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21), B20](f, _._20,x => x._1.copy(_20= x._2),20)
     def _21= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21), B21](f, _._21,x => x._1.copy(_21= x._2),21)
   }
-  implicit class Tuple22roducer[A: TypeTag, B1: TypeTag, B2: TypeTag, B3: TypeTag, B4: TypeTag, B5: TypeTag, B6: TypeTag, B7: TypeTag, B8: TypeTag, B9: TypeTag, B10: TypeTag, B11: TypeTag, B12: TypeTag, B13: TypeTag, B14: TypeTag, B15: TypeTag, B16: TypeTag, B17: TypeTag, B18: TypeTag, B19: TypeTag, B20: TypeTag, B21: TypeTag, B22: TypeTag]
+  implicit class Tuple22roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable, B19: Constrainable, B20: Constrainable, B21: Constrainable, B22: Constrainable]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21, B22)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21, B22), B1 ](f, _._1, x => x._1.copy(_1 = x._2), 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21, B22), B2 ](f, _._2, x => x._1.copy(_2 = x._2), 2)

@@ -1,8 +1,46 @@
 import org.scalatest._
-import shapeless.syntax.zipper._
-import Matchers._
+import Matchers.{ === => _, _}
+import inox._
+import inox.trees._
+import inox.trees.dsl._
+
 import scala.reflect.runtime.universe.TypeTag
 
+
+class StringAppendTest extends FunSuite {
+  import StringAppendReverse.put
+  import Constrainable._
+  import ImplicitTuples._
+  import Implicits._
+
+  def doubleAppend(in: Id[(String, String)]) = {
+    in._1 + in._2
+  }
+
+  test("Double decomposition") {
+    val d = doubleAppend(Id[(String, String)]())
+    d.get(("Hello ", "world")) shouldEqual "Hello world"
+    val o = FreshIdentifier("k")
+    val i = FreshIdentifier("i")
+    var varO = Variable(o, getType[String], Set())
+    var varI = Variable(i, getType[(String, String)], Set())
+
+    val constraint = d.put(o, i, Some(("Hello ", "world")))
+    /*constraint(varO -> "Hello world").tostream(varI).head shouldEqual ("Hello ", "world")
+    constraint(varO -> "Hello  world").tostream(varI).head shouldEqual ("Hello  ", "world")
+    constraint(varO -> "Hello Buddy").tostream(varI).head shouldEqual ("Hello ", "Buddy")
+    constraint(varO -> "Hi world").tostream(varI).head shouldEqual ("Hi ", "world")
+    constraint(varO -> "Helloooo world").tostream(varI).head shouldEqual ("Helloooo ", "world")*/
+    constraint(varO -> "Hello aworld").tostream(varI).foreach(println)
+//    constraint(varO -> "Hello aworld").tostream(varI)(1) shouldEqual ("Hello ", "aworld")
+
+    /*
+    d.put("Hello world", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "world")))
+    d.put("Hello Buddy", ("Hello ", "world")).toList.take(1) shouldEqual (List(("Hello ", "Buddy")))
+    d.put("Hello  world", ("Hello ", "world")).toList.take(1) shouldEqual (List(("Hello  ", "world")/*, ("Hello ", " world")*/))
+    d.put("Hello aworld", ("Hello ", "world")).toList.take(1) shouldEqual (List(("Hello ", "aworld")/*, ("Hello a", "world")*/))*/
+  }
+}
 /*
 class StringAppendTest extends FunSuite {
   import StringAppend.{put => appendRev, _}

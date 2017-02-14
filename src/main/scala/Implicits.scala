@@ -1,9 +1,14 @@
 import scala.language.dynamics
-import shapeless.{:: => #:, HList, HNil}
+import shapeless.{HList, HNil, :: => #:}
+
 import scala.language.implicitConversions
 
 object Implicits {
   import ImplicitTuples._
+  import inox._
+  import inox.trees._
+  import inox.trees.dsl._
+
   var debug = false
   var indentation = 0
   def report[A](s: =>String, force: Boolean = false)(a: =>A): A = {
@@ -21,6 +26,7 @@ object Implicits {
     if (debug || force) println((" " * indentation) + s.replaceAll("%s$", a.toString.replaceAll("\\$", "\\\\\\$")))
     res
   }
+
 /*
   implicit class AugmentedReverse1[A, B](r: (A ~~> B)) {
     def apply[BA](arg1: BA ~~> A): (BA ~~> B) = {
@@ -261,18 +267,18 @@ object Implicits {
     def replaceAllIn[I](s: I ~~> String, f: List[String] ~~> String): (I ~~> String) = 
       s andThen RegexReplaceAllInReverse(e, f)
   }
-  
-  implicit class StringProducer[A](f: (A ~~> String)) {
+  */
+  implicit class StringProducer[A: Constrainable](f: (A ~~> String)) {
     /*def +[B](other: (B ~~> String)): ((A, B) ~~> String) = {
       Pair(f, other) andThen StringAppend
     }*/
     def +(other: (A ~~> String)): (A ~~> String) = {
-      Pair(f, other) andThen StringAppend
+      PairSame(f, other) andThen StringAppendReverse
     }
     /*def format[B](other: (B ~~> List[Any])): ((A, B) ~~> String) = {
       Pair(f, other) andThen StringFormatReverse
     }*/
-    def format(other: (A ~~> List[Any])): (A ~~> String) = {
+    /*def format(other: (A ~~> List[Any])): (A ~~> String) = {
       Pair(f, other) andThen StringFormatReverse
     }
     
@@ -404,9 +410,9 @@ object Implicits {
             }
           }
       }
-    }
+    }*/
   }
-  
+  /*
   def reverselistiterable[A](l: List[Iterable[A]]): Iterable[List[A]] = report(s"reverselistiterable($l)=%s"){
     l match {
       case Nil => Stream(Nil)

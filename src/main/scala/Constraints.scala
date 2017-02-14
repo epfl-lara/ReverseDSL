@@ -164,8 +164,6 @@ object Custom {
   )
 }*/
 
-trait Constraint[A] extends Traversable[A] {
-}
 /*
 case class MemberOfConstraint[A](orderedSet: List[A]) extends Constraint[A] {
   def foreach[U](f: A => U) = orderedSet.foreach(f)
@@ -175,6 +173,7 @@ case class MemberOfLazyConstraint[A](orderedSet: Stream[A]) extends Constraint[A
   def foreach[U](f: A => U) = orderedSet.foreach(f)
 }*/
 
+import ImplicitTuples._
 import inox._
 import inox.trees._
 import inox.trees.dsl._
@@ -187,14 +186,148 @@ object Utils {
 
   val head: Identifier = FreshIdentifier("head")
   val tail: Identifier = FreshIdentifier("tail")
-
 }
 
-case class FormulaBasedConstraint[A](formula: Expr) extends Constraint[A] {
-  def foreach[U](f: A => U) = {
-    Nil
+
+trait Constrainable[A] { self =>
+  def getType: inox.trees.dsl.trees.Type
+  def zipWith[B](other: Constrainable[B]): Constrainable[(A, B)] = new Constrainable[(A, B)] {
+    def getType = T(tuple2)(self.getType, other.getType)
+    def recoverFrom(e: Expr): (A, B) = e match {
+      case ADT(_, Seq(a, b)) => (self.recoverFrom(a), other.recoverFrom(b))
+      case _ => throw new Exception("Could not recover tuple from " + e)
+    }
   }
-  def intersectWith(other: Constraint[A]) = {
-    
+  def recoverFrom(e: Expr): A
+}
+
+object Constrainable {
+
+  implicit object StringConstrainable extends Constrainable[String] {
+    def getType = StringType
+
+    override def recoverFrom(e: Expr): String = e match {
+      case StringLiteral(s) => s
+      case _ => throw new Exception("Could not recover string from " + e)
+    }
+  }
+  implicit val StringStringConstrainable = StringConstrainable.zipWith(StringConstrainable)
+
+  implicit def tupleConstrainable[A : Constrainable, B: Constrainable] : Constrainable[(A, B)] = implicitly[Constrainable[A]].zipWith(implicitly[Constrainable[B]])
+
+  def getType[A:Constrainable] = implicitly[Constrainable[A]].getType
+}
+import Constrainable._
+
+case class Constraint[A: Constrainable](formula: Expr) {
+  def apply(tuple: (inox.trees.Variable, String)) = this && tuple._1 === E(tuple._2)
+
+  def &&(b: Expr) = Constraint[A](formula && b)
+
+  import inox.solvers._
+  import SolverResponses._
+
+  implicit val symbols = {
+    NoSymbols
+      .withFunctions(Seq())
+      .withADTs(allTupleConstructors)
+  }
+  def tostream(solutionVar: Variable): Stream[A] = {
+    // * step: We replace  c = remove(a, b) by (= (+ b c) a)
+    // * step: We convert all maybe(a) to a || true
+    // * step: We consider all top-level conjuncts of the for Identifier = Identifier and remove one of the two identifiers.
+    // * step: We take the streamed CNF version of the formula
+    val StringExprsMaybeReplaced = inox.trees.exprOps.postMap {
+      case Equals(c, FunctionInvocation(StringAppendReverse.removeStart, _, Seq(a, b))) =>
+        Some(Equals(a, StringConcat(b, c)))
+      case Equals(FunctionInvocation(StringAppendReverse.removeStart, _, Seq(a, b)), c) =>
+        Some(Equals(a, StringConcat(b, c)))
+      case Equals(c, FunctionInvocation(StringAppendReverse.removeEnd, _, Seq(a, b))) =>
+        Some(Equals(a, StringConcat(c, b)))
+      case Equals(FunctionInvocation(StringAppendReverse.removeEnd, _, Seq(a, b)), c) =>
+        Some(Equals(a, StringConcat(c, b)))
+      case _ => None
+    }(formula)
+    val toplevelIdentityRemoved = StringExprsMaybeReplaced match {
+      case TopLevelAnds(ands) =>
+        val topEqualities = ands.collect{ case Equals(v1, v2) => (if(v1 != solutionVar) v1 -> v2 else v2 -> v1):(Expr, Expr) }
+        inox.trees.exprOps.postMap(topEqualities.toMap.get)(StringExprsMaybeReplaced)
+      case _ => StringExprsMaybeReplaced
+    }
+    val removedAndTrue =
+      inox.trees.exprOps.postMap{
+        case And(exprs) =>
+          val trueAnds = exprs.filterNot{ case BooleanLiteral(true) => true case Equals(v, v2) if v == v2 => true case _ => false }
+          Some(if(trueAnds.isEmpty) E(true) else
+          if(trueAnds.length == 1) trueAnds.head else
+          And(trueAnds))
+        case _ => None
+      }(toplevelIdentityRemoved)
+    def getStreamOfConjuncts(e: Expr): Stream[Seq[Expr]] = {
+      e match {
+        case And(Seq(a1, a2)) => for{ a <- getStreamOfConjuncts(a1); b <- getStreamOfConjuncts(a2) ; c = a ++ b } yield c
+        case And(a1 +: at) => for{ a <- getStreamOfConjuncts(a1); b <- getStreamOfConjuncts(And(at)) ; c = a ++ b } yield c
+        case Or(exprs) => exprs.toStream.flatMap(getStreamOfConjuncts)
+        case k => Stream(Seq(k))
+      }
+    }
+    def expandMaybe(e: Seq[Expr]): Stream[Seq[Expr]] = {
+      // If the LHS of a maybe is nowhere else, we keep it.
+      // If the LHS of a maybe is somewhere else, we keep all of them, then one less, until there is at least one of them.
+      e match {
+        case Seq() => Stream(Seq())
+        case FunctionInvocation(Common.maybe, _, Seq(equality@Equals(a, b))) +: tail =>
+          if(!tail.exists((f: Expr) => f match {
+            case FunctionInvocation(Common.maybe,  _, Seq(Equals(c, d))) => c == a
+            case _ => false
+          })) {
+            expandMaybe(tail).map(equality +: _)
+          } else { // There exists another one later.
+            val tailFiltered = tail.filterNot{
+              case FunctionInvocation(Common.maybe, _, Seq(Equals(c, d))) => c == a
+              case _ => false
+            }
+            expandMaybe(tailFiltered).map(equality +: _) #::: expandMaybe(tail)
+          }
+        case head +: tail => expandMaybe(tail).map(head +: _)
+      }
+
+    }
+    val streamOfConjuncts = getStreamOfConjuncts(removedAndTrue).flatMap(expandMaybe).map(And.apply)
+    val program = InoxProgram(Context.empty, symbols)
+    def getStreamOfSolutions(e: Expr): Stream[A] = {
+      val solver = program.getSolver.getNewSolver
+      solver.assertCnstr(e)
+      var solving = e
+      println("New solving")
+      var prevSol: Option[Expr] = None
+      def iterate(): Stream[A] = {
+        println("Solving " + solving)
+        solver.check(SolverResponses.Model) match {
+          case SatWithModel(model) =>
+            val solution: Expr = model.vars(solutionVar.toVal)
+            if (prevSol.map(_ == solution).getOrElse(false)) Stream.empty else {
+              prevSol = Some(solution)
+              implicitly[Constrainable[A]].recoverFrom(solution) #:: {
+                solving = solving && !(solutionVar === solution)
+                solver.assertCnstr(!(solutionVar === solution))
+                iterate()
+              }
+            }
+          case _ => Stream.empty[A]
+        }
+      }
+      iterate()
+    }
+  //  println(streamOfConjuncts
+  //  implicit val po = PrinterOptions.fromContext(Context.empty)
+//    println(symbols.explainTyping(streamOfConjuncts.head))
+
+    streamOfConjuncts.flatMap(getStreamOfSolutions)
+/*
+    val solver = program.getSolver.getNewSolver
+    solver.assertCnstr(streamOfConjuncts.head)
+    println(solver.check(SolverResponses.Model))
+    ???*/
   }
 }

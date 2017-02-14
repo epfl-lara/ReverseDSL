@@ -1,14 +1,15 @@
+import ImplicitTuples.tuple2
+
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import shapeless.HList
 import Implicits._
-
 import inox._
 import inox.trees._
 import inox.trees.dsl._
 
 /** Lense trait
 */
-trait ~~>[A, B]/* extends (A => B)*/ {
+abstract class ~~>[A: Constrainable, B: Constrainable]/* extends (A => B)*/ {
   type Input = A
   type Output = B
   def get(in: A): B
@@ -20,10 +21,14 @@ trait ~~>[A, B]/* extends (A => B)*/ {
   final def put(out2: B): Iterable[A] = put(out2, None)
   //final def unapply(out: Output) = put(out)
   //final def apply[C](todobefore: C ~~> A): C ~~> B = todobefore andThen this
-  //def andThen[C](f: B ~~> C) = Compose(f, this)
+  def andThen[C: Constrainable](f: B ~~> C) = Compose(f, this)
 }
 
-object StringReverse extends ((String, String) ~~> String) {
+object Common {
+  val maybe : Identifier = FreshIdentifier("maybe")
+}
+
+object StringAppendReverse extends ((String, String) ~~> String) {
   import ImplicitTuples._
   def append(s: String, t: String): String = s+t
 
@@ -79,11 +84,10 @@ object StringReverse extends ((String, String) ~~> String) {
         }
     }
   }// ensuring { ress => ress.forall(res => append(res._1, res._2) == out) }
-  val startsWith : Identifier = FreshIdentifier("startsWith")
-  val endsWith : Identifier = FreshIdentifier("endsWith")
+  //val startsWith : Identifier = FreshIdentifier("startsWith") // No need of startswith because redundant with removeStart
+  //val endsWith : Identifier = FreshIdentifier("endsWith")
   val removeStart : Identifier = FreshIdentifier("removeStart")
   val removeEnd : Identifier = FreshIdentifier("removeEnd")
-  val maybe : Identifier = FreshIdentifier("maybe")
 
   override def put(out2: Identifier, inId: Identifier, in1: Option[(String, String)]): Constraint[(String, String)] = {
     val i = Variable(inId, T(tuple2)(StringType, StringType), Set())
@@ -92,11 +96,11 @@ object StringReverse extends ((String, String) ~~> String) {
       case None =>
         i.getField(_1)+i.getField(_2) === o
       case Some((a, b)) =>
-        E(endsWith)(o, E(b)) && i.getField(_1) === E(removeEnd)(o, E(a)) && E(maybe)(i.getField(_2) === E(b)) ||
-          E(startsWith)(o, E(a)) && i.getField(_2) === E(removeStart)(o, E(a)) && E(maybe)(i.getField(_1) === E(a)) ||
+          /*E(endsWith)(o, E(b)) && */  i.getField(_1) === E(removeEnd)(o, E(b)) && E(Common.maybe)(i.getField(_2) === E(b)) ||
+          /*E(startsWith)(o, E(a)) && */i.getField(_2) === E(removeStart)(o, E(a)) && E(Common.maybe)(i.getField(_1) === E(a)) ||
           i.getField(_1)+i.getField(_2) === o
     }
-    FormulaBasedConstraint[(String, String)](expr)
+    Constraint[(String, String)](expr)
   }
 }
 
@@ -682,15 +686,45 @@ case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Constraint[A], gRev
     gRev(out2).flatMap(b => fRev(b))
 }*/
 
-// Make sure the types agree !!
-case class Compose[A, B, C](a: B ~~> C, b: A ~~> B) extends (A ~~> C) {
+// Make sure the types agree !!*/
+
+case class Compose[A: Constrainable, B: Constrainable, C: Constrainable](a: B ~~> C, b: A ~~> B) extends (A ~~> C) {
   def get(in: Input): Output = a.get(b.get(in).asInstanceOf[a.Input])
   def put(out2: Output, in: Option[Input]) = {
    val intermediate_out = in.map(b.get)
    a.put(out2, intermediate_out).flatMap(x => b.put(x, in))
   }
+
+  override def put(idC: Identifier, idA: Identifier, in1: Option[A]): Constraint[A] = {
+    val idB = FreshIdentifier("c", true)
+    val intermediate_out = in1.map(b.get) // TODO: Have it pre-computed already
+    val constraintA = a.put(idC, idB, intermediate_out)
+    val constraintB = b.put(idB, idA, in1)
+    val expr = constraintA.formula && constraintB.formula
+    Constraint(expr)
+  }
 }
 
+case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~~> B, b: A ~~> D)
+    extends (A ~~> (B, D))()(implicitly[Constrainable[A]], implicitly[Constrainable[B]].zipWith(implicitly[Constrainable[D]])) {
+  def get(in: Input): Output = (a.get(in), b.get(in))
+  def put(out2: Output, in: Option[Input]): Iterable[Input] = ???
+  import ImplicitTuples._
+
+  def put(idBD: Identifier, idA: Identifier, in: Option[A]): Constraint[A] = {
+    val varBD = Variable(idBD, T(tuple2)(implicitly[Constrainable[B]].getType, implicitly[Constrainable[D]].getType), Set())
+    val idB = FreshIdentifier("b", true)
+    val idD = FreshIdentifier("d", true)
+    val varB = Variable(idB, implicitly[Constrainable[B]].getType, Set())
+    val varD = Variable(idD, implicitly[Constrainable[D]].getType, Set())
+    val constraintA = a.put(idB, idA, in)
+    val constraintB = b.put(idD, idA, in)
+    val expr =
+        constraintA.formula && constraintB.formula && varB === varBD.getField(_1) && varD === varBD.getField(_2)
+    Constraint(expr)
+  }
+}
+/*
 case class Pair[A, B, C, D](a: A ~~> B, b: C ~~> D) extends ((A, C) ~~> (B, D)) {
   def get(in: Input): Output = (a.get(in._1), b.get(in._2))
   def put(out2: Output, in: Option[Input]) = report(s"Pair.put($out2, $in) = %s"){
@@ -700,8 +734,8 @@ case class Pair[A, B, C, D](a: A ~~> B, b: C ~~> D) extends ((A, C) ~~> (B, D)) 
     val ini2 = b.put(out2._2, inb).toList
     if(Implicits.debug) println(" " * Implicits.indentation + "pairini1:"+ini1.mkString(","))
     if(Implicits.debug) println(" " * Implicits.indentation + "pairini2:"+ini2.mkString(","))
-    val res = 
-    for{i <- ini1; j <- ini2} yield (i, j)
+    val res =
+      for{i <- ini1; j <- ini2} yield (i, j)
     /*if (res.forall{ x => get(x) != out2}) {
       res.foreach(r => {
         println(s"get($r) = " + get(r))
@@ -711,8 +745,8 @@ case class Pair[A, B, C, D](a: A ~~> B, b: C ~~> D) extends ((A, C) ~~> (B, D)) 
     }*/
     res
   }
-}
-
+}*/
+/*
 case class Flatten[A]() extends (List[List[A]] ~~> List[A]) {
   def get(in: Input) = flatten(in)
   def put(out2: Output, in: Option[Input]) = in match {
@@ -976,12 +1010,17 @@ case class Const[A](value: A) extends (Unit ~~> A) {
   def get(u: Unit) = value
   def put(output: A, orig: Option[Unit]): Stream[Unit] = Stream(())
 }
-
-case class Id[A]() extends (A ~~> A) {
+*/
+case class Id[A: Constrainable]() extends (A ~~> A) {
   def get(a: A) = a
   def put(out: A, orig: Option[A]) = Stream(out)
+  def put(aOutId: Identifier, aInId: Identifier, in: Option[A]) = {
+    var varIn = Variable(aInId, implicitly[Constrainable[A]].getType, Set())
+    var varOut = Variable(aOutId, implicitly[Constrainable[A]].getType, Set())
+    Constraint(varIn === varOut)
+  }
 }
-
+/*
 case class CastUp[A, B, B2 >: B](f: A ~~> B) extends (A ~~> B2) {
   def get(a: A) = f.get(a)
   def put(out: B2, orig: Option[A]) = {
