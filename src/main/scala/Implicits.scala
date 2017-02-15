@@ -268,10 +268,13 @@ object Implicits {
       s andThen RegexReplaceAllInReverse(e, f)
   }
   */
+  implicit class IntProducer[A: Constrainable](f: (A ~~> Int)) {
+    def +(other: (A ~~> Int)): (A ~~> Int) = {
+      PairSame(f, other) andThen IntPlusReverse
+    }
+}
+
   implicit class StringProducer[A: Constrainable](f: (A ~~> String)) {
-    /*def +[B](other: (B ~~> String)): ((A, B) ~~> String) = {
-      Pair(f, other) andThen StringAppend
-    }*/
     def +(other: (A ~~> String)): (A ~~> String) = {
       PairSame(f, other) andThen StringAppendReverse
     }

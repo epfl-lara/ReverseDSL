@@ -84,8 +84,7 @@ object StringAppendReverse extends ((String, String) ~~> String) {
         }
     }
   }// ensuring { ress => ress.forall(res => append(res._1, res._2) == out) }
-  //val startsWith : Identifier = FreshIdentifier("startsWith") // No need of startswith because redundant with removeStart
-  //val endsWith : Identifier = FreshIdentifier("endsWith")
+
   val removeStart : Identifier = FreshIdentifier("removeStart")
   val removeEnd : Identifier = FreshIdentifier("removeEnd")
 
@@ -94,13 +93,33 @@ object StringAppendReverse extends ((String, String) ~~> String) {
     val o = Variable(out2, StringType, Set())
     val expr = in1 match {
       case None =>
-        i.getField(_1)+i.getField(_2) === o
+        StringConcat(i.getField(_1), i.getField(_2)) === o
       case Some((a, b)) =>
-          /*E(endsWith)(o, E(b)) && */  i.getField(_1) === E(removeEnd)(o, E(b)) && E(Common.maybe)(i.getField(_2) === E(b)) ||
-          /*E(startsWith)(o, E(a)) && */i.getField(_2) === E(removeStart)(o, E(a)) && E(Common.maybe)(i.getField(_1) === E(a)) ||
-          i.getField(_1)+i.getField(_2) === o
+          i.getField(_1) === E(removeEnd)(o, E(b)) && E(Common.maybe)(i.getField(_2) === E(b)) ||
+          i.getField(_2) === E(removeStart)(o, E(a)) && E(Common.maybe)(i.getField(_1) === E(a)) ||
+          StringConcat(i.getField(_1), i.getField(_2)) === o
     }
     Constraint[(String, String)](expr)
+  }
+}
+
+
+object IntPlusReverse extends ((Int, Int) ~~> Int) {
+  import ImplicitTuples._
+  def get(st: (Int, Int)) = st._1 + st._2
+
+  def put(out: Int, in1: Option[(Int, Int)]) = ???
+
+  def put(out2: Identifier, inId: Identifier, in1: Option[(Int, Int)]) = {
+    val i = Variable(inId, T(tuple2)(Int32Type, Int32Type), Set())
+    val o = Variable(out2, Int32Type, Set())
+    val expr = in1 match {
+      case None =>
+        i.getField(_1) + i.getField(_2) === o
+      case Some((a, b)) =>
+        (i.getField(_1) + i.getField(_2) === o) && E(Common.maybe)(i.getField(_2) === E(b)) && E(Common.maybe)(i.getField(_1) === E(a))
+    }
+    Constraint[(Int, Int)](expr)
   }
 }
 
@@ -434,12 +453,6 @@ object Interleavings {
     else if(l2.isEmpty) List(l1)
     else allInterleavings(l1.tail, l2).map(l1.head :: _) ++ allInterleavings(l1, l2.tail).map(l2.head :: _)
   }
-}
-
-object IntValReverse {
-  def add(s: Int, t: Int) = s+t
-  
-  def addRev(s: Int, t: Int, out: Int) = ((i: Int) => (i, out-i))
 }
 
 class ListSplit[A](p: A => Boolean) extends (List[A] ~~> (List[A], List[A])) {

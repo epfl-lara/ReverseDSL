@@ -1,4 +1,4 @@
-
+import scala.collection.mutable.ArrayBuffer
 
 object Distances {
   def size(a: Any): Int = a match {
@@ -30,7 +30,7 @@ object Distances {
   def distance(a: Any, b: Any): Int = {
     if (a == b) 0 else {
       (a, b) match {
-        case (a: Char, b: Char) => 1
+        case (a: Char, b: Char) => 2 // Remove a and write b
         case (a: String, b: String) => Levenshtein.distance(a, b, distance, size)
         case (a: TraversableOnce[_], b: TraversableOnce[_]) => Levenshtein.distance(a, b, distance, size)
         case (a: Product, b: Product) =>
@@ -45,6 +45,32 @@ object Distances {
         case (false, true) => 4
         case (a: Int, b: Int) =>
           distance(a.toString, b.toString)
+        case (a, b) => size(a) + size(b)
+      }
+    }
+  }
+
+  def distanceWithoutSubstitution(a: Any, b: Any): Int = {
+    if (a == b) 0 else {
+      (a, b) match {
+        case (a: Char, b: Char) =>
+          val isASpaceChar = a.isSpaceChar
+          val isBSpaceChar = b.isSpaceChar
+          if(isASpaceChar && !isBSpaceChar || !isASpaceChar && isBSpaceChar) 3 else 2
+        case (a: String, b: String) => Levenshtein.distance(a, b, distanceWithoutSubstitution, size)
+        case (a: TraversableOnce[_], b: TraversableOnce[_]) => Levenshtein.distance(a, b, distanceWithoutSubstitution, size)
+        case (a: Product, b: Product) =>
+          if (a.getClass == b.getClass) {
+            (0 /: (0 until a.productArity)) {
+              case (s, i) => s + distanceWithoutSubstitution(a.productElement(i), b.productElement(i))
+            }
+          } else {
+            size(a) + size(b) // remove a and write b
+          }
+        case (true, false) => 4
+        case (false, true) => 4
+        case (a: Int, b: Int) =>
+          distanceWithoutSubstitution(a.toString, b.toString)
         case (a, b) => size(a) + size(b)
       }
     }
@@ -90,6 +116,18 @@ object Distances {
 
         v1(t.length)
     }*/
+
+    @inline def spaceAndNotSpace(a: Any, b: Any) = {
+      val isASpaceChar = a match {
+        case c: Char => c.isSpaceChar
+        case _ => false
+      }
+      val isBSpaceChar = b match {
+        case c: Char => c.isSpaceChar
+        case _ => false
+      }
+      if(isASpaceChar != isBSpaceChar) 1 else 0
+    }
     
     def distance(ss: TraversableOnce[Any], tt: TraversableOnce[Any], d: (Any, Any) => Int, size: Any => Int): Int = {
         // degenerate cases
@@ -104,25 +142,47 @@ object Distances {
         // initialize v0 (the previous row of distances)
         // this row is A[0][i]: edit distance for an empty s
         // the distance is just the number of characters to delete from t
-        var v0 = Array.iterate(0, t.length + 1)(x => x + 1)
+        var v0 = ((ArrayBuffer[Int](0), None: Option[Any], 1) /: (0 until t.length)) {
+          case ((ab, prevChar, ctr), j) =>
+            val charToConsider = t(j)
+            val newCtr = ctr + prevChar.map(p => spaceAndNotSpace(charToConsider, p)).getOrElse(0)
+            (ab += newCtr, Some(charToConsider), newCtr + 1)
+        }._1.toArray
         //println(s"ss=$ss, tt=$tt.")
         //println(s"v0=${v0.mkString(",")}")
         var v1 = new Array[Int](t.length + 1)
+
+        var sim1: Option[Any] = None
+        var delta = 0
 
         for {i <- 0 until s.length} {
             // calculate v1 (current row distances) from the previous row v0
 
             // first element of v1 is A[i+1][0]
             //   edit distance is delete (i+1) chars from s to match empty t
-            v1(0) = i + 1;
             val si = s(i)
-            // use formula to fill in the rest of the row
+            delta = delta + sim1.map(si1 => spaceAndNotSpace(si1, si)).getOrElse(0)
+            v1(0) = i + 1 + delta;
+            // v0(j) contains the edit distance from s(0)...s(i-1) to t(0)..t(j-1)
             for (j <- 0 until t.length) {
+            // v1(j) contains the edit distance from  s(0)..s(i)   to t(0)..t(j-1)
                 val tj = t(j)
-                var substiCost = d(si, tj)
-                var insertCost = innerSize(tj)
-                var deleteCost = innerSize(si)
-                v1(j + 1) = minimum(v1(j) + insertCost, v0(j + 1) + deleteCost, v0(j) + substiCost)
+                val substiCost0 = d(si, tj)
+                val substiCost = if(substiCost0 == 0) { // We should add 1 more if one of the two letters is added after a whitespace/
+                  if(i > 0) {
+                    if(j > 0) {
+                      spaceAndNotSpace(t(j-1), s(i-1))
+                    } else spaceAndNotSpace(si, s(i-1))
+                  } else {
+                    if(j > 0) {
+                      spaceAndNotSpace(tj, t(j-1))
+                    } else 0
+                  }
+                }  else substiCost0
+                var sizeTj = innerSize(tj) + (if(j > 0) spaceAndNotSpace(tj, t(j-1)) else 0)
+                var sizeSi = innerSize(si) + (if(i > 0) spaceAndNotSpace(si, s(i-1)) else 0)
+                v1(j + 1) = minimum(v1(j) + sizeTj, v0(j + 1) + sizeSi, v0(j) + substiCost)
+             // v1(j+1) contains the edit distance from  s(0)..s(i)   to t(0)..t(j)
             }
             //println(s"v1=${v1.mkString(",")}")
             
