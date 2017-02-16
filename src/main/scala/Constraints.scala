@@ -58,6 +58,10 @@ object Constrainable {
   /** Obtains the inox type of a given type. */
   def getType[A:Constrainable] = implicitly[Constrainable[A]].getType
 
+  /** Creates a variable with the given name and type*/
+  def variable[A:Constrainable](name: String, alwaysShowUniqueId: Boolean = false) =
+    Variable(FreshIdentifier(name, alwaysShowUniqueId), getType[A], Set())
+
   /** Obtains the expression from an inox expression */
   def getExpr[A:Constrainable](e: inox.trees.Expr) = implicitly[Constrainable[A]].recoverFrom(e)
 

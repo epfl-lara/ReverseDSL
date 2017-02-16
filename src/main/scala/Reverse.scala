@@ -648,7 +648,7 @@ case class Compose[A: Constrainable, B: Constrainable, C: Constrainable](a: B ~~
   }
 
   override def put(idC: Variable, idA: Variable, in1: Option[A]): Constraint[A] = {
-    val idB = Variable(FreshIdentifier("t", true), getType[B], Set())
+    val idB = variable[B]("t", true)
     val intermediate_out = in1.map(b.get) // TODO: Have it pre-computed already
     val constraintA = a.put(idC, idB, intermediate_out)
     val constraintB = b.put(idB, idA, in1)
@@ -664,8 +664,8 @@ case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~
   import ImplicitTuples._
 
   def put(varBD: Variable, varA: Variable, in: Option[A]): Constraint[A] = {
-    val varB = Variable(FreshIdentifier("b", true), getType[B], Set())
-    val varD = Variable(FreshIdentifier("d", true), getType[D], Set())
+    val varB = variable[B]("b", true)
+    val varD = variable[D]("d", true)
     val constraintA = a.put(varB, varA, in)
     val constraintB = b.put(varD, varA, in)
     val expr =
@@ -673,28 +673,6 @@ case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~
     Constraint(expr)
   }
 }
-/*
-case class Pair[A, B, C, D](a: A ~~> B, b: C ~~> D) extends ((A, C) ~~> (B, D)) {
-  def get(in: Input): Output = (a.get(in._1), b.get(in._2))
-  def put(out2: Output, in: Option[Input]) = report(s"Pair.put($out2, $in) = %s"){
-    val ina = in.map(_._1)
-    val inb = in.map(_._2)
-    val ini1 = a.put(out2._1, ina).toList
-    val ini2 = b.put(out2._2, inb).toList
-    if(Implicits.debug) println(" " * Implicits.indentation + "pairini1:"+ini1.mkString(","))
-    if(Implicits.debug) println(" " * Implicits.indentation + "pairini2:"+ini2.mkString(","))
-    val res =
-      for{i <- ini1; j <- ini2} yield (i, j)
-    /*if (res.forall{ x => get(x) != out2}) {
-      res.foreach(r => {
-        println(s"get($r) = " + get(r))
-      })
-      println(s"Was looking for $out2")
-      throw new Exception("Nothing forwards to " + out2 + " in " + res.mkString(","))
-    }*/
-    res
-  }
-}*/
 /*
 case class Flatten[A]() extends (List[List[A]] ~~> List[A]) {
   def get(in: Input) = flatten(in)

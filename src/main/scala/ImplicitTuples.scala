@@ -2,6 +2,7 @@ import scala.reflect.runtime.universe.TypeTag
 import inox._
 import inox.trees._
 import inox.trees.dsl._
+import Constrainable._
 
 object ImplicitTuples {
   val tuple2 : Identifier = FreshIdentifier("Tuple2")
@@ -138,7 +139,7 @@ object ImplicitTuples {
     }
     override def put(varC: Variable, varA: Variable, in1: Option[A]): Constraint[A] = {
       val selector = _tupleIdentifiers(index-1)
-      var varTuple = Variable(FreshIdentifier("t", true), implicitly[Constrainable[Tuple]].getType, Set())
+      var varTuple = variable[Tuple]("t", true)
       val expr = varTuple.getField(selector) === varC && f.put(varTuple, varA, in1).formula
       Constraint(expr)
     }
