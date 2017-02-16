@@ -6,6 +6,7 @@ import Implicits._
 import inox._
 import inox.trees._
 import inox.trees.dsl._
+import Constrainable._
 
 /** Lense trait
 */
@@ -14,7 +15,7 @@ abstract class ~~>[A: Constrainable, B: Constrainable]/* extends (A => B)*/ {
   type Output = B
   def get(in: A): B
   def put(out2: B, in1: Option[A]): Iterable[A]
-  def put(out2: Identifier, inId: Identifier, in1: Option[A]): Constraint[A]
+  def put(out2: Variable, inId: Variable, in1: Option[A]): Constraint[A]
 
   //final def apply(in: A) = get(in)
   final def put(out2: B, in1: A): Iterable[A] = put(out2, Some(in1))
@@ -88,9 +89,7 @@ object StringAppendReverse extends ((String, String) ~~> String) {
   val removeStart : Identifier = FreshIdentifier("removeStart")
   val removeEnd : Identifier = FreshIdentifier("removeEnd")
 
-  override def put(out2: Identifier, inId: Identifier, in1: Option[(String, String)]): Constraint[(String, String)] = {
-    val i = Variable(inId, T(tuple2)(StringType, StringType), Set())
-    val o = Variable(out2, StringType, Set())
+  override def put(o: Variable, i: Variable, in1: Option[(String, String)]): Constraint[(String, String)] = {
     val expr = in1 match {
       case None =>
         StringConcat(i.getField(_1), i.getField(_2)) === o
@@ -110,9 +109,7 @@ object IntPlusReverse extends ((Int, Int) ~~> Int) {
 
   def put(out: Int, in1: Option[(Int, Int)]) = ???
 
-  def put(out2: Identifier, inId: Identifier, in1: Option[(Int, Int)]) = {
-    val i = Variable(inId, T(tuple2)(Int32Type, Int32Type), Set())
-    val o = Variable(out2, Int32Type, Set())
+  def put(o: Variable, i: Variable, in1: Option[(Int, Int)]) = {
     val expr = in1 match {
       case None =>
         i.getField(_1) + i.getField(_2) === o
@@ -124,70 +121,12 @@ object IntPlusReverse extends ((Int, Int) ~~> Int) {
 }
 
 /*
-object StringAppend extends  ((String, String) ~~> String) {
-  def append(s: String, t: String): String = s+t
-  
-  def get(st: Input): Output = append(st._1, st._2)
-  
-  def put(out: Output, st: Option[Input]): Constraint[Input] = report(s"StringAppend.put($out, $st) = %s"){
-    st match {
-      case None => List((out, "")).distinct
-      case Some(st) =>
-      val s = st._1
-      val t = st._2
-      if (s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
-        //val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
-        //val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
-        /*val modifyBoth: Constraint[Input] = for{(kFirst1, kFirst2) <- keepFirstIntact
-          (kSecond1, kSecond2) <- keepSecondIntact
-        } yield (kSecond1, kFirst2)*/
-        val parsing: List[(String, String)] = for{i <- (0 to out.length).reverse.toList
-            //if i != s.length && out.length - i != t.length
-            (start, end) = out.splitAt(i)
-          } yield (start, end)
-        //println("KeepFirstIntact:" + keepFirstIntact.toList.mkString(","))
-        //println("keepSecondIntact:" + keepSecondIntact.toList.mkString(","))
-        //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
-        val res = (/*keepFirstIntact ++ keepSecondIntact ++ modifyBoth ++ */parsing).filter(res => get(res._1, res._2) == out).sortBy{ case (is, it) =>
-          val value = if (is.length > 0 && it.length > 0) {
-            val isEnd = is(is.length - 1)
-            val itStart = it(0)
-            if(is == s || it == t) {
-               // That's very good to split and keep one of the two
-              // unless there was a space/nonspace split before which does not exist anymore.
-              if (s.length > 0 && t.length > 0 &&
-                 ((s(s.length - 1).isSpaceChar != t(0).isSpaceChar) ==
-                 (isEnd.isSpaceChar == itStart.isSpaceChar))) {
-                7
-              } else 0
-            }
-            else if (isEnd.isSpaceChar && itStart.isSpaceChar) 10 // That's awful to split at a space.
-            else if (! isEnd.isSpaceChar && ! itStart.isSpaceChar) {
-              if(isEnd.isLower != itStart.isLower) 5
-              else 10// That's awful to split at a non-space
-            }
-            else 2
-          } else {
-            if (is == s || it == t) 1 // That's very good to split and keep one of the two.
-            else 6
-          }
-          if(Implicits.debug) println((is, it) + " -> " + value)
-          value
-        }
-        if(Implicits.debug) println((" " * Implicits.indentation) + s"rev-append($out, ($s, $t)) = " + res.toList)
-        res
-      }
-    }
-  }// ensuring { ress => ress.forall(res => append(res._1, res._2) == out) }
-}
-
-/*
 object StringExtractReverse {
   def substring(s: String, start: Int, end: Int) = s.substring(s, start, end)
   
   def substringRev(s: String, start: Int, end: Int, out: String) = s.substring(0, start) + out + s.substring(end)
 }*/
-
+/*
 object StringFormatReverse extends ((String, List[Any]) ~~> String) {
   import java.util.regex.Pattern
   def format(s: String, args: List[Any]) = {
@@ -708,8 +647,8 @@ case class Compose[A: Constrainable, B: Constrainable, C: Constrainable](a: B ~~
    a.put(out2, intermediate_out).flatMap(x => b.put(x, in))
   }
 
-  override def put(idC: Identifier, idA: Identifier, in1: Option[A]): Constraint[A] = {
-    val idB = FreshIdentifier("c", true)
+  override def put(idC: Variable, idA: Variable, in1: Option[A]): Constraint[A] = {
+    val idB = Variable(FreshIdentifier("t", true), getType[B], Set())
     val intermediate_out = in1.map(b.get) // TODO: Have it pre-computed already
     val constraintA = a.put(idC, idB, intermediate_out)
     val constraintB = b.put(idB, idA, in1)
@@ -724,14 +663,11 @@ case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~
   def put(out2: Output, in: Option[Input]): Iterable[Input] = ???
   import ImplicitTuples._
 
-  def put(idBD: Identifier, idA: Identifier, in: Option[A]): Constraint[A] = {
-    val varBD = Variable(idBD, T(tuple2)(implicitly[Constrainable[B]].getType, implicitly[Constrainable[D]].getType), Set())
-    val idB = FreshIdentifier("b", true)
-    val idD = FreshIdentifier("d", true)
-    val varB = Variable(idB, implicitly[Constrainable[B]].getType, Set())
-    val varD = Variable(idD, implicitly[Constrainable[D]].getType, Set())
-    val constraintA = a.put(idB, idA, in)
-    val constraintB = b.put(idD, idA, in)
+  def put(varBD: Variable, varA: Variable, in: Option[A]): Constraint[A] = {
+    val varB = Variable(FreshIdentifier("b", true), getType[B], Set())
+    val varD = Variable(FreshIdentifier("d", true), getType[D], Set())
+    val constraintA = a.put(varB, varA, in)
+    val constraintB = b.put(varD, varA, in)
     val expr =
         constraintA.formula && constraintB.formula && varB === varBD.getField(_1) && varD === varBD.getField(_2)
     Constraint(expr)
@@ -1027,9 +963,7 @@ case class Const[A](value: A) extends (Unit ~~> A) {
 case class Id[A: Constrainable]() extends (A ~~> A) {
   def get(a: A) = a
   def put(out: A, orig: Option[A]) = Stream(out)
-  def put(aOutId: Identifier, aInId: Identifier, in: Option[A]) = {
-    var varIn = Variable(aInId, implicitly[Constrainable[A]].getType, Set())
-    var varOut = Variable(aOutId, implicitly[Constrainable[A]].getType, Set())
+  def put(varIn: Variable, varOut: Variable, in: Option[A]) = {
     Constraint(varIn === varOut)
   }
 }

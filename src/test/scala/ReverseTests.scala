@@ -16,10 +16,6 @@ class StringAppendTest extends FunSuite {
   import ImplicitTuples._
   import Implicits._
 
-  val o = FreshIdentifier("o")
-  val i = FreshIdentifier("i")
-
-
   def doubleAppend(in: Id[(String, String)]) = {
     in._1 + in._2
   }
@@ -27,19 +23,19 @@ class StringAppendTest extends FunSuite {
   test("Double decomposition") {
     val d = Make(doubleAppend)
     d.get(("Hello ", "world")) shouldEqual "Hello world"
-    var varO = Variable(o, getType[String], Set())
-    var varI = Variable(i, getType[(String, String)], Set())
+    var o = Variable(FreshIdentifier("o"), getType[String], Set())
+    var i = Variable(FreshIdentifier("i"), getType[(String, String)], Set())
     val init = ("Hello ", "world")
     val constraint = d.put(o, i, Some(init))
     def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(Distances.distance(_, init)) #::: s.drop(num)
 
-    sort(constraint(varO -> "Hello world").toStream(varI), 2).head shouldEqual ("Hello ", "world")
-    sort(constraint(varO -> "Hello  world").toStream(varI), 2).head shouldEqual ("Hello  ", "world")
-    sort(constraint(varO -> "Hello Buddy").toStream(varI), 2).head shouldEqual ("Hello ", "Buddy")
-    sort(constraint(varO -> "Hi world").toStream(varI), 2).head shouldEqual ("Hi ", "world")
-    sort(constraint(varO -> "Helloooo world").toStream(varI), 2).head shouldEqual ("Helloooo ", "world")
-    sort(constraint(varO -> "Hello aworld").toStream(varI), 2).head shouldEqual (("Hello ", "aworld"))
-    sort(constraint(varO -> "Hi buddy").toStream(varI), 10).head shouldEqual (("Hi ", "buddy"))
+    sort(constraint(o -> "Hello world").toStream(i), 2).head shouldEqual ("Hello ", "world")
+    sort(constraint(o -> "Hello  world").toStream(i), 2).head shouldEqual ("Hello  ", "world")
+    sort(constraint(o -> "Hello Buddy").toStream(i), 2).head shouldEqual ("Hello ", "Buddy")
+    sort(constraint(o -> "Hi world").toStream(i), 2).head shouldEqual ("Hi ", "world")
+    sort(constraint(o -> "Helloooo world").toStream(i), 2).head shouldEqual ("Helloooo ", "world")
+    sort(constraint(o -> "Hello aworld").toStream(i), 2).head shouldEqual (("Hello ", "aworld"))
+    sort(constraint(o -> "Hi buddy").toStream(i), 10).head shouldEqual (("Hi ", "buddy"))
   }
 
   def appendTwice(in: Id[String]) = {
@@ -49,21 +45,21 @@ class StringAppendTest extends FunSuite {
   test("Append twice") {
     val d = Make(appendTwice)
     d.get("Hello") shouldEqual "HelloHello"
-    var varO = Variable(o, getType[String], Set())
-    var varI = Variable(i, getType[String], Set())
+    var o = Variable(FreshIdentifier("o"), getType[String], Set())
+    var i = Variable(FreshIdentifier("i"), getType[String], Set())
     val init = "Hello"
     val constraint = d.put(o, i, Some(init))
     def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(Distances.distance(_, init)) #::: s.drop(num)
 
     //println(constraint.simplify(varI))
 
-    sort(constraint(varO -> "MikaelMikael").toStream(varI), 2).head shouldEqual "Mikael" // Longer disambiguated
-    sort(constraint(varO -> "MikMik").toStream(varI), 2).head shouldEqual "Mik" // Shorter disambiguated
+    sort(constraint(o -> "MikaelMikael").toStream(i), 2).head shouldEqual "Mikael" // Longer disambiguated
+    sort(constraint(o -> "MikMik").toStream(i), 2).head shouldEqual "Mik" // Shorter disambiguated
 
-    sort(constraint(varO -> "HelloMikael").toStream(varI), 2).head shouldEqual "Mikael" // Longer
-    sort(constraint(varO -> "MikaelHello").toStream(varI), 2).head shouldEqual "Mikael"
-    sort(constraint(varO -> "HelloMik").toStream(varI), 2).head shouldEqual "Mik" // Shorter
-    sort(constraint(varO -> "MikHello").toStream(varI), 2).head shouldEqual "Mik"
+    sort(constraint(o -> "HelloMikael").toStream(i), 2).head shouldEqual "Mikael" // Longer
+    sort(constraint(o -> "MikaelHello").toStream(i), 2).head shouldEqual "Mikael"
+    sort(constraint(o -> "HelloMik").toStream(i), 2).head shouldEqual "Mik" // Shorter
+    sort(constraint(o -> "MikHello").toStream(i), 2).head shouldEqual "Mik"
   }
 
   def appendTwicePlusMiddle(in: Id[(String, String)]) = {
@@ -74,23 +70,23 @@ class StringAppendTest extends FunSuite {
     val d = Make(appendTwicePlusMiddle)
     val init = ("Hello", " ")
     d.get(init) shouldEqual "Hello Hello"
-    var varO = Variable(o, getType[String], Set())
-    var varI = Variable(i, getType[(String, String)], Set())
+    var o = Variable(FreshIdentifier("o"), getType[String], Set())
+    var i = Variable(FreshIdentifier("i"), getType[(String, String)], Set())
     val constraint = d.put(o, i, Some(init))
     def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(Distances.distance(_, init)) #::: s.drop(num)
 
-    println(constraint.simplify(varI))
+    //println(constraint.simplify(i))
 
-    sort(constraint(varO -> "Mikael Mikael").toStream(varI), 2).head shouldEqual (("Mikael", " ")) // Longer disambiguated
-    sort(constraint(varO -> "Mik Mik").toStream(varI), 2).head shouldEqual (("Mik", " ")) // Shorter disambiguated
+    sort(constraint(o -> "Mikael Mikael").toStream(i), 2).head shouldEqual (("Mikael", " ")) // Longer disambiguated
+    sort(constraint(o -> "Mik Mik").toStream(i), 2).head shouldEqual (("Mik", " ")) // Shorter disambiguated
 
-    sort(constraint(varO -> "Mikael Hello").toStream(varI), 2).head shouldEqual (("Mikael", " ")) // Longer
-    sort(constraint(varO -> "Hello Mikael").toStream(varI), 2).head shouldEqual (("Mikael", " "))
-    sort(constraint(varO -> "Hello Mik").toStream(varI), 2).head shouldEqual (("Mik", " ")) // Shorter
-    sort(constraint(varO -> "Mik Hello").toStream(varI), 2).head shouldEqual (("Mik", " "))
+    sort(constraint(o -> "Mikael Hello").toStream(i), 2).head shouldEqual (("Mikael", " ")) // Longer
+    sort(constraint(o -> "Hello Mikael").toStream(i), 2).head shouldEqual (("Mikael", " "))
+    sort(constraint(o -> "Hello Mik").toStream(i), 2).head shouldEqual (("Mik", " ")) // Shorter
+    sort(constraint(o -> "Mik Hello").toStream(i), 2).head shouldEqual (("Mik", " "))
 
-    sort(constraint(varO -> "Hello  Hello").toStream(varI), 2).head shouldEqual (("Hello", "  ")) // Space editiong
-    sort(constraint(varO -> "HelloHello").toStream(varI), 2).head shouldEqual (("Hello", "")) // Space editiong
+    sort(constraint(o -> "Hello  Hello").toStream(i), 2).head shouldEqual (("Hello", "  ")) // Space editiong
+    sort(constraint(o -> "HelloHello").toStream(i), 2).head shouldEqual (("Hello", "")) // Space editiong
   }
 }
 
@@ -100,55 +96,6 @@ class IntPlusReverseTest extends FunSuite  {
   import ImplicitTuples._
   import Implicits._
 
-  /*
-  val source = """
-object Prog {
-  def main() = {
-    val a = 1
-    add(add(a, 3), a)
-  }
-/*
-  3 [ a -> 1 ] = add(add(a, 3), a)
-
-(add(a, 3), a) in addRev(add(a, 3), a, 3)
-(add(a, 3), a) in (2, 1) or (4, -1)
-add(a, 3) = 2 <=> (a, 3) in (1, 1) or (-1, 3)
-add(a, 3) = 4 <=> (a, 3) in (1, 3)
-
-(a, 3, a) in (1, 1, 1) or (-1, 3, 1) or (1, 3, -1)
-Only one possibility, change 3 to 1. Not enough. We miss (0, 3, 0) which changes two values at call site but only one in the final. How to get it? Maybe in this case it's simply not invertible. We cannot afford all possible decompositions if bottom up. Unless abstract representation of all the solutions, such as
-def addRev(s: Int, t: Int, out: Int) = (i: Int) =>  {
-    (i, out-i)
-  } ensuring { ress => ress.forall(res => add(res._1, res._2) == out) }
-
-In this case, we would have:
-(add(a, '3), a) in addRev(add(a, 3), a, 3)
-So exists i such that
-add(a, '3) = i
-a = 3-i
-Hence
-(a, '3) in addRev(a, 3, i)
-So there exists j such that
-a = j
-'3 = i-j
-Solve equations =>
-3-i = j
-Hence
-'3 = 2i-3
-a = 3-i
-Now we test a=1 gives one solution.
-We test '3 = 3 gives miraculously one solution
-*/
-  val expected0 = 5
-  val expected1 = 4
-  val expected2 = 3
-  val expected3 = 6
-  val expected4 = 7
-}
-"""*/
-
-  val o = FreshIdentifier("o")
-  val i = FreshIdentifier("i")
 
   def add2and3(in: Id[(Int, Int)]) = {
     in._1 + in._2 + in._1
@@ -158,41 +105,18 @@ We test '3 = 3 gives miraculously one solution
     val d = Make(add2and3)
     val init = (1, 3)
     d.get(init) shouldEqual 5
-    var varO = Variable(o, getType[Int], Set())
-    var varI = Variable(i, getType[(Int, Int)], Set())
+    var o = Variable(FreshIdentifier("o"), getType[Int], Set())
+    var i = Variable(FreshIdentifier("i"), getType[(Int, Int)], Set())
     val constraint = d.put(o, i, Some(init))
     //println(constraint)
     //println(constraint.simplify(varI))
     //println(varI)
-    constraint(varO -> 4).toStream(varI).head shouldEqual ((1, 2))
-    constraint(varO -> 3).toStream(varI).take(2).toSet shouldEqual Set((1, 1), (0, 3))
-    constraint(varO -> 6).toStream(varI).head shouldEqual ((1, 4))
-    constraint(varO -> 7).toStream(varI).take(2).toSet shouldEqual Set((1, 5), (2, 3))
-    constraint(varO -> 8).toStream(varI).head shouldEqual ((1, 6))
-    constraint(varO -> 9).toStream(varI).take(2).toSet shouldEqual Set((1, 7), (3, 3))
-  }
-
-  def fRev(res: Int): List[(Int, Int)] = {
-    //res = add(add(a, 3), a)
-    //val i = findInt
-    //val lr = addRev(add(a, 3), a, res) (i)
-    //(add(a, 3), a) == lr
-    //val j = findInt
-    //val lr2 = addRev(a, 3, lr._1)
-    //assume(a == lr._2 && a == lr2._1 && ifPossible(lr2._2 == 3))
-    //yield (a, lr2._2)
-    ???
-  }
-
-  def test() = {
-    //"val a = 1; add(add(a, 3), a)"
-    // addRev(a, 3)
-    // Would require Z3.
-    /*fRev(5) should have 'size 1 //'
-    fRev(4) should have 'size 1 //'
-    fRev(3) should have 'size 2 //'
-    fRev(6) should have 'size 1 //'
-    fRev(7) should have 'size 2 //'*/
+    constraint(o -> 4).toStream(i).head shouldEqual ((1, 2))
+    constraint(o -> 3).toStream(i).take(2).toSet shouldEqual Set((1, 1), (0, 3))
+    constraint(o -> 6).toStream(i).head shouldEqual ((1, 4))
+    constraint(o -> 7).toStream(i).take(2).toSet shouldEqual Set((1, 5), (2, 3))
+    constraint(o -> 8).toStream(i).head shouldEqual ((1, 6))
+    constraint(o -> 9).toStream(i).take(2).toSet shouldEqual Set((1, 7), (3, 3))
   }
 }
 /*

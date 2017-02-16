@@ -136,13 +136,10 @@ object ImplicitTuples {
         case None => Nil
       }
     }
-    override def put(idC: Identifier, idA: Identifier, in1: Option[A]): Constraint[A] = {
-      var varC = Variable(idC, implicitly[Constrainable[C]].getType, Set())
-      var varA = Variable(idA, implicitly[Constrainable[A]].getType, Set())
+    override def put(varC: Variable, varA: Variable, in1: Option[A]): Constraint[A] = {
       val selector = _tupleIdentifiers(index-1)
-      var idTuple = FreshIdentifier("t", true)
-      var varTuple = Variable(idTuple, implicitly[Constrainable[Tuple]].getType, Set())
-      val expr = varTuple.getField(selector) === varC && f.put(idTuple, idA, in1).formula
+      var varTuple = Variable(FreshIdentifier("t", true), implicitly[Constrainable[Tuple]].getType, Set())
+      val expr = varTuple.getField(selector) === varC && f.put(varTuple, varA, in1).formula
       Constraint(expr)
     }
   }
