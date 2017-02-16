@@ -1,7 +1,7 @@
 import org.scalatest._
 import Matchers.{ === => _, _}
 import inox._
-import inox.trees._
+import inox.trees.{not => inoxNot, _}
 import inox.trees.dsl._
 
 import scala.reflect.runtime.universe.TypeTag
@@ -23,8 +23,8 @@ class StringAppendTest extends FunSuite {
   test("Double decomposition") {
     val d = Make(doubleAppend)
     d.get(("Hello ", "world")) shouldEqual "Hello world"
-    var o = Variable(FreshIdentifier("o"), getType[String], Set())
-    var i = Variable(FreshIdentifier("i"), getType[(String, String)], Set())
+    var o = Variable(FreshIdentifier("o"), inoxTypeOf[String], Set())
+    var i = Variable(FreshIdentifier("i"), inoxTypeOf[(String, String)], Set())
     val init = ("Hello ", "world")
     val constraint = d.put(o, i, Some(init))
     def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(Distances.distance(_, init)) #::: s.drop(num)
@@ -45,8 +45,8 @@ class StringAppendTest extends FunSuite {
   test("Append twice") {
     val d = Make(appendTwice)
     d.get("Hello") shouldEqual "HelloHello"
-    var o = Variable(FreshIdentifier("o"), getType[String], Set())
-    var i = Variable(FreshIdentifier("i"), getType[String], Set())
+    var o = Variable(FreshIdentifier("o"), inoxTypeOf[String], Set())
+    var i = Variable(FreshIdentifier("i"), inoxTypeOf[String], Set())
     val init = "Hello"
     val constraint = d.put(o, i, Some(init))
     def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(Distances.distance(_, init)) #::: s.drop(num)
@@ -70,8 +70,8 @@ class StringAppendTest extends FunSuite {
     val d = Make(appendTwicePlusMiddle)
     val init = ("Hello", " ")
     d.get(init) shouldEqual "Hello Hello"
-    var o = Variable(FreshIdentifier("o"), getType[String], Set())
-    var i = Variable(FreshIdentifier("i"), getType[(String, String)], Set())
+    var o = Variable(FreshIdentifier("o"), inoxTypeOf[String], Set())
+    var i = Variable(FreshIdentifier("i"), inoxTypeOf[(String, String)], Set())
     val constraint = d.put(o, i, Some(init))
     def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(Distances.distance(_, init)) #::: s.drop(num)
 
@@ -105,8 +105,8 @@ class IntPlusReverseTest extends FunSuite  {
     val d = Make(add2and3)
     val init = (1, 3)
     d.get(init) shouldEqual 5
-    var o = Variable(FreshIdentifier("o"), getType[Int], Set())
-    var i = Variable(FreshIdentifier("i"), getType[(Int, Int)], Set())
+    var o = Variable(FreshIdentifier("o"), inoxTypeOf[Int], Set())
+    var i = Variable(FreshIdentifier("i"), inoxTypeOf[(Int, Int)], Set())
     val constraint = d.put(o, i, Some(init))
     //println(constraint)
     //println(constraint.simplify(varI))
@@ -240,28 +240,41 @@ class ListAppendTest extends FunSuite {
     d.put(List(3, 2, 2, 3, 2), Some(List(1), List(2))) should contain((List(3, 2), List(2)))
   }
 }
+*/
 
 class StringFormatReverseTest extends FunSuite  {
   import Implicits._
-  def format(in: Id[(String, List[Any])]) = {
+  import ImplicitTuples._
+
+  def format(in: Id[(String, List[Either[String, Int]])]) = {
     in._1.format(in._2)
   }
   
   test("Formatting reverse decomposition") {
-    val f = format(Id())
-    def formatRev(s: String, args: List[Any], output: String) =
+    val f = Make(format)
+    object CList {
+      def apply(i: Any*): List[Either[String, Int]] = listAnyToListEither(i.toList)
+
+      def listAnyToListEither(l: List[Any]): List[Either[String, Int]] = l match {
+        case Nil => Nil
+        case (s: String):: tail => Left(s) :: listAnyToListEither(tail)
+        case (i: Int)::tail => Right(i) :: listAnyToListEither(tail)
+        case _ => throw new Exception(s"$l is not a list of String | Int")
+      }
+    }
+    def formatRev(s: String, args: List[Either[String, Int]], output: String) =
       f.put(output, Some((s, args)))
-    formatRev("%s %s %d", List("Hello", "world", 42), "Hello buddy 42") shouldEqual List(("%s %s %d", List("Hello", "buddy", 42)))
-    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello, obscure world!") should contain (("%s, %s %s!", List("Hello", "obscure", "world")))
-    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Hello,clear world!") should contain (("%s,%s %s!", List("Hello", "clear", "world")))
-    formatRev("%s,%s %s!", List("Hello", "obscure", "world"), "Good bye,awesome friend!") should contain (("%s,%s %s!", List("Good bye", "awesome", "friend")))
-    formatRev("%2$s,%3$s %1$s!", List("world", "Hello", "obscure"), "Hello,clear world!") should contain (("%2$s,%3$s %1$s!", List("world", "Hello", "clear")))
-    formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should contain(("Hello %1$s! %1$s is ok?", List("Mikael")))
-    formatRev("Hello %1$s! %1$s is ok?", List("Marion"), "Hello Mikael! Marion is ok?") should not contain (("Hello %1$s! %1$s is ok?", List("Marion")))
+    formatRev("%s %s %d", CList("Hello", "world", 42), "Hello buddy 42") shouldEqual List(("%s %s %d", CList("Hello", "buddy", 42)))
+    formatRev("%s,%s %s!", CList("Hello", "obscure", "world"), "Hello, obscure world!") should contain (("%s, %s %s!", CList("Hello", "obscure", "world")))
+    formatRev("%s,%s %s!", CList("Hello", "obscure", "world"), "Hello,clear world!") should contain (("%s,%s %s!", CList("Hello", "clear", "world")))
+    formatRev("%s,%s %s!", CList("Hello", "obscure", "world"), "Good bye,awesome friend!") should contain (("%s,%s %s!", CList("Good bye", "awesome", "friend")))
+    formatRev("%2$s,%3$s %1$s!", CList("world", "Hello", "obscure"), "Hello,clear world!") should contain (("%2$s,%3$s %1$s!", CList("world", "Hello", "clear")))
+    formatRev("Hello %1$s! %1$s is ok?", CList("Marion"), "Hello Mikael! Marion is ok?") should contain(("Hello %1$s! %1$s is ok?", CList("Mikael")))
+    formatRev("Hello %1$s! %1$s is ok?", CList("Marion"), "Hello Mikael! Marion is ok?") should not contain (("Hello %1$s! %1$s is ok?", CList("Marion")))
   }
 }
 
-
+/*
 class RegexReplaceAllInReverseTest extends FunSuite  {
   import Implicits._
   

@@ -281,10 +281,10 @@ object Implicits {
     /*def format[B](other: (B ~~> List[Any])): ((A, B) ~~> String) = {
       Pair(f, other) andThen StringFormatReverse
     }*/
-    /*def format(other: (A ~~> List[Any])): (A ~~> String) = {
-      Pair(f, other) andThen StringFormatReverse
+    def format(other: (A ~~> List[Either[String, Int]])): (A ~~> String) = {
+      PairSame(f, other) andThen StringFormatReverse
     }
-    
+    /*
     def length = new (A ~~> Int) {
       def get(in: A) = f.get(in).length
       def put(out: Int, in1: Option[A]) = {

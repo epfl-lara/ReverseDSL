@@ -8,106 +8,75 @@ import inox.trees._
 import inox.trees.dsl._
 import Constrainable._
 
-/** Lense trait
-*/
-abstract class ~~>[A: Constrainable, B: Constrainable]/* extends (A => B)*/ {
+/** Lense class.
+  * Should provide the method get and put.
+  */
+abstract class ~~>[A: Constrainable, B: Constrainable] {
   type Input = A
   type Output = B
   def get(in: A): B
-  def put(out2: B, in1: Option[A]): Iterable[A]
   def put(out2: Variable, inId: Variable, in1: Option[A]): Constraint[A]
 
-  //final def apply(in: A) = get(in)
+  lazy val constrainableInput: Constrainable[A] = implicitly[Constrainable[A]]
+  lazy val constrainableOutput: Constrainable[B] = implicitly[Constrainable[B]]
+
+  // Basic implementation provided in ~~=>.put
+  def put(out2: B, in1: Option[A]): Iterable[A]
+
   final def put(out2: B, in1: A): Iterable[A] = put(out2, Some(in1))
   final def put(out2: B): Iterable[A] = put(out2, None)
-  //final def unapply(out: Output) = put(out)
-  //final def apply[C](todobefore: C ~~> A): C ~~> B = todobefore andThen this
   def andThen[C: Constrainable](f: B ~~> C) = Compose(f, this)
+}
+
+/** Particular case of ~~=> Implementing the direct put method as immediate constraint solving. */
+abstract class ~~=>[A: Constrainable, B: Constrainable]  extends (A ~~> B) {
+  val name: String
+  def put(out: Output, st: Option[Input]): Iterable[Input] = report(s"$name.put($out, $st) = %s"){
+    val outId = variable[Output]("out")
+    val inId = variable[Input]("in")
+    val constraint = put(outId, inId, st)
+    constraint(outId -> out).toStream(inId)
+  }
+}
+
+/** A way to provide a manual reverse of the transformation */
+trait ManualReverse[A, B] extends (A ~~> B) {
+
+  def putManual(out2: B, in1: Option[A]): Iterable[A]
 }
 
 object Common {
   val maybe : Identifier = FreshIdentifier("maybe")
 }
 
-object StringAppendReverse extends ((String, String) ~~> String) {
+// Definition of multiple lenses
+
+/** String concatenation lens */
+object StringAppendReverse extends ((String, String) ~~=> String) {
   import ImplicitTuples._
-  def append(s: String, t: String): String = s+t
 
-  def get(in: (String, String)): String = append(in._1, in._2)
+  def get(in: (String, String)): String = in._1 + in._2
 
-  def put(out: Output, st: Option[Input]): Iterable[Input] = report(s"StringAppend.put($out, $st) = %s"){
-    st match {
-      case None => List((out, "")).distinct
-      case Some(st) =>
-        val s = st._1
-        val t = st._2
-        if (s + t == out) List((s, t)) else {//Priority given to attaching space to spaces, and non-spaces to non-spaces.
-        //val keepFirstIntact: List[Input] = (if(out.length >= s.length) List((s, out.substring(s.length))) else Nil)
-        //val keepSecondIntact: List[Input] = (if(out.length >= t.length) List((out.substring(0, out.length - t.length), t)) else Nil)
-        /*val modifyBoth: Constraint[Input] = for{(kFirst1, kFirst2) <- keepFirstIntact
-          (kSecond1, kSecond2) <- keepSecondIntact
-        } yield (kSecond1, kFirst2)*/
-        val parsing: List[(String, String)] = for{i <- (0 to out.length).reverse.toList
-                                                  //if i != s.length && out.length - i != t.length
-                                                  (start, end) = out.splitAt(i)
-        } yield (start, end)
-          //println("KeepFirstIntact:" + keepFirstIntact.toList.mkString(","))
-          //println("keepSecondIntact:" + keepSecondIntact.toList.mkString(","))
-          //appendRev("Hello"," ","Hello  ")  = List(("Hello", "  ") ("Hello ", " "))
-          val res = (/*keepFirstIntact ++ keepSecondIntact ++ modifyBoth ++ */parsing).filter(res => get(res._1, res._2) == out).sortBy{ case (is, it) =>
-            val value = if (is.length > 0 && it.length > 0) {
-              val isEnd = is(is.length - 1)
-              val itStart = it(0)
-              if(is == s || it == t) {
-                // That's very good to split and keep one of the two
-                // unless there was a space/nonspace split before which does not exist anymore.
-                if (s.length > 0 && t.length > 0 &&
-                  ((s(s.length - 1).isSpaceChar != t(0).isSpaceChar) ==
-                    (isEnd.isSpaceChar == itStart.isSpaceChar))) {
-                  7
-                } else 0
-              }
-              else if (isEnd.isSpaceChar && itStart.isSpaceChar) 10 // That's awful to split at a space.
-              else if (! isEnd.isSpaceChar && ! itStart.isSpaceChar) {
-                if(isEnd.isLower != itStart.isLower) 5
-                else 10// That's awful to split at a non-space
-              }
-              else 2
-            } else {
-              if (is == s || it == t) 1 // That's very good to split and keep one of the two.
-              else 6
-            }
-            if(Implicits.debug) println((is, it) + " -> " + value)
-            value
-          }
-          if(Implicits.debug) println((" " * Implicits.indentation) + s"rev-append($out, ($s, $t)) = " + res.toList)
-          res
-        }
-    }
-  }// ensuring { ress => ress.forall(res => append(res._1, res._2) == out) }
-
-  val removeStart : Identifier = FreshIdentifier("removeStart")
-  val removeEnd : Identifier = FreshIdentifier("removeEnd")
+  val name = "StringAppend"
 
   override def put(o: Variable, i: Variable, in1: Option[(String, String)]): Constraint[(String, String)] = {
     val expr = in1 match {
       case None =>
         StringConcat(i.getField(_1), i.getField(_2)) === o
       case Some((a, b)) =>
-          i.getField(_1) === E(removeEnd)(o, E(b)) && E(Common.maybe)(i.getField(_2) === E(b)) ||
-          i.getField(_2) === E(removeStart)(o, E(a)) && E(Common.maybe)(i.getField(_1) === E(a)) ||
+          StringConcat(i.getField(_1), E(b)) === o && E(Common.maybe)(i.getField(_2) === E(b)) ||
+          StringConcat(E(a), i.getField(_2)) === o && E(Common.maybe)(i.getField(_1) === E(a)) ||
           StringConcat(i.getField(_1), i.getField(_2)) === o
     }
     Constraint[(String, String)](expr)
   }
 }
 
-
-object IntPlusReverse extends ((Int, Int) ~~> Int) {
+/** Integer addition lens */
+object IntPlusReverse extends ((Int, Int) ~~=> Int) {
   import ImplicitTuples._
   def get(st: (Int, Int)) = st._1 + st._2
-
-  def put(out: Int, in1: Option[(Int, Int)]) = ???
+  val name = "IntPlus"
 
   def put(o: Variable, i: Variable, in1: Option[(Int, Int)]) = {
     val expr = in1 match {
@@ -126,25 +95,26 @@ object StringExtractReverse {
   
   def substringRev(s: String, start: Int, end: Int, out: String) = s.substring(0, start) + out + s.substring(end)
 }*/
-/*
-object StringFormatReverse extends ((String, List[Any]) ~~> String) {
+
+object StringFormatReverse extends ((String, List[Either[String, Int]]) ~~=> String) with ManualReverse[(String, List[Either[String, Int]]), String]{
   import java.util.regex.Pattern
-  def format(s: String, args: List[Any]) = {
+  def format(s: String, args: List[Either[String, Int]]) = {
     //println(s"Calling '$s'.format(" + args.map(x => (x, x.getClass)).mkString(",") + ")")
-    s.format(args: _*)
+    s.format(args.map{ case Left(i) => i : Any case Right(i) => i : Any}: _*)
   }
   def get(in: Input) = format(in._1, in._2)
-  
-  def put(out2: Output, in: Option[Input]): Constraint[Input] =
+  val name = "StringFormat"
+
+  def putManual(out2: Output, in: Option[Input]): Iterable[Input] =
     in match {
     case None =>
-      List(("%s", List(out2)))
+      List(("%s", List(Left(out2))))
     case Some(in) =>
       formatRev(in._1, in._2, out2)
   }
 
   // Parsing !
-  def formatRev(s: String, args: List[Any], out: String): List[(String, List[Any])] = {
+  def formatRev(s: String, args: List[Either[String, Int]], out: String): List[(String, List[Either[String, Int]])] = {
     // Replace all %s in s by (.*) regexes, and %d in s by (\d*) regexes.
     val formatters = "%(?:(\\d+)\\$)?((?:s|d))".r
     var i = -1
@@ -158,7 +128,7 @@ object StringFormatReverse extends ((String, List[Any]) ~~> String) {
     }._1.toList
     
     // given the elements, put them in the right order. Provides alternatives.
-    def reverse(indexes: IndexedSeq[Int], l: List[Any]): List[List[Any]] = {
+    def reverse(indexes: IndexedSeq[Int], l: List[Either[String, Int]]): List[List[Either[String, Int]]] = {
       //print(s"indexes : $indexes, l: $l, result = ")
       // indexes = [1, 1] and l = List(a, b) => List(List(a), List(b))
       // indexes = [1, 2] and l = List(a, b) =>  List(List(a, b))
@@ -169,9 +139,9 @@ object StringFormatReverse extends ((String, List[Any]) ~~> String) {
       // zipped {1 -> List(a), 2 -> List(b)} =>  List(List(a, b))
       // zipped {2 -> List(b), 3 -> List(c), 1 -> List(a)} =>  List(List(a, b, c))
       // zipped {1 -> List(a, c), 2 -> List(b)} =>  List(List(a, b), List(c, b))
-      (List(List[Any]()) /: (argsLength to 1 by -1)) {
+      (List(List[Either[String, Int]]()) /: (argsLength to 1 by -1)) {
         case (lb, i) =>
-          val maps = zipped.getOrElse(i-1, List(args(i-1)))
+          val maps: Seq[Either[String, Int]] = zipped.getOrElse(i-1, List(args(i-1)))
           maps.flatMap(pos => lb.map(pos::_)).toList.distinct
       }
     }
@@ -189,8 +159,8 @@ object StringFormatReverse extends ((String, List[Any]) ~~> String) {
         // TODO: Reorder out for comparison.
         var res = reverse(indexes, args2.zip(splitters).map{ arg_s => 
           arg_s._2._4 match {
-            case "s" => arg_s._1
-            case "d" => arg_s._1.toInt
+            case "s" => Left(arg_s._1)
+            case "d" => Right(arg_s._1.toInt)
           }
         })
         //println("Classes:" + res.map(l => l.map(_.getClass).mkString(",")))
@@ -208,8 +178,15 @@ object StringFormatReverse extends ((String, List[Any]) ~~> String) {
     }
     ifsmodified ++ ifargsmodified
   }
-}
 
+  def put(o: Variable, i: Variable, in: Option[(String, List[Either[String, Int]])]): Constraint[(String, List[Either[String, Int]])] = {
+    val format = FreshIdentifier("format")
+    val expr = Equals(E(format)(i, inoxExprOf(in)), o)
+    //println("Constraint inferred:" + expr)
+    Constraint[(String, List[Either[String, Int]])](expr, Map(format -> this.asInstanceOf[ManualReverse[B forSome { type B },C forSome { type C }]]))
+  }
+}
+/*
 import scala.util.matching.Regex
 case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) extends (String ~~> String) {
   import java.util.regex.Pattern
@@ -650,27 +627,25 @@ case class Compose[A: Constrainable, B: Constrainable, C: Constrainable](a: B ~~
   override def put(idC: Variable, idA: Variable, in1: Option[A]): Constraint[A] = {
     val idB = variable[B]("t", true)
     val intermediate_out = in1.map(b.get) // TODO: Have it pre-computed already
-    val constraintA = a.put(idC, idB, intermediate_out)
-    val constraintB = b.put(idB, idA, in1)
-    val expr = constraintA.formula && constraintB.formula
-    Constraint(expr)
+    a.put(idC, idB, intermediate_out) <&&
+      b.put(idB, idA, in1)
   }
 }
 
 case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~~> B, b: A ~~> D)
-    extends (A ~~> (B, D))()(implicitly[Constrainable[A]], implicitly[Constrainable[B]].zipWith(implicitly[Constrainable[D]])) {
+    extends (A ~~=> (B, D)) {
   def get(in: Input): Output = (a.get(in), b.get(in))
-  def put(out2: Output, in: Option[Input]): Iterable[Input] = ???
+  //def put(out2: Output, in: Option[Input]): Iterable[Input] = ???
   import ImplicitTuples._
+  val name = "Pair"
 
   def put(varBD: Variable, varA: Variable, in: Option[A]): Constraint[A] = {
     val varB = variable[B]("b", true)
     val varD = variable[D]("d", true)
-    val constraintA = a.put(varB, varA, in)
-    val constraintB = b.put(varD, varA, in)
-    val expr =
-        constraintA.formula && constraintB.formula && varB === varBD.getField(_1) && varD === varBD.getField(_2)
-    Constraint(expr)
+    a.put(varB, varA, in) &&
+      b.put(varD, varA, in) &&
+      varB === varBD.getField(_1) &&
+      varD === varBD.getField(_2)
   }
 }
 /*
