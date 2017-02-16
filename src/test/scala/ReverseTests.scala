@@ -265,6 +265,7 @@ class StringFormatReverseTest extends FunSuite  {
     def formatRev(s: String, args: List[Either[String, Int]], output: String) =
       f.put(output, Some((s, args)))
     formatRev("%s %s %d", CList("Hello", "world", 42), "Hello buddy 42") shouldEqual List(("%s %s %d", CList("Hello", "buddy", 42)))
+    StringFormatReverse.formatRev("%s,%s %s!", CList("Hello", "obscure", "world"), "Hello, obscure world!") should contain (("%s, %s %s!", CList("Hello", "obscure", "world")))
     formatRev("%s,%s %s!", CList("Hello", "obscure", "world"), "Hello, obscure world!") should contain (("%s, %s %s!", CList("Hello", "obscure", "world")))
     formatRev("%s,%s %s!", CList("Hello", "obscure", "world"), "Hello,clear world!") should contain (("%s,%s %s!", CList("Hello", "clear", "world")))
     formatRev("%s,%s %s!", CList("Hello", "obscure", "world"), "Good bye,awesome friend!") should contain (("%s,%s %s!", CList("Good bye", "awesome", "friend")))

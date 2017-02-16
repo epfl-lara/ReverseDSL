@@ -415,7 +415,9 @@ case class Constraint[A: Constrainable](private val formula: Expr,
                 realDefaultValue = optionConstrainable(function.constrainableInput).recoverFrom(inDefault)
                 inValue <- function.putManual(realOutValue, realDefaultValue)
                 newSeqExpr = (seqExpr :+ Equals(inVar, function.constrainableInput.produce(inValue))) ++ model.vars.map{ case (v, e) => Equals(v.toVariable, e) }
+                //_ = println("Solving this :" + newSeqExpr)
                 x  = splitMaybe(newSeqExpr, Nil, Nil)
+                //_ = println("Solving maybe:" + x)
                 solver <- addMaybes(x, 0)
           } yield {
             solver

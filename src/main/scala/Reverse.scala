@@ -171,11 +171,13 @@ object StringFormatReverse extends ((String, List[Either[String, Int]]) ~~=> Str
         res.map((s, _))
       case None => Nil
     }
-    val regexschange = args.map(x => Pattern.quote(x.toString)).mkString("(.*)", "(.*)", "(.*)")
+    val regexschange = args.map{ case Left(x) => Pattern.quote(x.toString) case Right(x) =>Pattern.quote(x.toString) }.mkString("(.*)", "(.*)", "(.*)")
+    //println("Regex if changed: " + regexschange)
     val ifsmodified =  regexschange.r.unapplySeq(out) match {
       case Some(sSplitted) => List((sSplitted.mkString("%s"), args))
       case None => Nil
     }
+    //println("Regex solution: " + ifsmodified)
     ifsmodified ++ ifargsmodified
   }
 
