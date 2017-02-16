@@ -83,12 +83,58 @@ case class Constraint[A: Constrainable](formula: Expr) {
       .withADTs(allTupleConstructors)
   }
   // The program
-  lazy val prog = InoxProgram(Context.empty, symbols)
+  lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
+  lazy val prog = InoxProgram(context, symbols)
 
   type ThisSolver = solvers.combinators.TimeoutSolver { val program: prog.type }
 
   /** Simplify the formula by replacing String method calls, removing equalities between identifiers */
   def simplify(solutionVar: Variable): Constraint[A] = {
+    val assignments = {
+      val TopLevelAnds(conjuncts) = formula
+      conjuncts.collect{
+        case Equals(v: Variable, t: Literal[_]) => (v -> t)
+      }.toMap
+    }
+
+    object LeftConstant {
+      def unapply(s: inox.trees.Expr): Some[(String, Option[inox.trees.Expr])] = Some(s match {
+        case StringConcat(a, b) =>
+          LeftConstant.unapply(a).get match {
+            case (sa, Some(ea)) => (sa, Some(StringConcat(ea, b)))
+            case (sa, None) =>
+              LeftConstant.unapply(b).get match {
+                case (sb, seb) => (sa + sb, seb)
+              }
+          }
+        case StringLiteral(s) => (s, None)
+        case v: Variable => assignments.get(v) match {
+          case Some(StringLiteral(s)) => (s, None)
+          case _ => ("", Some(v))
+        }
+        case e => ("", Some(e))
+      })
+    }
+
+    object RightConstant {
+      def unapply(s: inox.trees.Expr): Some[(Option[inox.trees.Expr], String)] = Some(s match {
+        case StringConcat(a, b) =>
+          RightConstant.unapply(b).get match {
+            case (Some(eb), sb) => (Some(StringConcat(a, eb)), sb)
+            case (None, sb) =>
+              RightConstant.unapply(a).get match {
+                case (sea, sa) => (sea, sa + sb)
+              }
+          }
+        case StringLiteral(s) => (None, s)
+        case v: Variable => assignments.get(v) match {
+          case Some(StringLiteral(s)) => (None, s)
+          case _ => (Some(v), "")
+        }
+        case e => (Some(e), "")
+      })
+    }
+
     val StringExprsMaybeReplaced = inox.trees.exprOps.postMap {
       case Equals(c, FunctionInvocation(StringAppendReverse.removeStart, _, Seq(a, b))) =>
         Some(Equals(a, StringConcat(b, c)))
@@ -99,12 +145,13 @@ case class Constraint[A: Constrainable](formula: Expr) {
       case Equals(FunctionInvocation(StringAppendReverse.removeEnd, _, Seq(a, b)), c) =>
         Some(Equals(a, StringConcat(c, b)))
       case _ => None
-    }(formula)
-    val toplevelIdentityRemoved = StringExprsMaybeReplaced match {
+    } _
+
+    val toplevelIdentityRemoved = (x: Expr) => x match {
       case TopLevelAnds(ands) =>
         val topEqualities = ands.collect{ case Equals(v1: Variable, v2: Variable) => (if(v1 != solutionVar) v1 -> v2 else v2 -> v1):(Expr, Expr) }
-        inox.trees.exprOps.postMap(topEqualities.toMap.get)(StringExprsMaybeReplaced)
-      case _ => StringExprsMaybeReplaced
+        inox.trees.exprOps.postMap(topEqualities.toMap.get)(x)
+      case _ => x
     }
     //println("#2 " + toplevelIdentityRemoved)
     val removedAndTrue =
@@ -115,13 +162,41 @@ case class Constraint[A: Constrainable](formula: Expr) {
           if(trueAnds.length == 1) trueAnds.head else
             And(trueAnds))
         case _ => None
-      }(toplevelIdentityRemoved)
-    Constraint(removedAndTrue)
+      } _
+
+    val removeFalseTrue =
+      inox.trees.exprOps.postMap{
+        case And(exprs) =>
+          val isFalse = exprs.exists{
+            case Equals(LeftConstant(a, ea), LeftConstant(b, eb)) if !a.startsWith(b) && !b.startsWith(a) => true
+            case Equals(RightConstant(ea, a), RightConstant(eb, b)) if !a.endsWith(b) && !b.endsWith(a) => true
+            case _ => false
+          }
+          if(isFalse) Some(BooleanLiteral(false)) else None
+        case Or(exprs) =>
+          val e = exprs.filter{
+            case BooleanLiteral(false) => false
+            case _ => true
+          }
+          Some(or(e: _*))
+        case Not(BooleanLiteral(b)) => Some(BooleanLiteral(!b))
+        case _ => None
+      } _
+
+    val finalFormula = (StringExprsMaybeReplaced
+        andThen toplevelIdentityRemoved
+        andThen removedAndTrue
+        andThen removeFalseTrue
+      )(formula)
+
+    Constraint(finalFormula)
   }
 
   /** Returns a stream of solutions satisfying the constraint */
   def toStream(solutionVar: inox.trees.Variable): Stream[A] = {
     val simplified = simplify(solutionVar).formula
+
+    //println("######## Converting this formula to stream of solutions ######\n" + simplified)
 
     // Convert the formula to a stream of conjuncts, each of one being able to yield solutions
     def getStreamOfConjuncts(e: Expr): Stream[Seq[Expr]] = {
