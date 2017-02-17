@@ -172,7 +172,7 @@ case class Leaf[LeafValue, NodeValue](value: LeafValue) extends Tree[LeafValue, 
 
 /** A wrapper around an inox Expr which can enumerate solutions*/
 case class Constraint[A: Constrainable](private val formula: Expr,
-                                        functions: Map[Identifier, ManualReverse[B forSome {type B}, C forSome {type C}]] = Map())/* extends ConstraintInterface[A]*/ {
+                                        functions: Map[Identifier, ManualReverse[_, _]] = Map())/* extends ConstraintInterface[A]*/ {
   /** Adds a new assignment to this constraint */
   def apply[A: Constrainable](tuple: (inox.trees.Variable, A)) = this && tuple._1 === inoxExprOf[A](tuple._2)
 
@@ -408,13 +408,18 @@ case class Constraint[A: Constrainable](private val formula: Expr,
             case _ => throw new Exception("Cannot reverse this equality: " + value)
           }
 
+          def getInValues[A, B](function: ManualReverse[A, B], outValue: Expr, inDefault: Expr): Iterable[Expr] = {
+            val realOutValue = function.constrainableOutput.recoverFrom(outValue)
+            val realDefaultValue = optionConstrainable(function.constrainableInput).recoverFrom(inDefault)
+            val inValues = function.putManual(realOutValue, realDefaultValue)
+            inValues.map(function.constrainableInput.produce)
+          }
+
           for { solvermodel <- solveTrees(right)
                 model <- getStreamOfSolutions(outVar, solvermodel)
                 outValue = model.vars(outVar.toVal  : inox.trees.ValDef)
-                realOutValue = function.constrainableOutput.recoverFrom(outValue)
-                realDefaultValue = optionConstrainable(function.constrainableInput).recoverFrom(inDefault)
-                inValue <- function.putManual(realOutValue, realDefaultValue)
-                newSeqExpr = (seqExpr :+ Equals(inVar, function.constrainableInput.produce(inValue))) ++ model.vars.map{ case (v, e) => Equals(v.toVariable, e) }
+                inValue <- getInValues(function, outValue, inDefault)
+                newSeqExpr = (seqExpr :+ Equals(inVar, inValue)) ++ model.vars.map{ case (v, e) => Equals(v.toVariable, e) }
                 //_ = println("Solving this :" + newSeqExpr)
                 x  = splitMaybe(newSeqExpr, Nil, Nil)
                 //_ = println("Solving maybe:" + x)

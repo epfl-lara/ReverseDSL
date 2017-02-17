@@ -185,7 +185,7 @@ object StringFormatReverse extends ((String, List[Either[String, Int]]) ~~=> Str
     val format = FreshIdentifier("format")
     val expr = Equals(E(format)(i, inoxExprOf(in)), o)
     //println("Constraint inferred:" + expr)
-    Constraint[(String, List[Either[String, Int]])](expr, Map(format -> this.asInstanceOf[ManualReverse[B forSome { type B },C forSome { type C }]]))
+    Constraint[(String, List[Either[String, Int]])](expr, Map(format -> this))
   }
 }
 /*
