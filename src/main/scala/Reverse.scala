@@ -7,6 +7,7 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import Constrainable._
+import inox.evaluators.EvaluationResults
 
 /** Lense class.
   * Should provide the method get and put.
@@ -188,6 +189,48 @@ object StringFormatReverse extends ((String, List[Either[String, Int]]) ~~=> Str
     Constraint[(String, List[Either[String, Int]])](expr, Map(format -> this))
   }
 }
+
+case class InoxLambda[A: Constrainable, B: Constrainable](args: Variable, body: Expr)(implicit p: Program { val trees: inox.trees.type }) extends (A => B) {
+  def apply(a: A) = {
+    val exprA = inoxExprOf[A](a)
+    val exprToEval = Application(Lambda(Seq(args.toVal), body), Seq(exprA))
+    p.getEvaluator.eval(exprToEval, Model.empty(p)) match {
+      case EvaluationResults.Successful(b) => exprOfInox[B](b)
+      case e => throw new Exception(s"error while executing $exprToEval, got $e")
+    }
+  }
+}
+
+
+/* Macro reversing
+
+def f(s: String) = {
+  Element(“li”, TextElement(s)::Nil)
+}
+f(“abc”)
+⇒
+def f(s: String, l: String => Element) = {
+  apply(l, s)
+}
+f(“abc”, (s: String) => Element(“li”, TextElement(s)::Nil))
+
+Requested output: Element(“li”, Element(“div”, TextElement(“abc”)::Nil)::Nil). Just finding a new value for “abc” does not work.
+
+meta-reversing.
+
+
+case class ApplyADTReverse[A: Constrainable, B: Constrainable]() extends ((A, InoxFun[A, B]) ~~> B) {
+  applyReverse(out: Expr, init: Option[(Lambda, Expr)] ): Iterable[(Lambda, Expr)] = {
+    val (lambda, initExpr) = init.get
+    val Lambda(argName, body) = lambda
+    val initOut = execute(lambda(initExpr))
+    if(out == initOut) return Stream(init)
+    // look on how to transform initOut to out and apply this transformation on body.
+  }
+}
+
+
+*/
 /*
 import scala.util.matching.Regex
 case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) extends (String ~~> String) {
