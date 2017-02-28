@@ -293,7 +293,7 @@ class ListSplitTest extends FunSuite  {
   }
 }
 
-/*
+
 import WebTrees._
 
 class TypeSplitTest extends FunSuite  {
@@ -310,7 +310,7 @@ class TypeSplitTest extends FunSuite  {
     List(List(WebStyle("width","100px"), Element("pre"), WebAttribute("src","http")))
   }
 }
-
+/*
 class WebElementAdditionTest extends FunSuite  {
   import TypeSplit._
   import WebElementAddition._
@@ -600,9 +600,9 @@ class PairTest extends FunSuite {
 class PizzaTest extends FunSuite {
    import WebBuilder._
    import Implicits.{RemoveUnit => _, _}
-   /*object TN extends (String ~~> List[Tree]) {
+   /*object TN extends (String ~~> List[WebTree]) {
      def get(s: String) = List(TextNode(s))
-     def put(out: List[Tree], s: Option[String]): Iterable[String] = report(s"TN.put($s, $out) = %s"){
+     def put(out: List[WebTree], s: Option[String]): Iterable[String] = report(s"TN.put($s, $out) = %s"){
        out match {
        case List(TextNode(i)) => List(i)
        case _ => Nil
@@ -646,7 +646,7 @@ class PizzaTest extends FunSuite {
    
    def pizzasCreator3(l: Id[List[String]]) = {
      val filtered = l.filter((s: String)=> s.startsWith("S"))
-     val mapped = filtered.map((x: Id[String]) => li(List(CastUp[String, TextNode, Tree](TextNode(x)))))
+     val mapped = filtered.map((x: Id[String]) => li(List(CastUp[String, TextNode, WebTree](TextNode(x)))))
      val result = ul(mapped)
      result
    }

@@ -30,16 +30,49 @@ object Utils {
   val leftConstructor = mkConstructor(left)("A", "B")(Some(either))(stp => Seq(ValDef(value, stp(0))))
   val rightConstructor = mkConstructor(right)("A", "B")(Some(either))(stp => Seq(ValDef(value, stp(1))))
 
+  val webTree: Identifier = FreshIdentifier("WebTree")
+  val webElement: Identifier = FreshIdentifier("WebElement")
+  val textNode: Identifier = FreshIdentifier("TextNode")
+  val element: Identifier = FreshIdentifier("Element")
+  val webAttribute: Identifier = FreshIdentifier("WebAttribute")
+  val webStyle: Identifier = FreshIdentifier("WebStyle")
+  val text: Identifier = FreshIdentifier("text")
+  val tag: Identifier = FreshIdentifier("tag")
+  val children: Identifier = FreshIdentifier("children")
+  val attributes: Identifier = FreshIdentifier("attributes")
+  val styles: Identifier = FreshIdentifier("styles")
+  val name: Identifier = FreshIdentifier("name")
+  val webTreeSort = mkSort(webTree)()(Seq(webElement, webAttribute, webStyle))
+  val webElementSort = mkSort(webElement)()(Seq(textNode, element))
+  val textNodeConstructor = mkConstructor(textNode)()(Some(webElement))(stp => Seq(ValDef(text, StringType)))
+  val elementConstructor = mkConstructor(element)()(Some(webElement))(stp =>
+    Seq(ValDef(tag, StringType),
+        ValDef(children, T(list)(T(webElement)())),
+        ValDef(attributes, T(list)(T(webAttribute)())),
+        ValDef(styles, T(list)(T(webStyle)()))))
+  val webAttributeConstructor = mkConstructor(webAttribute)()(Some(webTree))(stp => Seq(
+        ValDef(name, StringType),
+        ValDef(value, StringType)))
+  val webStyleConstructor = mkConstructor(webStyle)()(Some(webTree))(stp => Seq(
+    ValDef(name, StringType),
+    ValDef(value, StringType)))
+
   val allConstructors = List(
     listSort,
     optionSort,
     eitherSort,
+    webTreeSort,
+    webElementSort,
     consConstructor,
     nilConstructor,
     leftConstructor,
     rightConstructor,
     someConstructor,
-    noneConstructor
+    noneConstructor,
+    textNodeConstructor,
+    elementConstructor,
+    webAttributeConstructor,
+    webStyleConstructor
   )
 }
 
@@ -130,6 +163,91 @@ object Constrainable {
     def produce(a: Either[A, B]): inox.trees.Expr = a match {
       case Left(value) =>   ADT(ADTType(left, Seq(inoxTypeOf[A], inoxTypeOf[B])), Seq(inoxExprOf[A](value)))
       case Right(value) =>  ADT(ADTType(right, Seq(inoxTypeOf[A], inoxTypeOf[B])), Seq(inoxExprOf[B](value)))
+    }
+  }
+
+  import WebTrees._
+
+  implicit val WebTreeConstrainable: Constrainable[WebTree] = new  Constrainable[WebTree] {
+    import Utils._
+    def getType: inox.trees.dsl.trees.Type = T(webElement)()
+    def produce(a: WebTree): inox.trees.Expr = a match {
+      case a: WebElement => WebElementConstrainable.produce(a)
+      case a: WebAttribute => WebAttributeConstrainable.produce(a)
+      case a: WebStyle => WebStyleConstrainable.produce(a)
+    }
+    def recoverFrom(e: inox.trees.Expr): WebTree = e match {
+      case ADT(ADTType(`webAttribute`, Seq()), _) => WebAttributeConstrainable.recoverFrom(e)
+      case ADT(ADTType(`webStyle`, Seq()), _) => WebStyleConstrainable.recoverFrom(e)
+      case e => WebElementConstrainable.recoverFrom(e)
+    }
+  }
+  
+  implicit val WebElementConstrainable: Constrainable[WebElement] = new  Constrainable[WebElement] {
+    import Utils._
+    def getType: inox.trees.dsl.trees.Type = T(webElement)()
+    def produce(a: WebElement): inox.trees.Expr = a match {
+      case a: TextNode => TextNodeConstrainable.produce(a)
+      case a: Element => ElementConstrainable.produce(a)
+    }
+    def recoverFrom(e: inox.trees.Expr): WebElement = e match {
+      case ADT(ADTType(`textNode`, Seq()), _) => TextNodeConstrainable.recoverFrom(e)
+      case ADT(ADTType(`element`, Seq()), _) => ElementConstrainable.recoverFrom(e)
+      case _ => throw new Exception("Could not recover TextNode from " + e)
+    }
+  }
+
+  implicit val TextNodeConstrainable: Constrainable[TextNode] = new  Constrainable[TextNode] {
+    import Utils._
+    def getType: inox.trees.dsl.trees.Type = T(textNode)()
+    def produce(a: TextNode): inox.trees.Expr = a match {
+      case TextNode(s) => ADT(ADTType(textNode, Seq()), Seq(inoxExprOf[String](s)))
+    }
+    def recoverFrom(e: inox.trees.Expr): TextNode = e match {
+      case ADT(ADTType(`textNode`, Seq()), Seq(s)) => TextNode(exprOfInox[String](s))
+      case _ => throw new Exception("Could not recover TextNode from " + e)
+    }
+  }
+
+  implicit val ElementConstrainable: Constrainable[Element] = new  Constrainable[Element] {
+    import Utils._
+    def getType: inox.trees.dsl.trees.Type = T(element)()
+    def produce(a: Element): inox.trees.Expr = a match {
+      case Element(tag, children, attributes, styles) => ADT(ADTType(element, Seq()),
+        Seq(inoxExprOf[String](tag), inoxExprOf[List[WebElement]](children), inoxExprOf[List[WebAttribute]](attributes), inoxExprOf[List[WebStyle]](styles)))
+    }
+    def recoverFrom(e: inox.trees.Expr): Element = e match {
+      case ADT(ADTType(`element`, Seq()), Seq(tag, children, attributes, styles)) =>
+        Element(exprOfInox[String](tag), exprOfInox[List[WebElement]](children), exprOfInox[List[WebAttribute]](attributes), exprOfInox[List[WebStyle]](styles))
+      case _ => throw new Exception("Could not recover Element from " + e)
+    }
+  }
+
+  implicit val WebAttributeConstrainable: Constrainable[WebAttribute] = new  Constrainable[WebAttribute] {
+    import Utils._
+    def getType: inox.trees.dsl.trees.Type = T(webAttribute)()
+    def produce(a: WebAttribute): inox.trees.Expr = a match {
+      case WebAttribute(name, value) => ADT(ADTType(webAttribute, Seq()),
+        Seq(inoxExprOf[String](name), inoxExprOf[String](value)))
+    }
+    def recoverFrom(e: inox.trees.Expr): WebAttribute = e match {
+      case ADT(ADTType(`webAttribute`, Seq()), Seq(name, value)) =>
+        WebAttribute(exprOfInox[String](name), exprOfInox[String](value))
+      case _ => throw new Exception("Could not recover Element from " + e)
+    }
+  }
+
+  implicit val WebStyleConstrainable: Constrainable[WebStyle] = new  Constrainable[WebStyle] {
+    import Utils._
+    def getType: inox.trees.dsl.trees.Type = T(webStyle)()
+    def produce(a: WebStyle): inox.trees.Expr = a match {
+      case WebStyle(name, value) => ADT(ADTType(webStyle, Seq()),
+        Seq(inoxExprOf[String](name), inoxExprOf[String](value)))
+    }
+    def recoverFrom(e: inox.trees.Expr): WebStyle = e match {
+      case ADT(ADTType(`webStyle`, Seq()), Seq(name, value)) =>
+        WebStyle(exprOfInox[String](name), exprOfInox[String](value))
+      case _ => throw new Exception("Could not recover Element from " + e)
     }
   }
 

@@ -492,27 +492,33 @@ case class ListSplit[A: Constrainable](p: A => Boolean) extends (List[A] %~> (Li
   }
 }
 
-/*
 object WebTrees {
   var displayNiceDSL = true
-  abstract class Tree extends Product with Serializable
-  abstract class WebElement extends Tree
+
+
+
+  abstract class WebTree extends Product with Serializable
+  abstract class WebElement extends WebTree
   case class TextNode(text: String) extends WebElement {
     override def toString = if(displayNiceDSL) "\"" + "\"".r.replaceAllIn("\\\\".r.replaceAllIn(text, "\\\\\\\\"), "\\\"") + "\"" else s"TextNode($text)"
   }
+
+
   object TextNode {
-    def apply[A](f: (A ~~> String)): (A ~~> TextNode) = new (A ~~> TextNode) {
+    def apply[A: Constrainable](f: (A ~~> String)): (A ~~> TextNode) = new (A %~> TextNode) {
+      val methodName = "TextNodeApply"
       def get(a: A) = TextNode(f.get(a))
-      def put(t: TextNode, in: Option[A]): Constraint[A] = {
+      def putManual(t: TextNode, in: Option[A]): Iterable[A] = {
         f.put(t.text, in)
       }
     }
   }
   object Element {
-    def apply[A](tag: String, f: A ~~> List[WebElement]): (A ~~> Element) = {
-      new (A ~~> Element) {
+    def apply[A: Constrainable](tag: String, f: A ~~> List[WebElement]): (A %~> Element) = {
+      new (A %~> Element) {
+        val methodName = "ElementApply"
         def get(a: A) = Element(tag, f.get(a))
-        def put(e: Element, in: Option[A]): Constraint[A] = Implicits.report(s"Element.put($e, $in) = %s") {
+        def putManual(e: Element, in: Option[A]): Iterable[A] = Implicits.report(s"Element.put($e, $in) = %s") {
           f.put(e.children, in)
         }
       }
@@ -534,31 +540,32 @@ object WebTrees {
       s"Element($tag,$children,$attributes,$styles)"
     }
     
-    def apply[A](f: (A ~~> List[Tree])): (A ~~> Element) = {
+    /*def apply[A: Constrainable](f: (A ~~> List[WebTree])): (A ~~> Element) = {
       Pair(Const(this), f) andThen WebElementComposition
     }
-    def apply(l: List[Tree]): Element = WebElementComposition.get((this, l))
+    def apply(l: List[WebTree]): Element = WebElementComposition.get((this, l))*/
   }
-  case class WebAttribute(name: String, value: String) extends Tree {
+  case class WebAttribute(name: String, value: String) extends WebTree {
     override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
   }
-  case class WebStyle(name: String, value: String) extends Tree {
+  case class WebStyle(name: String, value: String) extends WebTree {
     override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
   }
 }
 import WebTrees._
 
-object TypeSplit extends (List[Tree] ~~> (List[WebElement], List[WebAttribute], List[WebStyle])) {
+object TypeSplit extends (List[WebTree] %~> (List[WebElement], List[WebAttribute], List[WebStyle])) {
   import Interleavings._
+  val methodName = "TypeSplit"
   def get(in: Input): Output = split(in)
-  def put(out2: Output, in1: Option[Input]): Constraint[Input] = in1 match {
+  def putManual(out2: Output, in1: Option[Input]): Iterable[Input] = in1 match {
     case None =>
       List(out2._1 ++ out2._2 ++ out2._3)
     case Some(in1) =>
       splitRev(in1, out2)
   }
   
-  def split(l: List[Tree]): (List[WebElement], List[WebAttribute], List[WebStyle]) = l match {
+  def split(l: List[WebTree]): (List[WebElement], List[WebAttribute], List[WebStyle]) = l match {
     case Nil => (Nil, Nil, Nil)
     case a::b => val (l1, l2, l3) = split(b)
      a match {
@@ -569,7 +576,7 @@ object TypeSplit extends (List[Tree] ~~> (List[WebElement], List[WebAttribute], 
   }
 
   // Ensures that every created list has out._1.size + out._2.size
-  def splitRev(l: List[Tree], out: (List[WebElement], List[WebAttribute], List[WebStyle])):List[List[Tree]] = {
+  def splitRev(l: List[WebTree], out: (List[WebElement], List[WebAttribute], List[WebStyle])):List[List[WebTree]] = {
     out match {
       case (l1, l2, l3) =>
         l match {
@@ -621,8 +628,8 @@ object TypeSplit extends (List[Tree] ~~> (List[WebElement], List[WebAttribute], 
   }
 }
 
+/*
 object WebElementAddition extends ((Element, (List[WebElement], List[WebAttribute], List[WebStyle])) ~~> Element) {
-  
   def get(in: Input) = apply(in._1, in._2._1, in._2._2, in._2._3)
   def put(out2: Output, in: Option[Input]) = in match {
     case None => List((out2, (Nil, Nil, Nil)))
@@ -666,7 +673,7 @@ object WebElementAddition extends ((Element, (List[WebElement], List[WebAttribut
   }
 }
 
-object WebElementComposition extends ((Element, List[Tree])  ~~> Element) {
+object WebElementComposition extends ((Element, List[WebTree])  ~~> Element) {
   def get(in: Input): Output = {
     WebElementAddition.get(in._1, TypeSplit.get(in._2))
   }
