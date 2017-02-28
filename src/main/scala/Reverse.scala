@@ -88,6 +88,28 @@ object StringAppendReverse extends ((String, String) &~> String) {
   }
 }
 
+/** String concatenation lens */
+/*case class ListAppendReverse[A : Constrainable]() extends ((List[A], List[A]) &~> List[A]) {
+  import ImplicitTuples._
+
+  def get(in: (List[A], List[A])): List[A] = in._1 ++ in._2
+
+  val name = "ListAppend"
+
+  override def put(o: Variable, i: Variable, in1: Option[(List[A], List[A])]): Constraint[(List[A], List[A])] = {
+    val expr = in1 match {
+      case None =>
+        StringConcat(i.getField(_1), i.getField(_2)) === o
+      case Some((a, b)) =>
+        StringConcat(i.getField(_1), E(b)) === o && E(Common.maybe)(i.getField(_2) === E(b)) ||
+          StringConcat(E(a), i.getField(_2)) === o && E(Common.maybe)(i.getField(_1) === E(a)) ||
+          StringConcat(i.getField(_1), i.getField(_2)) === o
+    }
+    Constraint[(String, String)](expr)
+  }
+}*/
+
+
 /** Integer addition lens */
 object IntPlusReverse extends ((Int, Int) &~> Int) {
   import ImplicitTuples._
@@ -416,7 +438,7 @@ object IntReverse extends ((Int, Int) ~~> Int) {
     List((s, out-s),  (out-t, t))
   }// ensuring { ress => ress.forall(res => add(res._1, res._2) == out) }
 }
-
+*/
 object Interleavings {
   def allInterleavings[A](l1: List[A], l2: List[A]): List[List[A]] = {
     if(l1.isEmpty) List(l2)
@@ -425,11 +447,13 @@ object Interleavings {
   }
 }
 
-class ListSplit[A](p: A => Boolean) extends (List[A] ~~> (List[A], List[A])) {
+case class ListSplit[A: Constrainable](p: A => Boolean) extends (List[A] %~> (List[A], List[A])) {
   import Interleavings._
+
+  val methodName = "ListSplit"
   
   def get(in: Input): Output = split(in)
-  def put(out2: Output, in: Option[Input]) = in match {
+  def putManual(out2: Output, in: Option[Input]) = in match {
     case None => List(out2._1 ++ out2._2)
     case Some(in) => splitRev(in, out2)
   }
@@ -468,6 +492,7 @@ class ListSplit[A](p: A => Boolean) extends (List[A] ~~> (List[A], List[A])) {
   }
 }
 
+/*
 object WebTrees {
   var displayNiceDSL = true
   abstract class Tree extends Product with Serializable

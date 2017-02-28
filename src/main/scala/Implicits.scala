@@ -204,9 +204,9 @@ object Implicits {
       }).toList
     }
   }*/
-  
-  implicit class ListProducer[A, B](a: A ~~> List[B]) {
-    def filter(f: B => Boolean): (A ~~> List[B]) = {
+  */
+  implicit class ListProducer[A : Constrainable, B : Constrainable](a: A ~~> List[B]) {
+    /*def filter(f: B => Boolean): (A ~~> List[B]) = {
       a andThen FilterReverse(f)
     }
     def map[C](f: B ~~> C): (A ~~> List[C]) = {
@@ -214,11 +214,15 @@ object Implicits {
     }
     def map[C](f: Id[B] => (B ~~> C)): A ~~> List[C] = {
       a andThen MapReverse(f(Id[B]()))
+    }*/
+
+    def split(f: B => Boolean): (A ~~> (List[B], List[B])) = {
+      a andThen ListSplit(f)
     }
-    
-    def ++(f: A ~~> List[B]): (A ~~> List[B]) = new ((A, A) ~~> List[B]) {
+
+    /*def ++(f: A ~~> List[B]): (A ~~> List[B]) = new ((A, A) %~> List[B]) {
       def get(in: (A, A)) = a.get(in._1) ++ f.get(in._2)
-      def put(out: List[B], in: Option[(A, A)]) = report(s"++.put($out, $in) = %s") {
+      def putManual(out: List[B], in: Option[A]) = report(s"++.put($out, $in) = %s") {
         (in map (x => (a.get(x._1), f.get(x._2)))) match {
           case None => for{ in1 <- a.put(out, in.map(_._1)); in2 <- f.put(out, in.map(_._1)) } yield (in1, in2)
           case Some((initOut1, initOut2)) =>
@@ -253,7 +257,7 @@ object Implicits {
               }
         }
       }
-    }
+    }*/
     /*def headOption = new (A ~~> Option[B]) {
       def get(in: A) = a.get(in).headOption
       def put(out: Option[B], in: Option[A]) = {
@@ -262,7 +266,7 @@ object Implicits {
         }
       }
     }*/
-  }*/
+  }
   implicit class RegexEnhancer(e: scala.util.matching.Regex) {
     def replaceAllIn[I](s: I ~~> String, f: List[String] ~~> String): (I ~~> String) = 
       s andThen RegexReplaceAllInReverse(e, f)

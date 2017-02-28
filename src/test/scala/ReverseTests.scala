@@ -138,7 +138,6 @@ class IntPlusReverseTest extends FunSuite  {
   }
 }
 /*
-
 class ListAppendTest extends FunSuite {
   def doubleAppend(in: (List[Int], List[Int])): List[Int] = {
     in._1 ++ in._2
@@ -185,7 +184,10 @@ class ListAppendTest extends FunSuite {
     d.put(List(2, 2, 2), Some(List(1), List(2))) should contain((List(2), List(2)))
     d.put(List(3, 2, 2, 3, 2), Some(List(1), List(2))) should contain((List(3, 2), List(2)))
   }
-}
+}*/
+
+/*
+
 */
 
 class StringFormatReverseTest extends FunSuite  {
@@ -279,10 +281,10 @@ class RegexReplaceAllInReverseTest extends FunSuite  {
 }
 
 
-/*
+
 class ListSplitTest extends FunSuite  {
   val f = (x: Int) => x % 2 == 0
-  val b = new ListSplit[Int](f)
+  val b = ListSplit[Int](f)
   import b._
   test("Testing split reverse") {
     splitRev(List(3, 5), (List(3, 5), List(4))) shouldEqual List(List(4, 3, 5), List(3, 4, 5), List(3, 5, 4))
@@ -290,6 +292,8 @@ class ListSplitTest extends FunSuite  {
     splitRev(List(1, 2, 3, 4, 5), (List(1, 3, 5), List(2, 6, 4))) shouldEqual List(List(1, 2, 6, 3, 4, 5), List(1, 2, 3, 6, 4, 5))
   }
 }
+
+/*
 import WebTrees._
 
 class TypeSplitTest extends FunSuite  {
