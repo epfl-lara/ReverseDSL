@@ -5,50 +5,28 @@ import inox.trees.dsl._
 import Constrainable._
 
 object ImplicitTuples {
-  val scalaTuplesCurried = List(
-    (Tuple2.apply _).curried: Any,
-    (Tuple3.apply _).curried: Any,
-    (Tuple4.apply _).curried: Any,
-    (Tuple5.apply _).curried: Any,
-    (Tuple6.apply _).curried: Any,
-    (Tuple7.apply _).curried: Any,
-    (Tuple8.apply _).curried: Any,
-    (Tuple9.apply _).curried: Any,
-    (Tuple10.apply _).curried: Any,
-    (Tuple11.apply _).curried: Any,
-    (Tuple12.apply _).curried: Any,
-    (Tuple13.apply _).curried: Any,
-    (Tuple14.apply _).curried: Any,
-    (Tuple15.apply _).curried: Any,
-    (Tuple16.apply _).curried: Any,
-    (Tuple17.apply _).curried: Any,
-    (Tuple18.apply _).curried: Any,
-    (Tuple19.apply _).curried: Any,
-    (Tuple20.apply _).curried: Any,
-    (Tuple21.apply _).curried: Any,
-    (Tuple22.apply _).curried: Any
-  )
+  /* Generic combination class. We wish to have everything there, but it is apparently not possible */
+  abstract class Combination[Tuple <: Product](constrainables: Constrainable[_]*) extends Constrainable[Tuple] {
+    def getType = ADTType(_tupleTypes(constrainables.length - 2), constrainables.map(_.getType))
+  }
 
-  case class Combination3[A, B, C](ca: Constrainable[A], cb: Constrainable[B], cc: Constrainable[C]) extends Constrainable[(A, B, C)] {
-    type Tuple = (A, B, C)
-    def getType = T(_tupleTypes(1))(ca.getType, cb.getType, cc.getType)
-    def recoverFrom(e: Expr): Tuple = e match {
+  /** Combination2 for Tuple2 */
+  case class Combination2[A, B](self: Constrainable[A], other: Constrainable[B]) extends Combination[(A, B)](self, other) {
+    def recoverFrom(e: Expr): (A, B) = e match {
+      case ADT(_, Seq(a, b)) => (self.recoverFrom(a), other.recoverFrom(b))
+      case _ => throw new Exception("Could not recover tuple from " + e)
+    }
+    def produce(a: (A, B)): Expr = ADT(getType, Seq(self.produce(a._1), other.produce(a._2)))
+  }
+
+  /** Combination3 for Tuple3 */
+  case class Combination3[A, B, C](ca: Constrainable[A], cb: Constrainable[B], cc: Constrainable[C]) extends Combination[(A, B, C)](ca, cb, cc) {
+    def recoverFrom(e: Expr): (A, B, C) = e match {
       case ADT(_, Seq(ea, eb, ec)) => (ca.recoverFrom(ea), cb.recoverFrom(eb), cc.recoverFrom(ec))
       case _ => throw new Exception("Could not recover tuple from " + e)
     }
-    def produce(a: Tuple): Expr = ADT(getType, Seq(ca.produce(a._1), cb.produce(a._2), cc.produce(a._3)))
+    def produce(a: (A, B, C)): Expr = ADT(getType, Seq(ca.produce(a._1), cb.produce(a._2), cc.produce(a._3)))
   }
-
-  /*case class Combination[Tuple <: Product](cs: Constrainable[_]*) extends Constrainable[Tuple] {
-    def getType = T(_tupleTypes(cs.length - 2))(cs.map(_.getType): _*)
-    def recoverFrom(e: Expr): Tuple = e match {
-      case ADT(_, s) => (((scalaTuplesCurried(cs.length - 2)) /: s.zip(cs).map{ case (ss, c: Constrainable[_]) => c.recoverFrom(ss)}) {
-        case (f, x) => f.asInstanceOf[Any => Any](x)
-      }).asInstanceOf[Tuple]
-      case _ => throw new Exception("Could not recover tuple from " + e)
-    }
-    def produce(a: Tuple): Expr = ADT(getType, cs.zip(a.productIterator.toIterable).map{ case (c, ai) => c.produce(ai.asInstanceOf[c.theType]) })
-  }*/
 
   val tuple2 : Identifier = FreshIdentifier("Tuple2")
   val tuple3 : Identifier = FreshIdentifier("Tuple3")

@@ -70,21 +70,12 @@ object Constrainable {
     def produce(a: Int): inox.trees.Expr = E(a)
   }
 
-  def combine[A, B](self: Constrainable[A], other: Constrainable[B]): Constrainable[(A, B)] = new Constrainable[(A, B)] {
-    def getType = T(tuple2)(self.getType, other.getType)
-    def recoverFrom(e: Expr): (A, B) = e match {
-      case ADT(_, Seq(a, b)) => (self.recoverFrom(a), other.recoverFrom(b))
-      case _ => throw new Exception("Could not recover tuple from " + e)
-    }
-    def produce(a: (A, B)): Expr = ADT(ADTType(tuple2, Seq(self.getType, other.getType)), Seq(self.produce(a._1), other.produce(a._2)))
-  }
-
   private def c[A : Constrainable] = implicitly[Constrainable[A]]
 
   implicit def tuple2Constrainable[A : Constrainable, B: Constrainable] : Constrainable[(A, B)] =
-    combine(implicitly[Constrainable[A]], implicitly[Constrainable[B]])
+    ImplicitTuples.Combination2(c[A], c[B])
   implicit def tuple3Constrainable[A : Constrainable, B: Constrainable, C: Constrainable] : Constrainable[(A, B, C)] =
-    ImplicitTuples.Combination3[A, B, C](c[A], c[B], c[C])
+    ImplicitTuples.Combination3(c[A], c[B], c[C])
   /*implicit def tuple4Constrainable[A : Constrainable, B: Constrainable, C: Constrainable, D: Constrainable]
   : Constrainable[(A, B, C, D)] =
     ImplicitTuples.Combination[(A, B, C, D)](c[A], c[B], c[C], c[D])*/
