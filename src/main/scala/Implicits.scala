@@ -262,12 +262,12 @@ object Implicits {
         }
       }
     }*/
-  }
+  }*/
   implicit class RegexEnhancer(e: scala.util.matching.Regex) {
     def replaceAllIn[I](s: I ~~> String, f: List[String] ~~> String): (I ~~> String) = 
       s andThen RegexReplaceAllInReverse(e, f)
   }
-  */
+
   implicit class IntProducer[A: Constrainable](f: (A ~~> Int)) {
     def +(other: (A ~~> Int)): (A ~~> Int) = {
       PairSame(f, other) andThen IntPlusReverse

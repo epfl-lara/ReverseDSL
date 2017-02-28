@@ -120,78 +120,6 @@ class IntPlusReverseTest extends FunSuite  {
   }
 }
 /*
-class StringAppendTest extends FunSuite {
-  import StringAppend.{put => appendRev, _}
-  def doubleAppend(in: (String, String)): String = {
-    in._1 + in._2
-  }
-  import Implicits._
-  def doubleAppend2(in: Id[(String, String)]) = {
-    in._1 + in._2
-  }
-  
-  test("Double decomposition") {
-    doubleAppend(("Hello ", "world")) shouldEqual "Hello world"
-    val d = doubleAppend2(Id())
-    d.get(("Hello ", "world")) shouldEqual "Hello world"
-    d.put("Hello world", ("Hello ", "world")).toList shouldEqual (List(("Hello ", "world")))
-    d.put("Hello Buddy", ("Hello ", "world")).toList.take(1) shouldEqual (List(("Hello ", "Buddy")))
-    d.put("Hello  world", ("Hello ", "world")).toList.take(1) shouldEqual (List(("Hello  ", "world")/*, ("Hello ", " world")*/))
-    d.put("Hello aworld", ("Hello ", "world")).toList.take(1) shouldEqual (List(("Hello ", "aworld")/*, ("Hello a", "world")*/))
-  }
-  
-  def tripleAppend2(in: Id[(String, String, String)]) = {
-    in._1 + in._2 + in._3
-  }
-  
-  test("Triple decomposition") {
-    val t = tripleAppend2(Id())
-
-    def tRev(i: String) = t.put(i, Option(("Hello", " ", "world"))).toList
-    tRev("Hello world") shouldEqual List(("Hello", " ", "world"))
-    tRev("Hello Buddy").take(1) shouldEqual List(("Hello", " ", "Buddy"))
-    tRev("Hello big world").take(2).toSet shouldEqual Set(/*("Hello"," ","big world"), */("Hello"," big ","world"), ("Hello big"," ","world"))
-    tRev("Hello underworld").take(1) shouldEqual List(("Hello"," ","underworld")/*, ("Hello"," under","world")*/)
-    tRev("Hello      world").take(1) shouldEqual List(("Hello","      ","world")/*, ("Hello     "," ","world"), ("Hello"," ","     world")*/)
-    tRev("Helloooooo world").take(1) shouldEqual List(("Helloooooo"," ","world")/*, ("Hello","ooooo ","world")*/)
-    tRev("Hi world").take(1) shouldEqual List(("Hi"," ","world"))
-    t.put("Hi Buddy", Option(("Hello", " ", "world"))).take(1) shouldEqual List(("Hi", " ", "Buddy"))
-  }
-    
-  test("Concatenates a variable with itself") {
-    def doubleAppend2(in: Id[String]) = {
-      in + in
-    }
-    val d = doubleAppend2(Id())
-    d.put("HelloBig", Some("Big")).head shouldEqual "Hello"
-    d.put("BigHello", Some("Big")).head shouldEqual "Hello"
-    
-    d.put("HelloBig", Some("Hello")).head shouldEqual "Big"
-    d.put("BigHello", Some("Hello")).head shouldEqual "Big"
-
-    d.put("HelloHello", Some("Big")).head shouldEqual "Hello"
-    d.put("BigBig", Some("Hello")).head shouldEqual "Big"
-  }
-  
-  test("Use of a variable twice") {
-    def doubleAppend2(in: Id[(String, String)]) = {
-      in._1 + in._2 + in._1
-    }
-    val d = doubleAppend2(Id())
-    d.get(("Hello", " ")) shouldEqual "Hello Hello"
-    d.put("Hello Hello", Some(("Hello", " "))).toList shouldEqual List(("Hello", " "))
-    d.put("Hello World", Some(("Hello", " "))).head shouldEqual (("World", " "))
-    d.put("a b", Some(("a", " "))).take(1) shouldEqual List(("b", " "))
-    d.put("World Hello", Some(("Hello", " "))).head shouldEqual (("World", " "))
-    d.put("Big World", Some(("Hello", " "))).take(2).toSet shouldEqual Set(("World", " "), ("Big", " "))
-    d.put("Big Big", Some(("Hello", " "))).head shouldEqual (("Big", " "))
-    
-    d.put("Hello  Hello", Some(("Hello", " "))).take(1).toSet shouldEqual Set(("Hello", "  "))//, (" Hello", " "))
-    d.put("  Hello ", Some((" ", "Hello"))).take(1).toSet shouldEqual Set(("  ", "Hello"))
-    d.put(" Hello  ", Some((" ", "Hello"))).take(1).toSet shouldEqual Set(("  ", "Hello")) // Maybe we are missing other important solutions, but how to find them?
-  }
-}
-
 
 class ListAppendTest extends FunSuite {
   def doubleAppend(in: (List[Int], List[Int])): List[Int] = {
@@ -275,21 +203,23 @@ class StringFormatReverseTest extends FunSuite  {
   }
 }
 
-/*
+
 class RegexReplaceAllInReverseTest extends FunSuite  {
   import Implicits._
   
-  val f1 = new (List[String] ~~> String) {
+  val f1 = new (List[String] %~> String) {
+    val methodName = "fst"
     def get(in: List[String]) = in(0)
-    def put(out: String, in: Option[List[String]]): Iterable[List[String]] = in match {
+    def putManual(out: String, in: Option[List[String]]): Iterable[List[String]] = in match {
       case None => List(List(out))
       case Some(in) => List(out +: in.tail)
     }
     
   }
-  val f2 = new (List[String] ~~> String) {
+  val f2 = new (List[String] %~> String) {
+    val methodName = "snd"
     def get(in: List[String]) = in(1)
-    def put(out: String, in: Option[List[String]]): Iterable[List[String]] = in match {
+    def putManual(out: String, in: Option[List[String]]): Iterable[List[String]] = in match {
       case None => List(List(out, out))
       case Some(in) => List(in.take(1) ++ List(out) ++ in.drop(2))
     }
@@ -331,7 +261,7 @@ class RegexReplaceAllInReverseTest extends FunSuite  {
 }
 
 
-
+/*
 class IntReverseTest extends FunSuite  {
   import IntReverse._
 

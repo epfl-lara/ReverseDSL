@@ -163,7 +163,7 @@ object ImplicitTuples {
   
   class TupleProducer[A: Constrainable, Tuple <: Product : Constrainable, C: Constrainable] private[ImplicitTuples] (
       val f: A ~~> Tuple, val index: Int)
-    extends (A ~~=> C) {
+    extends (A &~> C) {
     def get(in: A): C = f.get(in).productElement(index-1).asInstanceOf[C]
     val name = "Tuple"+index
     override def put(varC: Variable, varA: Variable, in1: Option[A]): Constraint[A] = {

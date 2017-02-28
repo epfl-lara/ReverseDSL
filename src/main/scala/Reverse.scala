@@ -16,12 +16,14 @@ abstract class ~~>[A: Constrainable, B: Constrainable] {
   type Input = A
   type Output = B
   def get(in: A): B
+
+  // Basic implementation provided in __=>.put
   def put(out2: Variable, inId: Variable, in1: Option[A]): Constraint[A]
 
   lazy val constrainableInput: Constrainable[A] = implicitly[Constrainable[A]]
   lazy val constrainableOutput: Constrainable[B] = implicitly[Constrainable[B]]
 
-  // Basic implementation provided in ~~=>.put
+  // Basic implementation provided in &~>.put
   def put(out2: B, in1: Option[A]): Iterable[A]
 
   final def put(out2: B, in1: A): Iterable[A] = put(out2, Some(in1))
@@ -29,8 +31,9 @@ abstract class ~~>[A: Constrainable, B: Constrainable] {
   def andThen[C: Constrainable](f: B ~~> C) = Compose(f, this)
 }
 
-/** Particular case of ~~=> Implementing the direct put method as immediate constraint solving. */
-abstract class ~~=>[A: Constrainable, B: Constrainable]  extends (A ~~> B) {
+/** Particular case of ~~> where the only thing left to implement is the formula mapping inputs to outputs.
+  * It implements the direct inverse put method as immediate constraint solving. */
+abstract class &~>[A: Constrainable, B: Constrainable]  extends (A ~~> B) {
   val name: String
   def put(out: Output, st: Option[Input]): Iterable[Input] = report(s"$name.put($out, $st) = %s"){
     val outId = variable[Output]("out")
@@ -40,10 +43,22 @@ abstract class ~~=>[A: Constrainable, B: Constrainable]  extends (A ~~> B) {
   }
 }
 
-/** A way to provide a manual reverse of the transformation */
+/**  A way to provide a manual reverse of the transformation.
+  *  We should ensure that the method putManual always runs a finite algorithm. */
 trait ManualReverse[A, B] extends (A ~~> B) {
-
   def putManual(out2: B, in1: Option[A]): Iterable[A]
+}
+
+/** Particular case of ~~> where the only thing left to implement is the manual reverse.
+  * It implements the constraint formula as a custom method name */
+abstract class %~>[A: Constrainable, B: Constrainable] extends ManualReverse[A, B] {
+  val methodName: String
+  def put(o: Variable, i: Variable, in: Option[A]): Constraint[A] = {
+    val format = FreshIdentifier(methodName)
+    val expr = Equals(E(format)(i, inoxExprOf(in)), o)
+    Constraint[A](expr, Map(format -> this))
+  }
+  def put(out2: B, in1: Option[A]): Iterable[A] = putManual(out2, in1)
 }
 
 object Common {
@@ -53,7 +68,7 @@ object Common {
 // Definition of multiple lenses
 
 /** String concatenation lens */
-object StringAppendReverse extends ((String, String) ~~=> String) {
+object StringAppendReverse extends ((String, String) &~> String) {
   import ImplicitTuples._
 
   def get(in: (String, String)): String = in._1 + in._2
@@ -74,7 +89,7 @@ object StringAppendReverse extends ((String, String) ~~=> String) {
 }
 
 /** Integer addition lens */
-object IntPlusReverse extends ((Int, Int) ~~=> Int) {
+object IntPlusReverse extends ((Int, Int) &~> Int) {
   import ImplicitTuples._
   def get(st: (Int, Int)) = st._1 + st._2
   val name = "IntPlus"
@@ -97,7 +112,7 @@ object StringExtractReverse {
   def substringRev(s: String, start: Int, end: Int, out: String) = s.substring(0, start) + out + s.substring(end)
 }*/
 
-object StringFormatReverse extends ((String, List[Either[String, Int]]) ~~=> String) with ManualReverse[(String, List[Either[String, Int]]), String]{
+object StringFormatReverse extends ((String, List[Either[String, Int]]) %~> String) {
   import java.util.regex.Pattern
   def format(s: String, args: List[Either[String, Int]]) = {
     //println(s"Calling '$s'.format(" + args.map(x => (x, x.getClass)).mkString(",") + ")")
@@ -105,6 +120,7 @@ object StringFormatReverse extends ((String, List[Either[String, Int]]) ~~=> Str
   }
   def get(in: Input) = format(in._1, in._2)
   val name = "StringFormat"
+  val methodName = "format"
 
   def putManual(out2: Output, in: Option[Input]): Iterable[Input] =
     in match {
@@ -181,13 +197,6 @@ object StringFormatReverse extends ((String, List[Either[String, Int]]) ~~=> Str
     //println("Regex solution: " + ifsmodified)
     ifsmodified ++ ifargsmodified
   }
-
-  def put(o: Variable, i: Variable, in: Option[(String, List[Either[String, Int]])]): Constraint[(String, List[Either[String, Int]])] = {
-    val format = FreshIdentifier("format")
-    val expr = Equals(E(format)(i, inoxExprOf(in)), o)
-    //println("Constraint inferred:" + expr)
-    Constraint[(String, List[Either[String, Int]])](expr, Map(format -> this))
-  }
 }
 
 case class InoxLambda[A: Constrainable, B: Constrainable](args: Variable, body: Expr)(implicit p: Program { val trees: inox.trees.type }) extends (A => B) {
@@ -229,14 +238,14 @@ case class ApplyADTReverse[A: Constrainable, B: Constrainable]() extends ((A, In
   }
 }
 
-
 */
-/*
+
 import scala.util.matching.Regex
-case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) extends (String ~~> String) {
+case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) extends (String %~> String) {
   import java.util.regex.Pattern
+  val methodName = "replaceAllIn"
   def get(in: String): String = regex.replaceAllIn(in, m => f.get(m.subgroups))
-  def put(out: String, in: Option[String]): Constraint[String] = {
+  def putManual(out: String, in: Option[String]): Iterable[String] = {
      in match {
        case None => Nil // Maybe something better than Nil?
        case Some(in) => // Let's figure out where f did some replacement.
@@ -265,7 +274,7 @@ case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) ex
            List(ss.zip(mm).map{ case (a, b) => a + b.matched}.mkString + ss.last)
            case None => Nil
          }
-         val replacedContentSolutions: Constraint[String] = ifReplacedContentChanged.unapplySeq(out) match {
+         val replacedContentSolutions: Iterable[String] = ifReplacedContentChanged.unapplySeq(out) match {
            case Some(ss) => 
              // Need to compute the values of f now and put back the content into them.
              val unplexedResult = mm.zip(ss) map { case (m, s) =>
@@ -393,7 +402,7 @@ case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) ex
   }
 }
 
-
+/*
 object IntReverse extends ((Int, Int) ~~> Int) {
   def add(s: Int, t: Int) = s+t
   def get(in: Input): Output = add(in._1, in._2)
@@ -678,7 +687,7 @@ case class Compose[A: Constrainable, B: Constrainable, C: Constrainable](a: B ~~
 }
 
 case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~~> B, b: A ~~> D)
-    extends (A ~~=> (B, D)) {
+    extends (A &~> (B, D)) {
   def get(in: Input): Output = (a.get(in), b.get(in))
   //def put(out2: Output, in: Option[Input]): Iterable[Input] = ???
   import ImplicitTuples._
