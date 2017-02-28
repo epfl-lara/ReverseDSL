@@ -84,10 +84,10 @@ object Constrainable {
   implicit def tuple2Constrainable[A : Constrainable, B: Constrainable] : Constrainable[(A, B)] =
     combine(implicitly[Constrainable[A]], implicitly[Constrainable[B]])
   implicit def tuple3Constrainable[A : Constrainable, B: Constrainable, C: Constrainable] : Constrainable[(A, B, C)] =
-    ImplicitTuples.Combination[(A, B, C)](c[A], c[B], c[C])
-  implicit def tuple4Constrainable[A : Constrainable, B: Constrainable, C: Constrainable, D: Constrainable]
+    ImplicitTuples.Combination3[A, B, C](c[A], c[B], c[C])
+  /*implicit def tuple4Constrainable[A : Constrainable, B: Constrainable, C: Constrainable, D: Constrainable]
   : Constrainable[(A, B, C, D)] =
-    ImplicitTuples.Combination[(A, B, C, D)](c[A], c[B], c[C], c[D])
+    ImplicitTuples.Combination[(A, B, C, D)](c[A], c[B], c[C], c[D])*/
   //If need more tuples, add them here.
 
   implicit def listConstrainable[A: Constrainable]: Constrainable[List[A]] = new Constrainable[List[A]] {

@@ -23,8 +23,8 @@ class StringAppendTest extends FunSuite {
   test("Double decomposition") {
     val d = Make(doubleAppend)
     d.get(("Hello ", "world")) shouldEqual "Hello world"
-    var o = Variable(FreshIdentifier("o"), inoxTypeOf[String], Set())
-    var i = Variable(FreshIdentifier("i"), inoxTypeOf[(String, String)], Set())
+    var o = variable[String]("o")
+    var i = variable[(String, String)]("i")
     val init = ("Hello ", "world")
     val constraint = d.put(o, i, Some(init))
     def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(Distances.distance(_, init)) #::: s.drop(num)
@@ -45,8 +45,8 @@ class StringAppendTest extends FunSuite {
   test("Append twice") {
     val d = Make(appendTwice)
     d.get("Hello") shouldEqual "HelloHello"
-    var o = Variable(FreshIdentifier("o"), inoxTypeOf[String], Set())
-    var i = Variable(FreshIdentifier("i"), inoxTypeOf[String], Set())
+    var o = variable[String]("o")
+    var i = variable[String]("i")
     val init = "Hello"
     val constraint = d.put(o, i, Some(init))
     def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(Distances.distance(_, init)) #::: s.drop(num)
@@ -70,8 +70,8 @@ class StringAppendTest extends FunSuite {
     val d = Make(appendTwicePlusMiddle)
     val init = ("Hello", " ")
     d.get(init) shouldEqual "Hello Hello"
-    var o = Variable(FreshIdentifier("o"), inoxTypeOf[String], Set())
-    var i = Variable(FreshIdentifier("i"), inoxTypeOf[(String, String)], Set())
+    var o = variable[String]("o")
+    var i = variable[(String, String)]("i")
     val constraint = d.put(o, i, Some(init))
     def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(Distances.distance(_, init)) #::: s.drop(num)
 
@@ -105,8 +105,8 @@ class IntPlusReverseTest extends FunSuite  {
     val d = Make(add2and3)
     val init = (1, 3)
     d.get(init) shouldEqual 5
-    var o = Variable(FreshIdentifier("o"), inoxTypeOf[Int], Set())
-    var i = Variable(FreshIdentifier("i"), inoxTypeOf[(Int, Int)], Set())
+    var o = variable[Int]("o")
+    var i = variable[(Int, Int)]("i")
     val constraint = d.put(o, i, Some(init))
     //println(constraint)
     //println(constraint.simplify(varI))
@@ -117,6 +117,24 @@ class IntPlusReverseTest extends FunSuite  {
     constraint(o -> 7).toStream(i).take(2).toSet shouldEqual Set((1, 5), (2, 3))
     constraint(o -> 8).toStream(i).head shouldEqual ((1, 6))
     constraint(o -> 9).toStream(i).take(2).toSet shouldEqual Set((1, 7), (3, 3))
+  }
+
+  def add3(in: Id[(Int, Int, Int)]) = {
+    in._1 + in._2 + in._3
+  }
+
+  test("(2+3)+1 = 6, 5, 4, 7 repair") {
+    val d = Make(add3)
+    val init = (2, 3, 1)
+    var o = variable[Int]("o")
+    var i = variable[(Int, Int, Int)]("i")
+    d.get(init) shouldEqual 6
+    //println(d.put(o, i, Some(init)).simplify(i))
+    def fRev(k: Int) = d.put(o, i, Some(init))(o -> k).toStream(i).take(3).toList
+    fRev(6) shouldEqual List((2,3,1))
+    fRev(5) shouldEqual List((2,3,0), (2,2,1), (1,3,1))
+    fRev(4) shouldEqual List((2,3,-1), (2,1,1), (0,3,1))
+    fRev(7) shouldEqual List((2,3,2), (2,4,1), (3,3,1))
   }
 }
 /*
@@ -262,20 +280,6 @@ class RegexReplaceAllInReverseTest extends FunSuite  {
 
 
 /*
-class IntReverseTest extends FunSuite  {
-  import IntReverse._
-
-  def fRev(s: Int) = addRev(5, 1, s).flatMap(lr =>
-    addRev(2, 3, lr._1).map(lr2 => (lr2._1, lr2._2, lr._2))
-  )
-  test("(2+3)+1 = 6, 5, 4, 7 repair") {
-    fRev(6) shouldEqual List((2,3,1))
-    fRev(5) shouldEqual List((2,3,0), (2,2,1), (1,3,1))
-    fRev(4) shouldEqual List((2,3,-1), (2,1,1), (0,3,1))
-    fRev(7) shouldEqual List((2,3,2), (2,4,1), (3,3,1))
-  }
-}
-
 class ListSplitTest extends FunSuite  {
   val f = (x: Int) => x % 2 == 0
   val b = new ListSplit[Int](f)

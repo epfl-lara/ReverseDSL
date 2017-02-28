@@ -29,7 +29,17 @@ object ImplicitTuples {
     (Tuple22.apply _).curried: Any
   )
 
-  case class Combination[Tuple <: Product](cs: Constrainable[_]*) extends Constrainable[Tuple] {
+  case class Combination3[A, B, C](ca: Constrainable[A], cb: Constrainable[B], cc: Constrainable[C]) extends Constrainable[(A, B, C)] {
+    type Tuple = (A, B, C)
+    def getType = T(_tupleTypes(1))(ca.getType, cb.getType, cc.getType)
+    def recoverFrom(e: Expr): Tuple = e match {
+      case ADT(_, Seq(ea, eb, ec)) => (ca.recoverFrom(ea), cb.recoverFrom(eb), cc.recoverFrom(ec))
+      case _ => throw new Exception("Could not recover tuple from " + e)
+    }
+    def produce(a: Tuple): Expr = ADT(getType, Seq(ca.produce(a._1), cb.produce(a._2), cc.produce(a._3)))
+  }
+
+  /*case class Combination[Tuple <: Product](cs: Constrainable[_]*) extends Constrainable[Tuple] {
     def getType = T(_tupleTypes(cs.length - 2))(cs.map(_.getType): _*)
     def recoverFrom(e: Expr): Tuple = e match {
       case ADT(_, s) => (((scalaTuplesCurried(cs.length - 2)) /: s.zip(cs).map{ case (ss, c: Constrainable[_]) => c.recoverFrom(ss)}) {
@@ -37,8 +47,8 @@ object ImplicitTuples {
       }).asInstanceOf[Tuple]
       case _ => throw new Exception("Could not recover tuple from " + e)
     }
-    def produce(a: Tuple): Expr = ADT(ADTType(tuple2, cs.map(_.getType)), cs.zip(a.productIterator.toIterable).map{ case (c, ai) => c.produce(ai.asInstanceOf[c.theType]) })
-  }
+    def produce(a: Tuple): Expr = ADT(getType, cs.zip(a.productIterator.toIterable).map{ case (c, ai) => c.produce(ai.asInstanceOf[c.theType]) })
+  }*/
 
   val tuple2 : Identifier = FreshIdentifier("Tuple2")
   val tuple3 : Identifier = FreshIdentifier("Tuple3")
