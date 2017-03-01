@@ -418,11 +418,12 @@ class FlattenTest extends FunSuite  {
       List(List(1, 2, 3), List(5, 6), List(), List(7, 4))
   }
 }
-/*
+
 class MapReverseTest extends FunSuite  {
-  object f extends ~~>[Int, Int] {
+  object f extends %~>[Int, Int] {
     def get(x: Int) = x - (x%2)
-    def put(y: Int, in: Option[Int]) =
+    val methodName = "f"
+    def putManual(y: Int, in: Option[Int]) =
       if(y % 2 == 0) {
         in match {
           case Some(x) if get(x) == y => List(x)
@@ -471,9 +472,10 @@ class FilterReverseTest extends FunSuite  {
 
 // Combines map and flatten directly.
 class FlatMapByComposeTest extends FunSuite  {
-  object f extends ~~>[Int, List[Int]] {
+  object f extends %~>[Int, List[Int]] {
     def get(x: Int) = if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
-    def put(lx: List[Int], in: Option[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
+    val methodName = "f"
+    def putManual(lx: List[Int], in: Option[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
       if(lx(0) % 4 == 0) List(lx(0))
       else if(lx(0) % 4 == 2) List(lx(1))
       else Nil
@@ -492,9 +494,10 @@ class FlatMapByComposeTest extends FunSuite  {
   // f(2) == [3, 4]
   // f(3) == [2, 3, 4]
   
-  object fEven extends ~~>[Int, List[Int]] {
-     def get(x: Int) = if(x%2 == 0) List(x/2) else Nil
-     def put(x: List[Int], in: Option[Int]) = if(x.length == 1) List(x(0)*2) else if(x.length == 0 && in.nonEmpty) List(in.get) else Nil
+  object fEven extends %~>[Int, List[Int]] {
+    def get(x: Int) = if(x%2 == 0) List(x/2) else Nil
+    val methodName = "fEven"
+    def putManual(x: List[Int], in: Option[Int]) = if(x.length == 1) List(x(0)*2) else if(x.length == 0 && in.nonEmpty) List(in.get) else Nil
   }
  
   val d = MapReverse(fEven) andThen Flatten[Int]()
@@ -526,9 +529,10 @@ class FlatMapByComposeTest extends FunSuite  {
 
 // Combines map and flatten directly.
 class FlatMapTest extends FunSuite  {
-  object f extends ~~>[Int, List[Int]] {
+  object f extends %~>[Int, List[Int]] {
+    val methodName = "f"
     def get(x: Int) = if(x % 4 == 0) List(x, x+1, x+2) else if(x % 4 == 2) List(x+1, x+2) else if(x % 4 == 1) List(x-1, x) else List(x-1, x, x+1)
-    def put(lx: List[Int], in: Option[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
+    def putManual(lx: List[Int], in: Option[Int]) = if(lx.length == 3 && lx(1) == lx(0) + 1 && lx(2) == lx(1) + 1) {
       if(lx(0) % 4 == 0) List(lx(0))
       else if(lx(0) % 4 == 2) List(lx(1))
       else Nil
@@ -547,9 +551,10 @@ class FlatMapTest extends FunSuite  {
   // f(2) == [3, 4]
   // f(3) == [2, 3, 4]
   
-  object fEven extends ~~>[Int, List[Int]] {
+  object fEven extends %~>[Int, List[Int]] {
+    val methodName = "fEven"
      def get(x: Int) = if(x%2 == 0) List(x/2) else Nil
-     def put(x: List[Int], in: Option[Int]) = if(x.length == 1) List(x(0)*2) else Nil
+     def putManual(x: List[Int], in: Option[Int]) = if(x.length == 1) List(x(0)*2) else Nil
   }
  
   val d = FlatMap(fEven)
@@ -576,7 +581,7 @@ class FlatMapTest extends FunSuite  {
     put(List(1, 2), List(1, 2, 3, 6, 4, 5)) shouldEqual List(List(1, 2, 3, 4, 5))
   }
 }
-
+/*
 class PairTest extends FunSuite {
   object f extends ~~>[Int, Int] {
     def get(x: Int) = x - (x%2)

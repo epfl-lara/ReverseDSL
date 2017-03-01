@@ -816,12 +816,13 @@ case class Flatten[A: Constrainable]() extends %~>[List[List[A]], List[A]]()(lis
     }
   } // ensuring res => res.forall(sol => sol.flatten == out && lehvenstein(l, sol) == lehvenstein(out, sol.flatten))
 }
-/*
-case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
+
+case class MapReverse[A: Constrainable, B: Constrainable](fr: A ~~> B) extends (List[A] %~> List[B]) {
   val f: A => B = fr.get _
   val fRev = (in: Option[A], b: B) => fr.put(b, in).toList
   def get(in: Input) = map(in)
-  def put(out2: Output, in: Option[Input]): Constraint[Input] = Implicits.report(s"MapReverse.put($out2, $in) = %s"){
+  val methodName = "map"
+  def putManual(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"MapReverse.put($out2, $in) = %s"){
     in match {
     case None => mapRev(Nil, out2)
     case Some(in) => mapRev(in, out2)
@@ -888,9 +889,10 @@ case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
   }// ensuring res => res.forall(sol => map(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, map(sol, f)))
 }
 
-case class FilterReverse[A](f: A => Boolean) extends (List[A] ~~> List[A]) {
+case class FilterReverse[A: Constrainable](f: A => Boolean) extends (List[A] %~> List[A]) {
   def get(in: Input) = filter(in, f)
-  def put(out2: Output, in: Option[Input]) = Implicits.report(s"FilterReverse.put($out2, $in) = %s"){in match {
+  val methodName = "filter"
+  def putManual(out2: Output, in: Option[Input]) = Implicits.report(s"FilterReverse.put($out2, $in) = %s"){in match {
     case None => filterRev(Nil, f, out2)
     case Some(in) => filterRev(in, f, out2)
   }
@@ -935,11 +937,12 @@ case class FilterReverse[A](f: A => Boolean) extends (List[A] ~~> List[A]) {
   }// ensuring res => res.forall(sol => filter(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, filter(sol, f))
 }
 
-case class FlatMap[A, B](fr: A ~~> List[B]) extends (List[A] ~~> List[B]) {
+case class FlatMap[A: Constrainable, B: Constrainable](fr: A ~~> List[B]) extends (List[A] %~> List[B]) {
   val f = fr.get _
   val fRev = (x: List[B]) => fr.put(x, None).toList // TODO: replace None by something clever.
   def get(in: Input) = flatMap(in, f)
-  def put(out2: Output, in: Option[Input]) = flatMapRev(in.toList.flatten, f, fRev, out2)
+  val methodName = "flatMap"
+  def putManual(out2: Output, in: Option[Input]) = flatMapRev(in.toList.flatten, f, fRev, out2)
 
   def flatMap(l: List[A], f: A => List[B]): List[B] = l.flatMap(f)
 
@@ -986,7 +989,7 @@ case class FlatMap[A, B](fr: A ~~> List[B]) extends (List[A] ~~> List[B]) {
     }
   }
 }
-
+/*
 case class Const[A](value: A) extends (Unit ~~> A) {
   def get(u: Unit) = value
   def put(output: A, orig: Option[Unit]): Stream[Unit] = Stream(())
