@@ -310,7 +310,7 @@ class TypeSplitTest extends FunSuite  {
     List(List(WebStyle("width","100px"), Element("pre"), WebAttribute("src","http")))
   }
 }
-/*
+
 class WebElementAdditionTest extends FunSuite  {
   import TypeSplit._
   import WebElementAddition._
@@ -374,14 +374,16 @@ class WebElementCompositionTest extends FunSuite  {
 
 class ComposeTest extends FunSuite  {
   
-  object F extends ~~>[Int, Int] {
+  object F extends (Int %~> Int) {
+    val methodName = "function_f"
     def get(x: Int) = x - (x % 2)
-    def put(x: Int, in: Option[Int]) = if(x % 2 == 0) List(x, x+1) else Nil
+    def putManual(x: Int, in: Option[Int]) = if(x % 2 == 0) List(x, x+1) else Nil
   }
 
-  object G extends ~~>[Int, Int]  {
+  object G extends (Int %~> Int)  {
+    val methodName = "function_g"
     def get(x: Int) = x - (x % 3)
-    def put(x: Int, in: Option[Int]) = if(x % 3 == 0) List(x, x+1, x+2) else Nil
+    def putManual(x: Int, in: Option[Int]) = if(x % 3 == 0) List(x, x+1, x+2) else Nil
   }
 
   val b = Compose(G, F)
@@ -416,7 +418,7 @@ class FlattenTest extends FunSuite  {
       List(List(1, 2, 3), List(5, 6), List(), List(7, 4))
   }
 }
-
+/*
 class MapReverseTest extends FunSuite  {
   object f extends ~~>[Int, Int] {
     def get(x: Int) = x - (x%2)

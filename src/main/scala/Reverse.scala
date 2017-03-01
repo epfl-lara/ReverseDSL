@@ -628,10 +628,11 @@ object TypeSplit extends (List[WebTree] %~> (List[WebElement], List[WebAttribute
   }
 }
 
-/*
-object WebElementAddition extends ((Element, (List[WebElement], List[WebAttribute], List[WebStyle])) ~~> Element) {
+
+object WebElementAddition extends ((Element, (List[WebElement], List[WebAttribute], List[WebStyle])) %~> Element) {
   def get(in: Input) = apply(in._1, in._2._1, in._2._2, in._2._3)
-  def put(out2: Output, in: Option[Input]) = in match {
+  val methodName = "WebElementAddition"
+  def putManual(out2: Output, in: Option[Input]) = in match {
     case None => List((out2, (Nil, Nil, Nil)))
     case Some(in) => applyRev(in, out2)
   }
@@ -673,12 +674,13 @@ object WebElementAddition extends ((Element, (List[WebElement], List[WebAttribut
   }
 }
 
-object WebElementComposition extends ((Element, List[WebTree])  ~~> Element) {
+object WebElementComposition extends ((Element, List[WebTree])  %~> Element) {
   def get(in: Input): Output = {
     WebElementAddition.get(in._1, TypeSplit.get(in._2))
   }
 
-  def put(out2: Output, in: Option[Input]): Constraint[Input] = Implicits.report(s"WebElementComposition($in, $out2) = %s")(in match {
+  val methodName = "WebElementComposition"
+  def putManual(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"WebElementComposition($in, $out2) = %s")(in match {
     case None =>
       val l = out2.children ++ out2.attributes ++ out2.styles
       for{ i <- 0 to l.length
@@ -691,17 +693,6 @@ object WebElementComposition extends ((Element, List[WebTree])  ~~> Element) {
     }
   })
 }
-/*
-case class Compose[A, B, C](f: A => B, g: B => C, fRev: B => Constraint[A], gRev: C => Constraint[B]) extends ~~> {
-  type Input = A
-  type Output = C
-  def get(in: Input) = g(f(in))
-  
-  def put(in: Input, out2: Output) = 
-    gRev(out2).flatMap(b => fRev(b))
-}*/
-
-// Make sure the types agree !!*/
 
 case class Compose[A: Constrainable, B: Constrainable, C: Constrainable](a: B ~~> C, b: A ~~> B) extends (A ~~> C) {
   def get(in: Input): Output = a.get(b.get(in).asInstanceOf[a.Input])
@@ -734,10 +725,13 @@ case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~
       varD === varBD.getField(_2)
   }
 }
-/*
-case class Flatten[A]() extends (List[List[A]] ~~> List[A]) {
+
+import Constrainable.listConstrainable
+
+case class Flatten[A: Constrainable]() extends %~>[List[List[A]], List[A]]()(listConstrainable(implicitly[Constrainable[List[A]]]), implicitly[Constrainable[List[A]]]) {
+  val methodName = "flatten"
   def get(in: Input) = flatten(in)
-  def put(out2: Output, in: Option[Input]) = in match {
+  def putManual(out2: Output, in: Option[Input]) = in match {
     case None => List(List(out2))
     case Some(in) => flattenRev(in, out2)
   }
@@ -821,9 +815,8 @@ case class Flatten[A]() extends (List[List[A]] ~~> List[A]) {
       }
     }
   } // ensuring res => res.forall(sol => sol.flatten == out && lehvenstein(l, sol) == lehvenstein(out, sol.flatten))
-  
 }
-
+/*
 case class MapReverse[A, B](fr: A ~~> B) extends (List[A] ~~> List[B]) {
   val f: A => B = fr.get _
   val fRev = (in: Option[A], b: B) => fr.put(b, in).toList
