@@ -206,15 +206,15 @@ object Implicits {
   }*/
   */
   implicit class ListProducer[A : Constrainable, B : Constrainable](a: A ~~> List[B]) {
-    /*def filter(f: B => Boolean): (A ~~> List[B]) = {
+    def filter(f: B => Boolean): (A ~~> List[B]) = {
       a andThen FilterReverse(f)
     }
-    def map[C](f: B ~~> C): (A ~~> List[C]) = {
+    def map[C: Constrainable](f: B ~~> C): (A ~~> List[C]) = {
       a andThen MapReverse(f)
     }
-    def map[C](f: Id[B] => (B ~~> C)): A ~~> List[C] = {
+    def map[C: Constrainable](f: Id[B] => (B ~~> C)): A ~~> List[C] = {
       a andThen MapReverse(f(Id[B]()))
-    }*/
+    }
 
     def split(f: B => Boolean): (A ~~> (List[B], List[B])) = {
       a andThen ListSplit(f)
@@ -419,7 +419,7 @@ object Implicits {
       }
     }*/
   }
-  /*
+
   def reverselistiterable[A](l: List[Iterable[A]]): Iterable[List[A]] = report(s"reverselistiterable($l)=%s"){
     l match {
       case Nil => Stream(Nil)
@@ -462,10 +462,12 @@ object Implicits {
     }
   }
   
-  /*implicit def listOfTransformToTransformOfList[A, B](a: List[A ~~> B]): (List[A] ~~> List[B]) = new (List[A] ~~> List[B]) {
+  /*implicit def listOfTransformToTransformOfList[A: Constrainable, B: Constrainable](a: List[A ~~> B]): (List[A] ~~> List[B]) = new (List[A] %~> List[B]) {
     def get(in: List[A]) = a.zip(in).map{ case (ela, i) => ela.get(i) }
-    
-    def put(out: List[B], in1: Option[List[A]]): Iterable[List[A]] = {
+
+    val methodName = "listOfTransformToTransformOfList"
+
+    def putManual(out: List[B], in1: Option[List[A]]): Iterable[List[A]] = {
       val in1l = in1 match { case None => out.map(_ => None: Option[A]) case Some(l) => l.map(Some(_): Option[A]) }
       val iterables = out.zip(in1l).zip(a) map {
         case ((o, i), a) => a.put(o, i)
@@ -473,16 +475,17 @@ object Implicits {
       reverselistiterable(iterables)
     }
   }*/
-  implicit def listOfTransformToTransformOfList[A, B](a: List[A ~~> B]): (A ~~> List[B]) = new (A ~~> List[B]) {
+
+  implicit def listOfTransformToTransformOfList2[A: Constrainable, B: Constrainable](a: List[A ~~> B]): (A ~~> List[B]) = new (A %~> List[B]) {
     def get(i: A) = a.map{ case ela => ela.get(i) }
-    
-    def put(out: List[B], in1: Option[A]): Iterable[A] = report(s"listOfTransformToTransformOfList.put($out, $in1) = %s"){
+    val methodName = "listOfTransformToTransformOfList2"
+    def putManual(out: List[B], in1: Option[A]): Iterable[A] = report(s"listOfTransformToTransformOfList.put($out, $in1) = %s"){
       val argForIntersect: List[Iterable[A]] = a.zip(out).map{ case (ela, o) => ela.put(o, in1) }
       val res = intersect(argForIntersect)
       res #::: in1.map(aEl => intersectLight(argForIntersect, aEl)).getOrElse(Stream.empty)
     }
-  } 
-  
+  }
+  /*
   def Listfill[B, C](n: C ~~> (Int, B)) = new (C ~~> List[B]) {
     def get(c: C): List[B] = {
       val (i, b) = n.get(c)

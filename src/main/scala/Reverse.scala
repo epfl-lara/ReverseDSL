@@ -121,7 +121,7 @@ object IntPlusReverse extends ((Int, Int) &~> Int) {
       case None =>
         i.getField(_1) + i.getField(_2) === o
       case Some((a, b)) =>
-        (i.getField(_1) + i.getField(_2) === o) && E(Common.maybe)(i.getField(_2) === E(b)) && E(Common.maybe)(i.getField(_1) === E(a))
+        (i.getField(_1) + i.getField(_2) === o) && E(Common.maybe)(i.getField(_1) === E(a)) && E(Common.maybe)(i.getField(_2) === E(b))
     }
     Constraint[(Int, Int)](expr)
   }
@@ -265,7 +265,7 @@ case class ApplyADTReverse[A: Constrainable, B: Constrainable]() extends ((A, In
 import scala.util.matching.Regex
 case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) extends (String %~> String) {
   import java.util.regex.Pattern
-  val methodName = "replaceAllIn"
+  val methodName = "replaceAllIn" + Math.abs(this.hashCode()/2)
   def get(in: String): String = regex.replaceAllIn(in, m => f.get(m.subgroups))
   def putManual(out: String, in: Option[String]): Iterable[String] = {
      in match {
@@ -450,7 +450,7 @@ object Interleavings {
 case class ListSplit[A: Constrainable](p: A => Boolean) extends (List[A] %~> (List[A], List[A])) {
   import Interleavings._
 
-  val methodName = "ListSplit"
+  val methodName = "ListSplit" + Math.abs(this.hashCode()/2)
   
   def get(in: Input): Output = split(in)
   def putManual(out2: Output, in: Option[Input]) = in match {
@@ -495,11 +495,13 @@ case class ListSplit[A: Constrainable](p: A => Boolean) extends (List[A] %~> (Li
 object WebTrees {
   var displayNiceDSL = true
 
-
+  implicit def toWebTree(i: InnerWebElement) = WebElement(i)
+  implicit def toWebTree2(i: List[InnerWebElement]): List[WebTree] = i.map(WebElement.apply _)
 
   abstract class WebTree extends Product with Serializable
-  abstract class WebElement extends WebTree
-  case class TextNode(text: String) extends WebElement {
+  case class WebElement(inner: InnerWebElement) extends WebTree
+  abstract class InnerWebElement
+  case class TextNode(text: String) extends InnerWebElement {
     override def toString = if(displayNiceDSL) "\"" + "\"".r.replaceAllIn("\\\\".r.replaceAllIn(text, "\\\\\\\\"), "\\\"") + "\"" else s"TextNode($text)"
   }
 
@@ -524,7 +526,16 @@ object WebTrees {
       }
     }
   }
-  case class Element(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends WebElement {
+  import Constrainable._
+  case class InnerWebElementToWebTree[B <: InnerWebElement: Constrainable]() extends (B &~> WebTree) {
+    val name = "innerWebElementToWebTree" + Math.abs(this.hashCode()/2)
+    def get(a: B) = WebElement(a)
+    def put(out: Variable, in: Variable, inExpr: Option[B]) = {
+      Constraint[B](ADT(ADTType(Utils.webElement, Seq()), Seq(in)) === out)
+    }
+  }
+
+  case class Element(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends InnerWebElement {
     override def toString = if(displayNiceDSL) "<." + tag + (if(children.nonEmpty || attributes.nonEmpty || styles.nonEmpty) (children ++ attributes ++ styles).mkString("(", ", ", ")") else "") else {
       if(styles.isEmpty) {
         if(attributes.isEmpty) {
@@ -539,11 +550,17 @@ object WebTrees {
       } else
       s"Element($tag,$children,$attributes,$styles)"
     }
+
+    implicit object Dummy
     
-    /*def apply[A: Constrainable](f: (A ~~> List[WebTree])): (A ~~> Element) = {
-      Pair(Const(this), f) andThen WebElementComposition
+    def apply[A: Constrainable](f: (A ~~> List[WebTree])): (A ~~> Element) = {
+      PairSame(Const[A, Element](this), f) andThen WebElementComposition
     }
-    def apply(l: List[WebTree]): Element = WebElementComposition.get((this, l))*/
+    def apply[A: Constrainable, B <: InnerWebElement : Constrainable](f: (A ~~> List[B]))(implicit e: Dummy.type = Dummy): (A ~~> Element) = {
+      PairSame(Const[A, Element](this), f andThen MapReverse(InnerWebElementToWebTree[B]())) andThen WebElementComposition
+    }
+
+    def apply(l: List[WebTree]): Element = WebElementComposition.get((this, l))
   }
   case class WebAttribute(name: String, value: String) extends WebTree {
     override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
@@ -704,8 +721,8 @@ case class Compose[A: Constrainable, B: Constrainable, C: Constrainable](a: B ~~
   override def put(idC: Variable, idA: Variable, in1: Option[A]): Constraint[A] = {
     val idB = variable[B]("t", true)
     val intermediate_out = in1.map(b.get) // TODO: Have it pre-computed already
-    a.put(idC, idB, intermediate_out) <&&
-      b.put(idB, idA, in1)
+    b.put(idB, idA, in1) &&
+      a.put(idC, idB, intermediate_out)
   }
 }
 
@@ -714,7 +731,7 @@ case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~
   def get(in: Input): Output = (a.get(in), b.get(in))
   //def put(out2: Output, in: Option[Input]): Iterable[Input] = ???
   import ImplicitTuples._
-  val name = "Pair"
+  val name = "PairSame" + Math.abs(this.hashCode()/2)
 
   def put(varBD: Variable, varA: Variable, in: Option[A]): Constraint[A] = {
     val varB = variable[B]("b", true)
@@ -729,7 +746,7 @@ case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~
 import Constrainable.listConstrainable
 
 case class Flatten[A: Constrainable]() extends %~>[List[List[A]], List[A]]()(listConstrainable(implicitly[Constrainable[List[A]]]), implicitly[Constrainable[List[A]]]) {
-  val methodName = "flatten"
+  val methodName = "flatten"+ Math.abs(this.hashCode()/2)
   def get(in: Input) = flatten(in)
   def putManual(out2: Output, in: Option[Input]) = in match {
     case None => List(List(out2))
@@ -821,7 +838,7 @@ case class MapReverse[A: Constrainable, B: Constrainable](fr: A ~~> B) extends (
   val f: A => B = fr.get _
   val fRev = (in: Option[A], b: B) => fr.put(b, in).toList
   def get(in: Input) = map(in)
-  val methodName = "map"
+  val methodName = "map"+ Math.abs(this.hashCode()/2)
   def putManual(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"MapReverse.put($out2, $in) = %s"){
     in match {
     case None => mapRev(Nil, out2)
@@ -891,7 +908,7 @@ case class MapReverse[A: Constrainable, B: Constrainable](fr: A ~~> B) extends (
 
 case class FilterReverse[A: Constrainable](f: A => Boolean) extends (List[A] %~> List[A]) {
   def get(in: Input) = filter(in, f)
-  val methodName = "filter"
+  val methodName = "filter"+ Math.abs(this.hashCode()/2)
   def putManual(out2: Output, in: Option[Input]) = Implicits.report(s"FilterReverse.put($out2, $in) = %s"){in match {
     case None => filterRev(Nil, f, out2)
     case Some(in) => filterRev(in, f, out2)
@@ -941,7 +958,7 @@ case class FlatMap[A: Constrainable, B: Constrainable](fr: A ~~> List[B]) extend
   val f = fr.get _
   val fRev = (x: List[B]) => fr.put(x, None).toList // TODO: replace None by something clever.
   def get(in: Input) = flatMap(in, f)
-  val methodName = "flatMap"
+  val methodName = "flatMap"+ Math.abs(this.hashCode()/2)
   def putManual(out2: Output, in: Option[Input]) = flatMapRev(in.toList.flatten, f, fRev, out2)
 
   def flatMap(l: List[A], f: A => List[B]): List[B] = l.flatMap(f)
@@ -989,12 +1006,18 @@ case class FlatMap[A: Constrainable, B: Constrainable](fr: A ~~> List[B]) extend
     }
   }
 }
-/*
-case class Const[A](value: A) extends (Unit ~~> A) {
-  def get(u: Unit) = value
-  def put(output: A, orig: Option[Unit]): Stream[Unit] = Stream(())
+
+case class Const[I: Constrainable, A: Constrainable](value: A) extends (I &~> A) {
+  def get(u: I) = value
+
+  override val name: String = "const"+ Math.abs(this.hashCode()/2)
+
+  // Basic implementation provided in __=>.put
+  override def put(out2: inox.trees.Variable, inId: inox.trees.Variable, in1: Option[I]): Constraint[I] = {
+    Constraint(out2 === inoxExprOf(value))
+  }
 }
-*/
+
 case class Id[A: Constrainable]() extends (A ~~> A) {
   def get(a: A) = a
   def put(out: A, orig: Option[A]) = Stream(out)
@@ -1002,10 +1025,14 @@ case class Id[A: Constrainable]() extends (A ~~> A) {
     Constraint(varIn === varOut)
   }
 }
-/*
-case class CastUp[A, B, B2 >: B](f: A ~~> B) extends (A ~~> B2) {
+
+case class CastUp[A: Constrainable, B: Constrainable, B2 >: B : Constrainable](f: A ~~> B) extends (A &~> B2) {
   def get(a: A) = f.get(a)
-  def put(out: B2, orig: Option[A]) = {
-    f.put(out.asInstanceOf[B], orig)
+
+  override val name: String = "castup"+ Math.abs(this.hashCode()/2)
+
+  // Basic implementation provided in __=>.put
+  override def put(out2: inox.trees.Variable, inId: inox.trees.Variable, in1: Option[A]): Constraint[A] = {
+    f.put(out2, inId, in1)
   }
-}*/
+}

@@ -80,12 +80,12 @@ class StringAppendTest extends FunSuite {
     sort(constraint(o -> "Mikael Mikael").toStream(i), 2).head shouldEqual (("Mikael", " ")) // Longer disambiguated
     sort(constraint(o -> "Mik Mik").toStream(i), 2).head shouldEqual (("Mik", " ")) // Shorter disambiguated
 
-    sort(constraint(o -> "Mikael Hello").toStream(i), 2).head shouldEqual (("Mikael", " ")) // Longer
+    sort(constraint(o -> "Mikael Hello").toStream(i), 3).head shouldEqual (("Mikael", " ")) // Longer
     sort(constraint(o -> "Hello Mikael").toStream(i), 2).head shouldEqual (("Mikael", " "))
     sort(constraint(o -> "Hello Mik").toStream(i), 2).head shouldEqual (("Mik", " ")) // Shorter
     sort(constraint(o -> "Mik Hello").toStream(i), 2).head shouldEqual (("Mik", " "))
 
-    sort(constraint(o -> "Hello  Hello").toStream(i), 2).head shouldEqual (("Hello", "  ")) // Space editiong
+    sort(constraint(o -> "Hello  Hello").toStream(i), 3).head shouldEqual (("Hello", "  ")) // Space editiong
     sort(constraint(o -> "HelloHello").toStream(i), 2).head shouldEqual (("Hello", "")) // Space editiong
   }
 }
@@ -107,16 +107,18 @@ class IntPlusReverseTest extends FunSuite  {
     d.get(init) shouldEqual 5
     var o = variable[Int]("o")
     var i = variable[(Int, Int)]("i")
-    val constraint = d.put(o, i, Some(init))
+    val constraint: Constraint[(Int, Int)] = d.put(o, i, Some(init))
     //println(constraint)
     //println(constraint.simplify(varI))
     //println(varI)
+    def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(res => Distances.distance(res, init)) #::: s.drop(num)
+
+    sort(constraint(o -> 3).toStream(i), 3).take(2).toSet shouldEqual Set((1, 1), (0, 3))
     constraint(o -> 4).toStream(i).head shouldEqual ((1, 2))
-    constraint(o -> 3).toStream(i).take(2).toSet shouldEqual Set((1, 1), (0, 3))
     constraint(o -> 6).toStream(i).head shouldEqual ((1, 4))
-    constraint(o -> 7).toStream(i).take(2).toSet shouldEqual Set((1, 5), (2, 3))
+    sort(constraint(o -> 7).toStream(i), 3).take(2).toSet shouldEqual Set((1, 5), (2, 3))
     constraint(o -> 8).toStream(i).head shouldEqual ((1, 6))
-    constraint(o -> 9).toStream(i).take(2).toSet shouldEqual Set((1, 7), (3, 3))
+    sort(constraint(o -> 9).toStream(i), 3).take(2).toSet shouldEqual Set((1, 7), (3, 3))
   }
 
   def add3(in: Id[(Int, Int, Int)]) = {
@@ -131,10 +133,11 @@ class IntPlusReverseTest extends FunSuite  {
     d.get(init) shouldEqual 6
     //println(d.put(o, i, Some(init)).simplify(i))
     def fRev(k: Int) = d.put(o, i, Some(init))(o -> k).toStream(i).take(3).toList
+    def sort[A](s: Stream[A], num: Int) = s.take(num).sortBy(res => Distances.distance(res, init)) #::: s.drop(num)
     fRev(6) shouldEqual List((2,3,1))
-    fRev(5) shouldEqual List((2,3,0), (2,2,1), (1,3,1))
-    fRev(4) shouldEqual List((2,3,-1), (2,1,1), (0,3,1))
-    fRev(7) shouldEqual List((2,3,2), (2,4,1), (3,3,1))
+    fRev(5) shouldEqual List((2,3,0), (1,3,1), (2,2,1))
+    fRev(4) shouldEqual List((2,3,-1), (0,3,1), (2,1,1))
+    fRev(7) shouldEqual List((2,3,2), (3,3,1), (2,4,1))
   }
 }
 /*
@@ -300,14 +303,14 @@ class TypeSplitTest extends FunSuite  {
   import TypeSplit._
   
   test("Recovering split based on type") {
-    val initTest = List(WebStyle("width", "100px"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"))
+    val initTest = List[WebTree](WebStyle("width", "100px"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"))
     
     val sinit = split(initTest)
 
     splitRev(initTest, (sinit._1, sinit._2, sinit._3(0) :: WebStyle("outline", "bold") :: sinit._3(1) :: Nil)) shouldEqual
-    List(List(WebStyle("width","100px"), Element("pre"), WebStyle("outline","bold"), WebStyle("height","100px"), WebAttribute("src","http")))
+    List(List(WebStyle("width","100px"), WebElement(Element("pre")), WebStyle("outline","bold"), WebStyle("height","100px"), WebAttribute("src","http")))
     splitRev(initTest, (sinit._1, sinit._2, sinit._3(0) :: Nil)) shouldEqual
-    List(List(WebStyle("width","100px"), Element("pre"), WebAttribute("src","http")))
+    List(List(WebStyle("width","100px"), WebElement(Element("pre")), WebAttribute("src","http")))
   }
 }
 
@@ -315,7 +318,8 @@ class WebElementAdditionTest extends FunSuite  {
   import TypeSplit._
   import WebElementAddition._
   val initArg1 = Element("div", Nil, Nil, List(WebStyle("display", "none")))
-  val initArg2 = (List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))
+  val initArg2: (List[WebElement], List[WebAttribute], List[WebStyle]) =
+    (List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))
   val sinit = WebElementAddition(initArg1, initArg2._1, initArg2._2, initArg2._3)
   
   // No modification
@@ -325,28 +329,32 @@ class WebElementAdditionTest extends FunSuite  {
   reverseInit.toList shouldEqual List((initArg1, initArg2))
   
   // Last element changed
-  val reverseInit2 = WebElementAddition.applyRev((Element("div", Nil, Nil, List(WebStyle("display", "none"))), (List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
+  val reverseInit2: List[(Element, (List[WebElement], List[WebAttribute], List[WebStyle]))] = WebElementAddition.applyRev((Element("div", Nil, Nil, List(WebStyle("display", "none"))), (List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
     Element("div",List(Element("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","200px")))
   )
-  reverseInit2.toList shouldEqual List((Element("div",List(),List(),List(WebStyle("display","none"))),(List(Element("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px")))))
+  reverseInit2.toList shouldEqual List((Element("div",List(),List(),List(WebStyle("display","none"))),
+    (List(WebElement(Element("pre",List(),List(),List()))),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px")))))
   
   // Added a child at the beginning
   val reverseInit3 = WebElementAddition.applyRev((Element("div", Nil, Nil, List(WebStyle("display", "none"))), (List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
     Element("div",List(Element("pre",List(),List(),List()), Element("span",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","200px")))
   )
-  reverseInit3.toList shouldEqual List((Element("div",List(),List(),List(WebStyle("display","none"))),(List(Element("pre",List(),List(),List()), Element("span",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px")))))
+  reverseInit3.toList shouldEqual List((Element("div",List(),List(),List(WebStyle("display","none"))),
+    (List(WebElement(Element("pre",List(),List(),List())), WebElement(Element("span",List(),List(),List()))),List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","200px")))))
   
   // Changed the display
   val reverseInit4 = WebElementAddition.applyRev((Element("div", Nil, Nil, List(WebStyle("display", "none"))), (List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
-    Element("div",List(Element("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("display","block"), WebStyle("width","100px"), WebStyle("height","100px")))
+    Element("div",List(WebElement(Element("pre",List(),List(),List()))),List(WebAttribute("src","http")),List(WebStyle("display","block"), WebStyle("width","100px"), WebStyle("height","100px")))
   )
-  reverseInit4.toList shouldEqual List((Element("div",List(),List(),List(WebStyle("display","block"))),(List(Element("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px")))))
+  reverseInit4.toList shouldEqual List((Element("div",List(),List(),List(WebStyle("display","block"))),
+    (List(WebElement(Element("pre",List(),List(),List()))), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px")))))
   
   // Added a style before the original style
   val reverseInit5 = WebElementAddition.applyRev((Element("div", Nil, Nil, List(WebStyle("display", "none"))), (List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("width", "100px"), WebStyle("height", "100px")))),
     Element("div",List(Element("pre",List(),List(),List())),List(WebAttribute("src","http")),List(WebStyle("outline","1px solid black"), WebStyle("display","none"), WebStyle("width","100px"), WebStyle("height","100px")))
   )
-  reverseInit5.toList shouldEqual List((Element("div",List(),List(),List(WebStyle("outline","1px solid black"), WebStyle("display","none"))),(List(Element("pre",List(),List(),List())), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px")))))
+  reverseInit5.toList shouldEqual List((Element("div",List(),List(),List(WebStyle("outline","1px solid black"), WebStyle("display","none"))),
+    (List(WebElement(Element("pre",List(),List(),List()))), List(WebAttribute("src","http")),List(WebStyle("width","100px"), WebStyle("height","100px")))))
 }
 
 class WebElementCompositionTest extends FunSuite  {
@@ -354,18 +362,18 @@ class WebElementCompositionTest extends FunSuite  {
   import WebElementComposition._
   test("should compose and decompose elements correctly") {
     val initArg1 = Element("div", Nil, Nil, List(WebStyle("display", "none")))
-    val initArg2 = List(WebStyle("width", "100px"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"))
+    val initArg2: List[WebTree] = List(WebStyle("width", "100px"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"))
     val in = (initArg1, initArg2)
     val sinit = WebElementComposition.get(in)
     // Verification that the function computes correctly
     sinit shouldEqual Element("div", List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px")))
     // Replacing an element in the argument's list.
-    WebElementComposition.put(Element("div", List(Element("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList shouldEqual List((initArg1, initArg2.updated(1, Element("span"))))
+    WebElementComposition.put(Element("div", List(Element("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList shouldEqual List((initArg1, initArg2.updated(1, WebElement(Element("span")))))
     // Adding an element at the end of the argument's list.
-    WebElementComposition.put(Element("div", List(Element("pre"), Element("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList shouldEqual List((initArg1, List(WebStyle("width", "100px"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"), Element("span"))))
+    WebElementComposition.put(Element("div", List(Element("pre"), Element("span")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList shouldEqual List((initArg1, List(WebStyle("width", "100px"), WebElement(Element("pre")), WebStyle("height", "100px"), WebAttribute("src", "http"), WebElement(Element("span")))))
     // Adding an element before one of the argument's list.
     val r = WebElementComposition.put(Element("div", List(Element("span"), Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "none"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList 
-    r should contain ((initArg1, List(WebStyle("width", "100px"), Element("span"), Element("pre"), WebStyle("height", "100px"), WebAttribute("src", "http"))))
+    r should contain ((initArg1, List(WebStyle("width", "100px"), WebElement(Element("span")), WebElement(Element("pre")), WebStyle("height", "100px"), WebAttribute("src", "http"))))
     r should have size 2
     // Replacing the main element
     WebElementComposition.put(Element("div", List(Element("pre")), List(WebAttribute("src", "http")), List(WebStyle("display", "block"), WebStyle("width", "100px"), WebStyle("height", "100px"))), in).toList shouldEqual List((initArg1.copy(styles=List(WebStyle("display", "block"))), initArg2))
@@ -581,32 +589,10 @@ class FlatMapTest extends FunSuite  {
     put(List(1, 2), List(1, 2, 3, 6, 4, 5)) shouldEqual List(List(1, 2, 3, 4, 5))
   }
 }
-/*
-class PairTest extends FunSuite {
-  object f extends ~~>[Int, Int] {
-    def get(x: Int) = x - (x%2)
-    def put(y: Int, in: Option[Int]) =
-      if(y % 2 == 0) {
-        in match {
-          case Some(x) if get(x) == y => List(x)
-          case _ =>
-           List(y, y+1)
-        }
-      } else Nil
-  }
-  
-  val c = Pair(f, f)
-
-  test("Reverse pair") {
-    c.get((0, 3)) shouldEqual ((0, 2))
-    c.put((0, 2)).toList.sorted shouldEqual (List((0, 2), (0, 3), (1, 2), (1, 3)))
-    c.put((0, 2), Some((0, 3))).toList.sorted shouldEqual (List((0, 3))) 
-  }
-}
 
 class PizzaTest extends FunSuite {
    import WebBuilder._
-   import Implicits.{RemoveUnit => _, _}
+   import Implicits.{/* RemoveUnit => _ ,*/ _}
    /*object TN extends (String ~~> List[WebTree]) {
      def get(s: String) = List(TextNode(s))
      def put(out: List[WebTree], s: Option[String]): Iterable[String] = report(s"TN.put($s, $out) = %s"){
@@ -653,20 +639,20 @@ class PizzaTest extends FunSuite {
    
    def pizzasCreator3(l: Id[List[String]]) = {
      val filtered = l.filter((s: String)=> s.startsWith("S"))
-     val mapped = filtered.map((x: Id[String]) => li(List(CastUp[String, TextNode, WebTree](TextNode(x)))))
+     val mapped = filtered.map((x: Id[String]) => li(List(CastUp[String, TextNode, InnerWebElement](TextNode(x)))))
      val result = ul(mapped)
      result
    }
    test("it can use standard methods") {
-     val expectedResult = Element("ul", Element("li", TextNode("Salami")::Nil)::Element("li", TextNode("Sudjuk")::Nil)::Nil)
+     val expectedResult = Element("ul")(Element("li")(TextNode("Salami")::Nil)::Element("li")(TextNode("Sudjuk")::Nil)::Nil)
      val original = List("Margharita", "Sudjuk")
-     pizzasCreator3Raw(original) shouldEqual Element("ul", Element("li", TextNode("Sudjuk")::Nil)::Nil)
-     pizzasCreator3(Id()).get(original) shouldEqual Element("ul", Element("li", TextNode("Sudjuk")::Nil)::Nil)
+     pizzasCreator3Raw(original) shouldEqual Element("ul")(Element("li")(TextNode("Sudjuk")::Nil)::Nil)
+     pizzasCreator3(Id()).get(original) shouldEqual Element("ul")(Element("li")(TextNode("Sudjuk")::Nil)::Nil)
      pizzasCreator3(Id()).put(expectedResult, Some(original)) should contain (
      List("Margharita", "Salami", "Sudjuk"))
    }
 }
-
+/*
 /**
 This test focuses on the task of updating the result containing the duplication of an object.
 It tests that the object which was not there before is given the priority to represent all the changes.
@@ -836,6 +822,9 @@ class DistanceTest extends FunSuite {
     distance("Hello ", "Hello  ") shouldEqual 1
     distance("world", "aworld") shouldEqual 1
     distance("world", " world") shouldEqual 2
+    distance((1, 3), (1, 5)) shouldEqual 2
+    distance((1, 3), (2, 3)) shouldEqual 2
+    distance((1, 3), (3, 1)) shouldEqual 4
   }
 }
 

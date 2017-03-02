@@ -12,10 +12,12 @@ object ImplicitTuples {
 
   /** Combination2 for Tuple2 */
   case class Combination2[A, B](self: Constrainable[A], other: Constrainable[B]) extends Combination[(A, B)](self, other) {
-    def recoverFrom(e: Expr): (A, B) = e match {
+    def recoverFrom(e: Expr): (A, B) = { val res = e match {
       case ADT(_, Seq(a, b)) => (self.recoverFrom(a), other.recoverFrom(b))
       case _ => throw new Exception("Could not recover tuple from " + e)
     }
+      println(s"res = $res, class = ${res.getClass}")
+      res }
     def produce(a: (A, B)): Expr = ADT(getType, Seq(self.produce(a._1), other.produce(a._2)))
   }
 

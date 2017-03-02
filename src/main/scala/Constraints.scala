@@ -32,6 +32,8 @@ object Utils {
 
   val webTree: Identifier = FreshIdentifier("WebTree")
   val webElement: Identifier = FreshIdentifier("WebElement")
+  val inner: Identifier = FreshIdentifier("inner")
+  val innerWebElement: Identifier = FreshIdentifier("InnerWebElement")
   val textNode: Identifier = FreshIdentifier("TextNode")
   val element: Identifier = FreshIdentifier("Element")
   val webAttribute: Identifier = FreshIdentifier("WebAttribute")
@@ -43,9 +45,10 @@ object Utils {
   val styles: Identifier = FreshIdentifier("styles")
   val name: Identifier = FreshIdentifier("name")
   val webTreeSort = mkSort(webTree)()(Seq(webElement, webAttribute, webStyle))
-  val webElementSort = mkSort(webElement)()(Seq(textNode, element))
-  val textNodeConstructor = mkConstructor(textNode)()(Some(webElement))(stp => Seq(ValDef(text, StringType)))
-  val elementConstructor = mkConstructor(element)()(Some(webElement))(stp =>
+  val innerWebElementSort = mkSort(innerWebElement)()(Seq(textNode, element))
+  var webElementConstructor = mkConstructor(webElement)()(Some(webTree))(stp => Seq(ValDef(inner, T(innerWebElement)())))
+  val textNodeConstructor = mkConstructor(textNode)()(Some(innerWebElement))(stp => Seq(ValDef(text, StringType)))
+  val elementConstructor = mkConstructor(element)()(Some(innerWebElement))(stp =>
     Seq(ValDef(tag, StringType),
         ValDef(children, T(list)(T(webElement)())),
         ValDef(attributes, T(list)(T(webAttribute)())),
@@ -59,16 +62,17 @@ object Utils {
 
   val allConstructors = List(
     listSort,
-    optionSort,
-    eitherSort,
-    webTreeSort,
-    webElementSort,
     consConstructor,
     nilConstructor,
+    eitherSort,
     leftConstructor,
     rightConstructor,
+    optionSort,
     someConstructor,
     noneConstructor,
+    webTreeSort,
+    innerWebElementSort,
+    webElementConstructor,
     textNodeConstructor,
     elementConstructor,
     webAttributeConstructor,
@@ -170,7 +174,7 @@ object Constrainable {
 
   implicit val WebTreeConstrainable: Constrainable[WebTree] = new  Constrainable[WebTree] {
     import Utils._
-    def getType: inox.trees.dsl.trees.Type = T(webElement)()
+    def getType: inox.trees.dsl.trees.Type = T(webTree)()
     def produce(a: WebTree): inox.trees.Expr = a match {
       case a: WebElement => WebElementConstrainable.produce(a)
       case a: WebAttribute => WebAttributeConstrainable.produce(a)
@@ -186,18 +190,28 @@ object Constrainable {
   implicit val WebElementConstrainable: Constrainable[WebElement] = new  Constrainable[WebElement] {
     import Utils._
     def getType: inox.trees.dsl.trees.Type = T(webElement)()
-    def produce(a: WebElement): inox.trees.Expr = a match {
-      case a: TextNode => TextNodeConstrainable.produce(a)
-      case a: Element => ElementConstrainable.produce(a)
-    }
+    def produce(a: WebElement): inox.trees.Expr =
+      ADT(ADTType(webElement, Seq()), Seq(InnerWebElementConstrainable.produce(a.inner)))
     def recoverFrom(e: inox.trees.Expr): WebElement = e match {
-      case ADT(ADTType(`textNode`, Seq()), _) => TextNodeConstrainable.recoverFrom(e)
-      case ADT(ADTType(`element`, Seq()), _) => ElementConstrainable.recoverFrom(e)
-      case _ => throw new Exception("Could not recover TextNode from " + e)
+      case ADT(ADTType(webElement, Seq()), Seq(arg)) => WebElement(InnerWebElementConstrainable.recoverFrom(arg))
+      case _ => throw new Exception("Could not recover WebElement from " + e)
     }
   }
 
-  implicit val TextNodeConstrainable: Constrainable[TextNode] = new  Constrainable[TextNode] {
+  implicit val InnerWebElementConstrainable: Constrainable[InnerWebElement] = new  Constrainable[InnerWebElement] {
+    import Utils._
+    def getType: inox.trees.dsl.trees.Type = T(innerWebElement)()
+    def produce(a: InnerWebElement): inox.trees.Expr = a match {
+      case a: TextNode => TextNodeConstrainable.produce(a)
+      case a: Element =>  ElementConstrainable.produce(a)
+    }
+    def recoverFrom(e: inox.trees.Expr): InnerWebElement = e match {
+      case ADT(ADTType(`textNode`, Seq()), _) => TextNodeConstrainable.recoverFrom(e)
+      case ADT(ADTType(`element`, Seq()), _) => ElementConstrainable.recoverFrom(e)
+    }
+  }
+
+  implicit val TextNodeConstrainable: Constrainable[TextNode] = new Constrainable[TextNode] {
     import Utils._
     def getType: inox.trees.dsl.trees.Type = T(textNode)()
     def produce(a: TextNode): inox.trees.Expr = a match {
@@ -251,6 +265,12 @@ object Constrainable {
     }
   }
 
+  implicit val UnitConstrainable: Constrainable[Unit] = new Constrainable[Unit] {
+    def getType = UnitType
+    def produce(a: Unit) = UnitLiteral()
+    def recoverFrom(e: inox.trees.Expr): Unit = ()
+  }
+
   /** Obtains the inox type of a given type. */
   def inoxTypeOf[A:Constrainable] = implicitly[Constrainable[A]].getType
 
@@ -265,14 +285,6 @@ object Constrainable {
   def inoxExprOf[A: Constrainable](e: A) = implicitly[Constrainable[A]].produce(e)
 }
 import Constrainable._
-/*
-trait ConstraintInterface[A] {
-  def toStream(solutionVar: inox.trees.Variable): Stream[A]
-}
-
-case class BridgeConstraint[A: Constrainable](left: ConstraintInterface[_], middleProblem: , right: ConstraintInterface[_]) extends ConstraintInterface[A] {
-
-}*/
 
 abstract class Tree[LeafValue, NodeValue]
 
@@ -289,7 +301,7 @@ case class Constraint[A: Constrainable](private val formula: Expr,
   def &&(b: Expr) = Constraint[A](formula && b, functions)
 
   /** Adds a new conjunct to this constraint */
-  def &&[B: Constrainable](b: Constraint[B]) = Constraint[A](formula && b.formula, functions ++ b.functions)
+  def &&[B: Constrainable](b: Constraint[B]): Constraint[A] = Constraint[A](formula && b.formula, functions ++ b.functions)
   def <&&[B: Constrainable](b: Constraint[B]): Constraint[B] = Constraint[B](formula && b.formula, functions ++ b.functions)
 
   import inox.solvers._
@@ -402,7 +414,7 @@ case class Constraint[A: Constrainable](private val formula: Expr,
   def toStream(solutionVar: inox.trees.Variable): Stream[A] = {
     val simplified = simplify(solutionVar).formula
 
-    //println("######## Converting this formula to stream of solutions ######\n" + simplified)
+    println("######## Converting this formula to stream of solutions ######\n" + simplified)
 
     // Convert the formula to a stream of conjuncts, each of one being able to yield solutions
     def getStreamOfConjuncts(e: Expr): Stream[Seq[Expr]] = {
@@ -441,7 +453,13 @@ case class Constraint[A: Constrainable](private val formula: Expr,
       }
     }
 
-    def addMaybes(e: (List[Expr], List[Equals]), startToDeleteAt: Int = 0): Stream[(ThisSolver, prog.Model)] = {
+    // An "Equals" here is the inner content of a "Maybe". We want to satisfy most of them if possible.
+    // If a combination of maybe is satisfiables with e._1, no sub-combination should be tested.
+    // The Int is startToDeleteAt: Int = 0, a way to know the number of Equals from the beginning we should not remove.
+    def maxSMTMaybes(es: Stream[(List[Expr], List[Equals], Int)]): Stream[(ThisSolver, prog.Model)] = {
+      if(es.isEmpty) return Stream.empty
+      val e = es.head
+
       /*
          If there are top-level constructs of the form ... && function(in, [inValue]) == out && ...
          and function is registered as manual reversing, we split the constraint into two constraints.
@@ -452,21 +470,28 @@ case class Constraint[A: Constrainable](private val formula: Expr,
          For each in value V, we solve the equations
          A && in == V && M
       */
+      val constPart = e._1
+      val maybePart = e._2
+      val numForceMaybeToKeep = e._3
+      println("The maybes are: " + e._2)
 
       val solver = prog.getSolver.getNewSolver
-      //println("solving " + and(e._1 ++ e._2 : _*))
+      println("solving " + and(e._1 ++ e._2 : _*))
       solver.assertCnstr(and(e._1 ++ e._2 : _*))
       //println("#2")
       solver.check(SolverResponses.Model) match {
         case SatWithModel(model) =>
-          //println("One solution !")
-          Stream((solver, model))
+          println("One solution !")
+          val updatedStream = es.filterNot{ _._2.toSet.subsetOf(maybePart.toSet)}
+
+          (solver, model) #:: maxSMTMaybes(updatedStream)
         case _ =>
           //println("No solution. Removing maybes...")
-        for{i <- (startToDeleteAt until e._2.length).toStream
-            seq = e._2.take(i) ++ e._2.drop(i+1)
-            solver <- addMaybes((e._1, seq), i)
-          } yield solver
+          maxSMTMaybes(es.tail #::: {
+            for {i <- (numForceMaybeToKeep until e._2.length).toStream
+                 seq = e._2.take(i) ++ e._2.drop(i + 1)
+            } yield (constPart, seq, numForceMaybeToKeep)
+          })
       }
     }
 
@@ -505,8 +530,8 @@ case class Constraint[A: Constrainable](private val formula: Expr,
     def solveTrees(t: Tree[Seq[Expr], Expr]): Stream[(ThisSolver, prog.Model)] = {
       t match {
         case Leaf(seqExpr) =>
-          val x  = splitMaybe(seqExpr, Nil, Nil)
-          for{ solver <- addMaybes(x, 0) } yield solver
+          val (eqs, maybes)  = splitMaybe(seqExpr, Nil, Nil)
+          for{ solver <- maxSMTMaybes(Stream((eqs, maybes, 0))) } yield solver
         case Node(Leaf(seqExpr), value, right) =>
           //println("First we will solve " + right)
           //println("Then we inverse " + value)
@@ -530,9 +555,9 @@ case class Constraint[A: Constrainable](private val formula: Expr,
                 inValue <- getInValues(function, outValue, inDefault)
                 newSeqExpr = (seqExpr :+ Equals(inVar, inValue)) ++ model.vars.map{ case (v, e) => Equals(v.toVariable, e) }
                 //_ = println("Solving this :" + newSeqExpr)
-                x  = splitMaybe(newSeqExpr, Nil, Nil)
+                (eqs, maybes)  = splitMaybe(newSeqExpr, Nil, Nil)
                 //_ = println("Solving maybe:" + x)
-                solver <- addMaybes(x, 0)
+                solver <- maxSMTMaybes(Stream((eqs, maybes, 0)))
           } yield {
             solver
           }
@@ -543,13 +568,17 @@ case class Constraint[A: Constrainable](private val formula: Expr,
 
     // The stream of conjuncts splitted with the maybes.
     for{ a <- getStreamOfConjuncts(simplified)
+         _ = println("Solving conjunct : " + a)
          splitted = splitAtUnknownFunctions(a)
          solver <- solveTrees(splitted)
          modelInox <- getStreamOfSolutions(solutionVar, solver)
          solutionInox = modelInox.vars(solutionVar.toVal: inox.trees.ValDef)
          solution = exprOfInox[A](solutionInox)
     }
-      yield solution
+      yield {
+        println(s"solution: $solution class: ${solution.getClass}")
+        solution
+      }
   //println(streamOfConjuncts
   //implicit val po = PrinterOptions.fromContext(Context.empty)
   //println(symbols.explainTyping(streamOfConjuncts.head))

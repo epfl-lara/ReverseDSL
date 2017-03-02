@@ -29,23 +29,27 @@ object Distances {
 
   def distance(a: Any, b: Any): Int = {
     if (a == b) 0 else {
+      println(s"Comparing two $a of type ${a.getClass}, $b of type ${b.getClass}")
       (a, b) match {
         case (a: Char, b: Char) => 2 // Remove a and write b
         case (a: String, b: String) => Levenshtein.distance(a, b, distance, size)
         case (a: TraversableOnce[_], b: TraversableOnce[_]) => Levenshtein.distance(a, b, distance, size)
         case (a: Product, b: Product) =>
-          if (a.getClass == b.getClass) {
+          if (a.getClass == b.getClass || a.productPrefix == b.productPrefix) {
             (0 /: (0 until a.productArity)) {
               case (s, i) => s + distance(a.productElement(i), b.productElement(i))
             }
           } else {
+            println(s"Comparing two non-related products: $a of type ${a.getClass}, $b of type ${b.getClass}")
             size(a) + size(b) // remove a and write b
           }
         case (true, false) => 4
         case (false, true) => 4
         case (a: Int, b: Int) =>
           distance(a.toString, b.toString)
-        case (a, b) => size(a) + size(b)
+        case (a, b) =>
+          println(s"Comparing two non-related objects: $a, $b")
+          size(a) + size(b)
       }
     }
   }
