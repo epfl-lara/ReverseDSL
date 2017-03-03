@@ -30,7 +30,7 @@ object ReverseProgram {
     val prevFunction = prevProgram.symbols.functions.getOrElse(prevFunctionEntry, return Nil)
     val prevBody = prevFunction.fullBody
     val newMain = FreshIdentifier("main")
-    for {newOutExpr <- repair(prevBody, prevFunction.returnType, outExpr)
+    for {(newOutExpr, _) <- repair(prevBody, prevFunction.returnType, outExpr)
          newFunDef = mkFunDef(newMain)()(stp => (Seq(), prevFunction.returnType, _ => newOutExpr))
          newProgram = InoxProgram(context, Seq(newFunDef), allConstructors)
     } yield (newProgram, newMain)
@@ -43,12 +43,36 @@ object ReverseProgram {
     * @param function An expression that computed the value before newOut
     * @param newOut A *value* that prevOutExpr should produce
     **/
-  def repair(function: Expr, functionType: Type, newOut: Expr)(implicit symbols: Symbols): Iterable[Expr] = {
-    Stream(newOut) // Constant replacement
-    /*function match {
-      case Let(valdef, body, expr) =>
+  def repair(function: Expr, functionType: Type, newOut: Expr)(implicit symbols: Symbols): Iterable[(Expr, Map[Identifier, Expr])] = {
+    if(function == newOut) return List((function, Map()))
 
+    function match {
+      case Let(vd@ValDef(id, tpe, flags), expr, body) =>
+        for {(newBody, newAssignment) <- repair(body, functionType, newOut) // Later: Change assignments to constraints
+              newValValue = newAssignment.getOrElse(id, expr)
+             (newExpr, newAssignment2) <- repair(expr, tpe, newValValue)
+              newFunction = Let(vd, newExpr, newBody)
+              finalAssignments = (newAssignment ++ newAssignment2) - id
+        } yield (newFunction, finalAssignments)
 
+      case v@Variable(id, tpe, flags) =>
+        newOut match {
+          case l: Literal[_] =>
+            if(symbols.isSubtypeOf(l.getType, tpe)) {
+              Stream((v, Map(id -> l)))
+            } else {
+              throw new Error(s"How can we assign $l to $v of type $tpe ?")
+            }
+
+          case l@ADT(tpe2, args) =>
+            if(symbols.isSubtypeOf(tpe2, tpe)) {
+              Stream((v, Map(id -> l)))
+            } else {
+              throw new Error(s"How can we assign $l to $v of type $tpe ?")
+            }
+          case _ => throw new Exception(s"Don't know what to do: $v == $newOut")
+        }
+      /*
       case ADT(ADTType(tp, tpArgs), args) =>
         newOut match {
           case ADT(ADTType(tp2, tpArgs2), args2) if tp2 == tp && tpArgs2 == tpArgs => // Same type ! Maybe the arguments will change or move.
@@ -59,10 +83,11 @@ object ReverseProgram {
           case a => // Another value in the type hierarchy. But Maybe sub-trees are shared !
 
             ???
-          case _ => ???
-        }
+          case _ =>
 
-      case _ => ???
-    }*/
+            ???
+        } */
+      case _ => Stream((newOut, Map()))
+    }
   }
 }

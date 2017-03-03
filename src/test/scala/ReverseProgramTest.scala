@@ -51,6 +51,49 @@ class ReverseProgramTest extends FunSuite {
   test("Variable assigment keeps the shape") {
     val main = FreshIdentifier("main")
     val tmpVar = variable[String]("text")
+    val expected1 = "Hello world"
+    val funDef = mkFunDef(main)()(_ => (Seq(), inoxTypeOf[String], _ =>
+      let(tmpVar.toVal, StringLiteral("Hello world"))(v => v)
+    ))
+    val prog = InoxProgram(
+      ReverseProgram.context,
+      Seq(funDef), allConstructors
+    )
+    prog.getEvaluator.eval(FunctionInvocation(funDef.id, Seq(), Seq())) match {
+      case EvaluationResults.Successful(e) => exprOfInox[String](e) shouldEqual expected1
+      case m => fail(s"Did not evaluate to $expected1. Error: $m")
+    }
+    val expected2 = "We are the children"
+
+    val progfuns2 = ReverseProgram.put(expected2, None, None, Some((prog, funDef.id)))
+
+    progfuns2.toStream.lengthCompare(1) shouldEqual 0
+
+    val (prog2, funId2) = progfuns2.head
+    prog2.getEvaluator.eval(FunctionInvocation(funId2, Seq(), Seq())) match {
+      case EvaluationResults.Successful(e) => exprOfInox[String](e) shouldEqual expected2
+      case m => fail(s"Did not evaluate to $expected2. Error: $m")
+    }
+
+    // testing the shape.
+    prog2.symbols.functions.get(funId2) match {
+      case None => fail("???")
+      case Some(funDef) => funDef.fullBody match {
+        case l@Let(vd, expr, body) =>
+          val v = vd.toVariable
+          if(!inox.trees.exprOps.exists{
+            case v2:Variable => v2.id == v.id
+            case _ => false
+          }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+
+        case m => fail(s"eXpected let, got $m")
+      }
+    }
+  }
+
+  test("Variable assigment keeps the shape if deep embedded") {
+    val main = FreshIdentifier("main")
+    val tmpVar = variable[String]("text")
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val funDef = mkFunDef(main)()(_ => (Seq(), inoxTypeOf[Element], _ =>
       let(tmpVar.toVal, StringLiteral("Hello world"))(v =>
@@ -81,7 +124,13 @@ class ReverseProgramTest extends FunSuite {
     prog2.symbols.functions.get(funId2) match {
       case None => fail("???")
       case Some(funDef) => funDef.fullBody match {
-        case l: Let => // ok
+        case l@Let(vd, expr, body) =>
+          val v = vd.toVariable
+          if(!inox.trees.exprOps.exists{
+            case v2:Variable => v2.id == v.id
+            case _ => false
+          }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+
         case m => fail(s"eXpected let, got $m")
       }
     }
@@ -152,7 +201,12 @@ class ReverseProgramTest extends FunSuite {
     prog2.symbols.functions.get(funId2) match {
       case None => fail("???")
       case Some(funDef) => funDef.fullBody match {
-        case l: Let => // ok
+        case l@Let(vd, expr, body) =>
+          val v = vd.toVariable
+          if(!inox.trees.exprOps.exists{
+            case v2:Variable => v2.id == v.id
+            case _ => false
+          }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
         case m => fail(s"eXpected let, got $m")
       }
     }
@@ -225,10 +279,10 @@ class ReverseProgramTest extends FunSuite {
       case None => fail("???")
       case Some(funDef) => funDef.fullBody match {
         case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
-          assert(inox.trees.exprOps.exists{
+          if(!inox.trees.exprOps.exists{
             case v3:Variable => v2 == v2
             case _ => false
-          }(body), s"There was no variable $v in the given lambda: $newLambda")
+          }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
 
         case m => fail(s"eXpected a let-lambda-application', got $m")
       }
@@ -263,10 +317,10 @@ class ReverseProgramTest extends FunSuite {
       case None => fail("???")
       case Some(funDef) => funDef.fullBody match {
         case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
-          assert(inox.trees.exprOps.exists{
+          if(!inox.trees.exprOps.exists{
             case v3:Variable => v2 == v2
             case _ => false
-          }(body), s"There was no variable $v in the given lambda: $newLambda")
+          }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
 
         case m => fail(s"eXpected a let-lambda-application', got $m")
       }
