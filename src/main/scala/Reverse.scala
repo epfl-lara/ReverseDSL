@@ -268,158 +268,64 @@ case class RegexReplaceAllInReverse(regex: Regex, f: List[String] ~~> String) ex
   val methodName = "replaceAllIn" + Math.abs(this.hashCode()/2)
   def get(in: String): String = regex.replaceAllIn(in, m => f.get(m.subgroups))
   def putManual(out: String, in: Option[String]): Iterable[String] = {
-     in match {
-       case None => Nil // Maybe something better than Nil?
-       case Some(in) => // Let's figure out where f did some replacement.
-         val matches = regex.findAllMatchIn(in)
-         
-         var lastEnd = 0
-         val stringMatchPairs = (for{m <- matches.toList.view
-             start = m.start
-             end = m.end
-             str = in.substring(lastEnd, start)
-         } yield {
-            lastEnd = end
-            (str, m)
-         })
-         val (strings, mm) = stringMatchPairs.toList.unzip
-         val allstrings = strings :+ in.substring(lastEnd)
-         // Now we are going to parse the original string using all strings to recover the new output of each f element:
-         val ifReplacedContentChanged = (Pattern.quote(allstrings.head) + allstrings.tail.map{
-           case s => "(.*)" + Pattern.quote(s)
-         }.mkString).r
-         val ifReplacedConstantChanged = ("(.*)" + mm.toList.map{
-           case m => Pattern.quote(f.get(m.subgroups)) + "(.*)"
-         }.mkString).r
-         val replacedConstantSolutions = ifReplacedConstantChanged.unapplySeq(out) match {
-           case Some(ss) => 
-           List(ss.zip(mm).map{ case (a, b) => a + b.matched}.mkString + ss.last)
-           case None => Nil
-         }
-         val replacedContentSolutions: Iterable[String] = ifReplacedContentChanged.unapplySeq(out) match {
-           case Some(ss) => 
-             // Need to compute the values of f now and put back the content into them.
-             val unplexedResult = mm.zip(ss) map { case (m, s) =>
-               val init = m.subgroups
-               f.put(s, Some(init)).toStream.map{
-                 (fargs: List[String]) =>
-                   // Need to re-plug fargs inside the regex.
-                   // For that we need to split the group.
-                   val globalstart = m.start(0)
-                   var lastEnd = m.start(0)
-                   val externalGroups = for{i <- (1 to m.groupCount).toList.view
-                       start = m.start(i)
-                       end = m.end(i)
-                       str = m.matched.substring(lastEnd - globalstart, start - globalstart)
-                   } yield {
-                     lastEnd = end
-                     str
-                   }
-                   externalGroups.zip(fargs).map{ case (a, b) => a + b}.mkString + m.matched.substring(lastEnd - globalstart)
-               }
-             }
-             val plexedResult = cartesianProduct(unplexedResult)
-             plexedResult.map{ (contents: List[String]) =>
-               allstrings.zip(contents).map{ case (a, b) => a + b}.mkString + allstrings.last
-             }
-           // These are the new values to pass to f.
-           case None => Nil
-         }
-         replacedConstantSolutions ++ replacedContentSolutions
-     }
-  }
-  
-   def cartesianProduct[T](streams : Seq[Stream[T]]) : Stream[List[T]] = {
-    val dimensions = streams.size
-    val vectorizedStreams = streams.map(new VectorizedStream(_))
+    in match {
+      case None => Nil // Maybe something better than Nil?
+      case Some(in) => // Let's figure out where f did some replacement.
+        val matches = regex.findAllMatchIn(in)
 
-    if(dimensions == 0)
-      return Stream.cons(Nil, Stream.empty)
-
-    if(streams.exists(_.isEmpty))
-      return Stream.empty
-
-    val indices = diagCount(dimensions)
-
-    var allReached : Boolean = false
-    val bounds : Array[Option[Int]] = for (s <- streams.toArray) yield {
-      if (s.hasDefiniteSize) {
-        Some(s.size)
-      } else {
-        None
-      }
-    }
-
-    indices.takeWhile(_ => !allReached).flatMap { indexList =>
-      var d = 0
-      var continue = true
-      var is = indexList
-      var ss = vectorizedStreams.toList
-
-      if ((indexList zip bounds).forall {
-          case (i, Some(b)) => i >= b
-          case _ => false
-        }) {
-        allReached = true
-      }
-
-      var tuple : List[T] = Nil
-
-      while(continue && d < dimensions) {
-        val i = is.head
-        if(bounds(d).exists(i > _)) {
-          continue = false
-        } else try {
-          // TODO can we speed up by caching the random access into
-          // the stream in an indexedSeq? After all, `i` increases
-          // slowly.
-          tuple = ss.head(i) :: tuple
-          is = is.tail
-          ss = ss.tail
-          d += 1
-        } catch {
-          case e : IndexOutOfBoundsException =>
-            bounds(d) = Some(i - 1)
-            continue = false
+        var lastEnd = 0
+        val stringMatchPairs = (for {m <- matches.toList.view
+                                     start = m.start
+                                     end = m.end
+                                     str = in.substring(lastEnd, start)
+        } yield {
+          lastEnd = end
+          (str, m)
+        })
+        val (strings, mm) = stringMatchPairs.toList.unzip
+        val allstrings = strings :+ in.substring(lastEnd)
+        // Now we are going to parse the original string using all strings to recover the new output of each f element:
+        val ifReplacedContentChanged = (Pattern.quote(allstrings.head) + allstrings.tail.map {
+          case s => "(.*)" + Pattern.quote(s)
+        }.mkString).r
+        val ifReplacedConstantChanged = ("(.*)" + mm.toList.map {
+          case m => Pattern.quote(f.get(m.subgroups)) + "(.*)"
+        }.mkString).r
+        val replacedConstantSolutions = ifReplacedConstantChanged.unapplySeq(out) match {
+          case Some(ss) =>
+            List(ss.zip(mm).map { case (a, b) => a + b.matched }.mkString + ss.last)
+          case None => Nil
         }
-      }
-      if(continue) Some(tuple.reverse) else None
-    }
-  }
-  private def diagCount(dim : Int) : Stream[List[Int]] = diag0(dim, 0)
-  private def diag0(dim : Int, nextSum : Int) : Stream[List[Int]] = summingTo(nextSum, dim).append(diag0(dim, nextSum + 1))
-
-  private def summingTo(sum : Int, n : Int) : Stream[List[Int]] = {
-    if(sum < 0) {
-      Stream.empty
-    } else if(n == 1) {
-      Stream.cons(sum :: Nil, Stream.empty) 
-    } else {
-      (0 to sum).toStream.flatMap(fst => summingTo(sum - fst, n - 1).map(fst :: _))
-    }
-  }
-  private class VectorizedStream[T](initial : Stream[T]) {
-    private def mkException(i : Int) = new IndexOutOfBoundsException("Can't access VectorizedStream at : " + i)
-    private def streamHeadIndex : Int = indexed.size
-    private var stream  : Stream[T] = initial
-    private var indexed : Vector[T] = Vector.empty
-
-    def apply(index : Int) : T = {
-      if(index < streamHeadIndex) {
-        indexed(index)
-      } else {
-        val diff = index - streamHeadIndex // diff >= 0
-        var i = 0
-        while(i < diff) {
-          if(stream.isEmpty) throw mkException(index)
-          indexed = indexed :+ stream.head
-          stream  = stream.tail
-          i += 1
+        val replacedContentSolutions: Iterable[String] = ifReplacedContentChanged.unapplySeq(out) match {
+          case Some(ss) =>
+            // Need to compute the values of f now and put back the content into them.
+            val unplexedResult = mm.zip(ss) map { case (m, s) =>
+              val init = m.subgroups
+              f.put(s, Some(init)).toStream.map {
+                (fargs: List[String]) =>
+                  // Need to re-plug fargs inside the regex.
+                  // For that we need to split the group.
+                  val globalstart = m.start(0)
+                  var lastEnd = m.start(0)
+                  val externalGroups = for {i <- (1 to m.groupCount).toList.view
+                                            start = m.start(i)
+                                            end = m.end(i)
+                                            str = m.matched.substring(lastEnd - globalstart, start - globalstart)
+                  } yield {
+                    lastEnd = end
+                    str
+                  }
+                  externalGroups.zip(fargs).map { case (a, b) => a + b }.mkString + m.matched.substring(lastEnd - globalstart)
+              }
+            }
+            val plexedResult = inox.utils.StreamUtils.cartesianProduct(unplexedResult)
+            plexedResult.map { (contents: List[String]) =>
+              allstrings.zip(contents).map { case (a, b) => a + b }.mkString + allstrings.last
+            }
+          // These are the new values to pass to f.
+          case None => Nil
         }
-        // The trick is *not* to read past the desired element. Leave it in the
-        // stream, or it will force the *following* one...
-        stream.headOption.getOrElse { throw mkException(index) }
-      }
+        replacedConstantSolutions ++ replacedContentSolutions
     }
   }
 }

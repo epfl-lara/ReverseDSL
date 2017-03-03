@@ -185,7 +185,7 @@ class ReverseProgramTest extends FunSuite {
       case EvaluationResults.Successful(e) => exprOfInox[Element](e) shouldEqual expected1
       case m => fail(s"Did not evaluate to $expected1. Error: $m")
     }
-    val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
+    val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("We are the children"))::Nil))::Nil)
 
     val progfuns2 = ReverseProgram.put(expected2, None, None, Some((prog, funDef.id)))
 
@@ -202,6 +202,7 @@ class ReverseProgramTest extends FunSuite {
       case None => fail("???")
       case Some(funDef) => funDef.fullBody match {
         case l@Let(vd, expr, body) =>
+          println(l)
           val v = vd.toVariable
           if(!inox.trees.exprOps.exists{
             case v2:Variable => v2.id == v.id
