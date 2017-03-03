@@ -211,6 +211,7 @@ object Constrainable {
     def recoverFrom(e: inox.trees.Expr): InnerWebElement = e match {
       case ADT(ADTType(`textNode`, Seq()), _) => TextNodeConstrainable.recoverFrom(e)
       case ADT(ADTType(`element`, Seq()), _) => ElementConstrainable.recoverFrom(e)
+      case _ => throw new Exception("Could not recover InnerWebElement from " + e)
     }
   }
 
@@ -286,6 +287,25 @@ object Constrainable {
 
   /** Converts a value to an inox expression */
   def inoxExprOf[A: Constrainable](e: A) = implicitly[Constrainable[A]].produce(e)
+
+
+  // Helper for building ADTs
+  def _Cons[A: Constrainable](head: Expr, tail: Expr) = ADT(ADTType(Utils.cons, Seq(inoxTypeOf[A])), Seq(head, tail))
+  def _Nil[A: Constrainable] = ADT(ADTType(Utils.nil, Seq(inoxTypeOf[A])), Seq())
+  def _List[A: Constrainable](elements: Expr*): Expr = elements match {
+    case Nil => _Nil[A]
+    case head +: tail => _Cons[A](head, _List[A](tail: _*))
+  }
+  def _TextNode(value: Expr) = ADT(ADTType(Utils.textNode, Seq()), Seq(value))
+  def _Element(tag: Expr, children: Expr, attributes: Expr, styles: Expr) =
+    ADT(ADTType(Utils.element, Seq()), Seq(tag, children, attributes, styles))
+  def _WebElement(inner: Expr) = ADT(ADTType(Utils.webElement, Seq()), Seq(inner))
+  def _WebAttribute(key: Expr, value: Expr) = ADT(ADTType(Utils.webAttribute, Seq()), Seq(key, value))
+  def _WebStyle(key: Expr, value: Expr) = ADT(ADTType(Utils.webStyle, Seq()), Seq(key, value))
+  def _Some[A: Constrainable](e: Expr) = ADT(ADTType(Utils.some, Seq(inoxTypeOf[A])), Seq(e))
+  def _None[A: Constrainable] = ADT(ADTType(Utils.none, Seq(inoxTypeOf[A])), Seq())
+  def _Left[A: Constrainable, B: Constrainable](e: Expr) = ADT(ADTType(Utils.left, Seq(inoxTypeOf[A], inoxTypeOf[B])), Seq(e))
+  def _Right[A: Constrainable, B: Constrainable](e: Expr) = ADT(ADTType(Utils.right, Seq(inoxTypeOf[A], inoxTypeOf[B])), Seq(e))
 }
 import Constrainable._
 
