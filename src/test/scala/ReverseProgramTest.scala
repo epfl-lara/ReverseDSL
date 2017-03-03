@@ -193,7 +193,7 @@ class ReverseProgramTest extends FunSuite {
 
   test("Variable assigment same, outer structure") {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
-    val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("We are the children"))::Nil))::Nil)
+    val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
 
     val funDef = function(inoxTypeOf[Element])(
       let(vText.toVal, StringLiteral("Hello world"))(v =>
