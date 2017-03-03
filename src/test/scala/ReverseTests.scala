@@ -6,11 +6,6 @@ import inox.trees.dsl._
 
 import scala.reflect.runtime.universe.TypeTag
 
-
-object Make {
-  def apply[A: Constrainable, B](in: Id[A] => (A ~~> B)): (A ~~> B) = in(Id[A]())
-}
-
 class StringAppendTest extends FunSuite {
   import Constrainable._
   import ImplicitTuples._

@@ -78,6 +78,9 @@ object Utils {
     webAttributeConstructor,
     webStyleConstructor
   )
+
+  val defaultSymbols =
+    NoSymbols.withADTs(allConstructors)
 }
 
 /** A type which can be converted to inox types, and whose expressions can be obtained from inox expressions */
