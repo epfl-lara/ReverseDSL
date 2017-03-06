@@ -69,7 +69,14 @@ class ReverseProgramTest extends FunSuite {
     }
   }
 
-  def function(returnType: Type)(body: Expr) = mkFunDef(main)()(_ => (Seq(), returnType, _ => body))
+  private def isVarIn(id: Identifier, body: inox.trees.Expr) = {
+    inox.trees.exprOps.exists {
+      case v: Variable => v.id == id
+      case _ => false
+    }(body)
+  }
+
+  def function(body: Expr)(returnType: Type) = mkFunDef(main)()(_ => (Seq(), returnType, _ => body))
 
   val main = FreshIdentifier("main")
   val build = Variable(FreshIdentifier("build"), FunctionType(Seq(inoxTypeOf[String]), inoxTypeOf[Element]), Set())
@@ -83,9 +90,9 @@ class ReverseProgramTest extends FunSuite {
   }
 
   test("Change a constant output to another") {
-    val out = Element("div", WebElement(TextNode("Hello world"))::Nil)
-    val (prog, fun) = ReverseProgram.put(out, None, None, None).head
+    val out  = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val out2 = Element("pre", WebElement(TextNode("Hello code"))::Nil)
+    val (prog, fun) = ReverseProgram.put(out, None, None, None).head
     val (prog2, fun2) = ReverseProgram.put(out2, None, None, Some((prog, fun))).head
     checkProg(out2, fun2, prog2)
   }
@@ -94,9 +101,9 @@ class ReverseProgramTest extends FunSuite {
     val expected1 = "Hello world"
     val expected2 = "We are the children"
 
-    val funDef = function(inoxTypeOf[String])(
+    val funDef = function(
       let(vText.toVal, "Hello world")(v => v)
-    )
+    )(inoxTypeOf[String])
     val prog = mkProg(funDef)
     checkProg(expected1, funDef.id, prog)
 
@@ -106,11 +113,7 @@ class ReverseProgramTest extends FunSuite {
     // testing the shape.
     prog2 getBodyOf funId2 andMatch {
       case l@Let(vd, expr, body) =>
-        val v = vd.toVariable
-        if(!inox.trees.exprOps.exists{
-          case v2:Variable => v2.id == v.id
-          case _ => false
-        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
     }
   }
 
@@ -118,11 +121,10 @@ class ReverseProgramTest extends FunSuite {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("pre", WebElement(TextNode("Hello world"))::Nil)
 
-    val funDef = function(inoxTypeOf[Element])(
+    val funDef = function(
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
-      )
-    )
+      ))(inoxTypeOf[Element])
     val prog = mkProg(funDef)
     checkProg(expected1, funDef.id, prog)
 
@@ -132,11 +134,7 @@ class ReverseProgramTest extends FunSuite {
     // testing the shape.
     prog2 getBodyOf funId2 andMatch {
       case l@Let(vd, expr, body) =>
-        val v = vd.toVariable
-        if(!inox.trees.exprOps.exists{
-          case v2:Variable => v2.id == v.id
-          case _ => false
-        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
     }
   }
 
@@ -144,11 +142,10 @@ class ReverseProgramTest extends FunSuite {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
 
-    val funDef = function(inoxTypeOf[Element])(
+    val funDef = function(
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
-      )
-    )
+      ))(inoxTypeOf[Element])
     val prog = mkProg(funDef)
     checkProg(expected1, funDef.id, prog)
 
@@ -158,11 +155,7 @@ class ReverseProgramTest extends FunSuite {
     // testing the shape.
     prog2 getBodyOf funId2 andMatch {
       case l@Let(vd, expr, body) =>
-        val v = vd.toVariable
-        if(!inox.trees.exprOps.exists{
-          case v2:Variable => v2.id == v.id
-          case _ => false
-        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
     }
   }
 
@@ -173,13 +166,12 @@ class ReverseProgramTest extends FunSuite {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil, WebAttribute("class", "bgfont")::Nil)
     val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil, WebAttribute("class", "bgfontbig")::Nil)
 
-    val funDef = function(inoxTypeOf[Element])(
+    val funDef = function(
       let(text.toVal, "Hello world")(v =>
         let(attr.toVal, _WebAttribute("class", "bgfont"))(a =>
           _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](a), _List[WebStyle]())
         )
-      )
-    )
+      ))(inoxTypeOf[Element])
     val prog = mkProg(funDef)
     checkProg(expected1, funDef.id, prog)
 
@@ -189,16 +181,8 @@ class ReverseProgramTest extends FunSuite {
     // testing the shape.
     prog2 getBodyOf funId2 andMatch {
       case l@Let(vd, expr, l2@Let(vd2, expr2, body)) =>
-        val v = vd.toVariable
-        if(!inox.trees.exprOps.exists{
-          case v2:Variable => v2.id == v.id
-          case _ => false
-        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
-        val vv = vd2.toVariable
-        if(!inox.trees.exprOps.exists{
-          case v2:Variable => v2.id == vv.id
-          case _ => false
-        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd2.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
     }
   }
 
@@ -207,11 +191,10 @@ class ReverseProgramTest extends FunSuite {
     val out2      = Element("div", WebElement(TextNode("blue"))::Nil, Nil, WebStyle("color", "red")::Nil)
     val expected2 = Element("div", WebElement(TextNode("blue"))::Nil, Nil, WebStyle("color", "blue")::Nil)
 
-    val funDef = function(inoxTypeOf[Element])(
+    val funDef = function(
       let(vText.toVal, StringLiteral("red"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle](_WebStyle("color", v)))
-      )
-    )
+      ))(inoxTypeOf[Element])
     val prog = mkProg(funDef)
     checkProg[Element](initial, funDef.id, prog)
 
@@ -223,11 +206,10 @@ class ReverseProgramTest extends FunSuite {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
 
-    val funDef = function(inoxTypeOf[Element])(
+    val funDef = function(
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
-      )
-    )
+      ))(inoxTypeOf[Element])
     val prog = mkProg(funDef)
     checkProg[Element](expected1, funDef.id, prog)
 
@@ -237,12 +219,7 @@ class ReverseProgramTest extends FunSuite {
     // testing the shape.
     prog2 getBodyOf funId2 andMatch {
       case l@Let(vd, expr, body) =>
-        println(l)
-        val v = vd.toVariable
-        if(!inox.trees.exprOps.exists{
-          case v2:Variable => v2.id == v.id
-          case _ => false
-        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
     }
   }
 
@@ -251,19 +228,15 @@ class ReverseProgramTest extends FunSuite {
 
   test("Change a lambda's argument") {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
-    val funDef = function(inoxTypeOf[Element])(
+    val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
+    val funDef = function(
       let(build.toVal, lambda)(b =>
       Application(b, Seq("Hello world"))
-      )
-    )
+      ))(inoxTypeOf[Element])
     val prog = InoxProgram(ReverseProgram.context, Seq(funDef), allConstructors)
     checkProg(expected1, funDef.id, prog)
-
-    val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
-
     val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
     checkProg[Element](expected2, funId2, prog2)
-
     // testing the shape.
     prog2 getBodyOf funId2 andMatch {
       case Let(_, _, Application(_, Seq(StringLiteral(s)))) => s shouldEqual "We are the children"
@@ -272,26 +245,18 @@ class ReverseProgramTest extends FunSuite {
 
   test("Change a lambda's shape by wrapping an element") {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
-    val funDef = function(inoxTypeOf[Element])(
+    val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
+    val funDef = function(
       let(build.toVal, lambda)(b =>
       Application(b, Seq("Hello world"))
-      )
-    )
+      ))(inoxTypeOf[Element])
     val prog = mkProg(funDef)
-    val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
-
     val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
-
-
     checkProg(expected2, funId2, prog2)
-
     // testing that the lambda changed but keeps the variable.
     prog2 getBodyOf funId2 andMatch {
       case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
-        if(!inox.trees.exprOps.exists{
-          case v3:Variable => v2 == v2
-          case _ => false
-        }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
     }
   }
 
@@ -299,24 +264,18 @@ class ReverseProgramTest extends FunSuite {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(Element("br"))::WebElement(TextNode("Hello world"))::Nil)
 
-    val funDef = function(inoxTypeOf[Element])(
+    val funDef = function(
       let(build.toVal, lambda)(b =>
         Application(b, Seq("Hello world"))
-      )
-    )
-    val prog = mkProg(funDef)
+      ))(inoxTypeOf[Element])
 
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
-
+    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, mkProg(funDef), expected2)
     checkProg(expected2, funId2, prog2)
 
     // testing that the lambda changed but keeps the variable.
     prog2 getBodyOf funId2 andMatch {
       case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
-        if(!inox.trees.exprOps.exists{
-          case v3:Variable => v2 == v2
-          case _ => false
-        }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
     }
   }
 
