@@ -94,6 +94,18 @@ object ReverseProgram {
       }
     } #::: {
       val res: Stream[(Expr, Map[ValDef, Expr])] = function match {
+        // Values (including lambdas) should be immediately replaced by the new value
+        case l: Literal[_] => Stream((newOut, Map()))
+        case l: Lambda => Stream((newOut, Map())) // TODO: Check for closures
+
+        // Variables are assigned the given value.
+        case v@Variable(id, tpe, flags) =>
+          Stream((v, Map(v.toVal -> newOut)))
+
+        // Let expressions eval their variable, reverse their body and then their assigning expression
+        // It comes from the fact that
+        // let x = b in c[x]    is equivalent to      Application((\x. c[x]), (b))
+        // In theory with rewriting it could be dropped, but
         case Let(vd@ValDef(id, tpe, flags), expr, body) =>
           val currentVdValue = evalWithCache(letm(currentValues) in expr)
 
@@ -103,9 +115,6 @@ object ReverseProgram {
                newFunction = Let(vd, newExpr, newBody)
                finalAssignments = (newAssignment ++ newAssignment2) - vd
           } yield (newFunction, finalAssignments)
-
-        case v@Variable(id, tpe, flags) =>
-          Stream((v, Map(v.toVal -> newOut))) // newOut is a value
 
         case ADT(ADTType(tp, tpArgs), args) =>
           newOut match {
@@ -139,31 +148,31 @@ object ReverseProgram {
             case a => // Another value in the type hierarchy. But Maybe sub-trees are shared !
               throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
           }
-        case l: Literal[_] => Stream((newOut, Map()))
-        case l: Lambda => Stream((newOut, Map())) // A Lambda is a literal value.
 
-        case m@Application(v: Variable, arguments) =>
+        case m@Application(lambdaExpr, arguments) =>
           // Prioritize reversing lambdas first if it exists. Later: compile the reverse methods to be faster.
-          val originalValue = currentValues.getOrElse(v.toVal, evalWithCache(letm(currentValues) in v))
+          val originalValue = lambdaExpr match {
+            case v: Variable => currentValues.getOrElse(v.toVal, evalWithCache(letm(currentValues) in v))
+            case l: Lambda => evalWithCache(letm(currentValues) in l)
+          }
           originalValue match {
             case l@Lambda(argNames, body) =>
-              // First, we try to inverse its arguments - but it's built in !
-              // Second, we try to inverse the body of the lambda itself
               val argumentValues = argNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
-              val repaired = repair(body, argumentValues, l.getType, newOut)
               //println("body before: " + body)
               //println("body after: " + repaired)
-              for {(newBody, assignments) <- repaired
-                   isSameBody = newBody == body
-                   //_ = println(s"isNewBody? : ${isSameBody}")
-                   newLambda = if (isSameBody) l else Lambda(argNames, newBody)
-                   //_ = println(s"isNewBody? : ${isSameBody}")
-                   newArgumentsAssignments <- inox.utils.StreamUtils.cartesianProduct(arguments.zip(argNames).map { case (arg, v) =>
+              for { (newBody, assignments) <- repair(body, argumentValues, l.getType, newOut) // TODO: Incorporate changes in lambdas.
+                    newArgumentsAssignments <- inox.utils.StreamUtils.cartesianProduct(arguments.zip(argNames).map { case (arg, v) =>
                      repair(arg, currentValues, v.getType, assignments.getOrElse(v, argumentValues(v)))
                    })
                    newArguments = newArgumentsAssignments.map(_._1)
-                   finalApplication = Application(v, newArguments)
-                   newAssignments = Map[ValDef, Expr]() ++ (if (isSameBody) Nil else List(v.toVal -> newLambda)) ++
+                   isSameBody = newBody == body
+                   newLambda = if (isSameBody) l else Lambda(argNames, newBody)
+                   (newAppliee, assignments2) <- lambdaExpr match {
+                     case v: Variable => Stream(v -> (if(isSameBody) Map() else Map(v.toVal -> newLambda)))
+                     case l: Lambda => repair(lambdaExpr, currentValues, l.getType, newLambda)
+                   }
+                   finalApplication = Application(newAppliee, newArguments)
+                   newAssignments = Map[ValDef, Expr]() ++ assignments2 ++
                      newArgumentsAssignments.flatMap(_._2.toList) // TODO: Deal with variable value merging like above.
               } yield {
                 (finalApplication: Expr, newAssignments)

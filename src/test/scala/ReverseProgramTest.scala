@@ -128,7 +128,7 @@ class ReverseProgramTest extends FunSuite {
     val prog = mkProg(funDef)
     checkProg(expected1, funDef.id, prog)
 
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
+    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
     checkProg(expected2, funId2, prog2)
 
     // testing the shape.
@@ -149,7 +149,7 @@ class ReverseProgramTest extends FunSuite {
     val prog = mkProg(funDef)
     checkProg(expected1, funDef.id, prog)
 
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
+    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
     checkProg(expected2, funId2, prog2)
 
     // testing the shape.
@@ -175,7 +175,7 @@ class ReverseProgramTest extends FunSuite {
     val prog = mkProg(funDef)
     checkProg(expected1, funDef.id, prog)
 
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
+    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
     checkProg(expected2, funId2, prog2)
 
     // testing the shape.
@@ -199,13 +199,13 @@ class ReverseProgramTest extends FunSuite {
     val prog = mkProg(funDef)
     checkProg[Element](initial, funDef.id, prog)
 
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, out2)
+    val (prog2, funId2) = repairProgram(funDef, prog, out2)
     checkProg(expected2, funId2, prog2)
 
-    val (prog3: InoxProgram, funId3: FunctionEntry) = repairProgram(funDef, prog, out2bis)
+    val (prog3, funId3) = repairProgram(funDef, prog, out2bis)
     checkProg(expected2, funId3, prog3)
 
-    val (prog4: InoxProgram, funId4: FunctionEntry) = repairProgram(funDef, prog, out2)
+    val (prog4, funId4) = repairProgram(funDef, prog, out2)
     checkProg(expected2, funId4, prog4)
   }
 
@@ -220,7 +220,7 @@ class ReverseProgramTest extends FunSuite {
     val prog = mkProg(funDef)
     checkProg[Element](expected1, funDef.id, prog)
 
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
+    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
     checkProg(expected2, funId2, prog2)
 
     // testing the shape.
@@ -233,78 +233,102 @@ class ReverseProgramTest extends FunSuite {
   val lambda = Lambda(Seq(v.toVal),
     _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]()))
 
-  test("Change a lambda's argument") {
-    val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
-    val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
-    val funDef = function(
-      let(build.toVal, lambda)(b =>
-      Application(b, Seq("Hello world"))
-      ))(inoxTypeOf[Element])
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
-    checkProg[Element](expected2, funId2, prog2)
-    // testing the shape.
-    prog2 getBodyOf funId2 andMatch {
-      case Let(_, _, Application(_, Seq(StringLiteral(s)))) => s shouldEqual "We are the children"
+  for((funDef, msg) <- Seq(
+    (function(Application(lambda, Seq("Hello world")))(inoxTypeOf[Element]),
+      "change an applied lambda's argument"),
+    (function(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))))(inoxTypeOf[Element]),
+      "Change a variable lambda's argument")
+  )) test(msg) {
+      val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
+      val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
+      val prog = mkProg(funDef)
+      checkProg(expected1, funDef.id, prog)
+      val (prog2, funId2) = repairProgram(funDef, prog, expected2)
+      checkProg[Element](expected2, funId2, prog2)
+      // testing the shape.
+      prog2 getBodyOf funId2 andMatch {
+        case Let(_, _, Application(_, Seq(StringLiteral(s)))) if msg == "Change a variable lambda's argument"
+          => s shouldEqual "We are the children"
+        case Application(_, Seq(StringLiteral(s))) if msg == "change an applied lambda's argument"
+          => s shouldEqual "We are the children"
+      }
     }
-  }
 
-  test("Change a lambda's shape by wrapping an element") {
-    val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
-    val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
-    val funDef = function(
-      let(build.toVal, lambda)(b =>
-      Application(b, Seq("Hello world"))
-      ))(inoxTypeOf[Element])
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
-    checkProg(expected2, funId2, prog2)
-    // testing that the lambda changed but keeps the variable.
-    prog2 getBodyOf funId2 andMatch {
-      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
-        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+  for((funDef, msg) <- Seq(
+    (function(Application(lambda, Seq("Hello world")))(inoxTypeOf[Element]),
+      "Change an applied lambda's shape by wrapping an element"),
+    (function(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))))(inoxTypeOf[Element]),
+      "Change a variable lambda's shape by wrapping an element")
+  )) test(msg) {
+      val expected1 = Element("div", WebElement(TextNode("Hello world")) :: Nil)
+      val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world")) :: Nil)) :: Nil)
+      val prog = mkProg(funDef)
+      checkProg(expected1, funDef.id, prog)
+      val (prog2, funId2) = repairProgram(funDef, prog, expected2)
+      checkProg(expected2, funId2, prog2)
+      // testing that the lambda changed but keeps the variable.
+      prog2 getBodyOf funId2 andMatch {
+        case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
+          if msg == "Change a variable lambda's shape by wrapping an element"
+        =>
+          if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
+        case Application(newLambda@Lambda(Seq(v2), body), _)
+          if msg == "Change an applied lambda's shape by wrapping an element"
+          =>
+          if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
+      }
     }
-  }
 
   val lambda2 = Lambda(Seq(v.toVal),
     _Element("div", _List[WebElement](_WebElement(_Element("b", _List[WebElement](_WebElement(_TextNode(v))),
       _List[WebAttribute](), _List[WebStyle]()))), _List[WebAttribute](), _List[WebStyle]()))
 
-  test("Change a lambda's shape by unwrapping an element") {
+  for((funDef, msg) <- Seq(
+    (function(Application(lambda2, Seq("Hello world")))(inoxTypeOf[Element]),
+      "Change an applied lambda's shape by unwrapping an element"),
+    (function(let(build.toVal, lambda2)(b => Application(b, Seq("Hello world"))))(inoxTypeOf[Element]),
+      "Change a variable lambda's shape by unwrapping an element")
+  )) test(msg) {
     val expected1 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
     val expected2 = Element("div", WebElement(TextNode("Hello world"))::Nil)
-    val funDef = function(
-      let(build.toVal, lambda2)(b =>
-        Application(b, Seq("Hello world"))
-      ))(inoxTypeOf[Element])
     val prog = mkProg(funDef)
     checkProg(expected1, funDef.id, prog)
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
+    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
     checkProg(expected2, funId2, prog2)
     // testing that the lambda changed but keeps the variable.
     prog2 getBodyOf funId2 andMatch {
-      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
+      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
+        if msg == "Change a variable lambda's shape by unwrapping an element"
+      =>
         if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+      case Application(newLambda@Lambda(Seq(v2), body), _)
+        if msg == "Change an applied lambda's shape by unwrapping an element"
+      => {
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+      }
     }
   }
 
-  test("Change a lambda's shape by inserting a constant element") {
+  for((funDef, msg) <- Seq(
+    (function(Application(lambda, Seq("Hello world")))(inoxTypeOf[Element]),
+      "Change an applied lambda's shape by inserting a constant element"),
+    (function(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))))(inoxTypeOf[Element]),
+      "Change a variable lambda's shape by inserting a constant element")
+  ))  test(msg) {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(Element("br"))::WebElement(TextNode("Hello world"))::Nil)
-
-    val funDef = function(
-      let(build.toVal, lambda)(b =>
-        Application(b, Seq("Hello world"))
-      ))(inoxTypeOf[Element])
-
-    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, mkProg(funDef), expected2)
+    val (prog2, funId2) = repairProgram(funDef, mkProg(funDef), expected2)
     checkProg(expected2, funId2, prog2)
 
     // testing that the lambda changed but keeps the variable.
     prog2 getBodyOf funId2 andMatch {
-      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
+      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
+        if msg == "Change a variable lambda's shape by inserting a constant element"
+      =>
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+      case Application(newLambda@Lambda(Seq(v2), body), _)
+        if msg == "Change an applied lambda's shape by inserting a constant element"
+      =>
         if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
     }
   }
@@ -336,10 +360,13 @@ class ReverseProgramTest extends FunSuite {
   }
 
   /* Add tests for:
+     Closures
      List mapping, flatten, flatmap, filter.
      Multiple arguments changed in lambdas
      String concatenation
      Integers operations
      Migrate to constraint solving?
+
+     XML transformation as in the paper.
     */
 }
