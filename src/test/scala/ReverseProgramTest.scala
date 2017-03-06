@@ -63,7 +63,7 @@ class ReverseProgramTest extends FunSuite {
         if(test.isDefinedAt(body)) {
           test(body)
         } else {
-          fail(s"Unexpected shape $body")
+          fail(s"Unexpected shape:\n$body")
         }
       }
     }
@@ -233,7 +233,7 @@ class ReverseProgramTest extends FunSuite {
       let(build.toVal, lambda)(b =>
       Application(b, Seq("Hello world"))
       ))(inoxTypeOf[Element])
-    val prog = InoxProgram(ReverseProgram.context, Seq(funDef), allConstructors)
+    val prog = mkProg(funDef)
     checkProg(expected1, funDef.id, prog)
     val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
     checkProg[Element](expected2, funId2, prog2)

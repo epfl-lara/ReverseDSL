@@ -34,7 +34,7 @@ object ReverseProgram {
     val prevBody = prevFunction.fullBody
     val newMain = FreshIdentifier("main")
     implicit val cache = new mutable.HashMap[Expr, Expr]
-    for {(newOutExpr, _) <- repair(prevBody, prevFunction.returnType, outExpr, e => e)
+    for {(newOutExpr, _) <- repair(prevBody, Map(), prevFunction.returnType, outExpr)
          newFunDef = mkFunDef(newMain)()(stp => (Seq(), prevFunction.returnType, _ => newOutExpr))
          newProgram = InoxProgram(context, Seq(newFunDef), allConstructors)
     } yield (newProgram, newMain)
@@ -50,27 +50,40 @@ object ReverseProgram {
     }
   })
 
+  private case class letm(v: Map[ValDef, Expr]) {
+    @inline def in(res: Expr) = {
+      (res /: v) {
+        case (res, (key, value)) => let(key, value)(_ => res)
+      }
+    }
+  }
+
   @inline def castOrFail[A, B <: A](a: A): B =
     a.asInstanceOf[B]
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * @param function An expression that computed the value before newOut
+    * @param currentValues Values from which function depends, with theyr original values.
+    * @param functionType The declared return type of the function
     * @param newOut A *value* that prevOutExpr should produce
+    * @return A set of possible expressions, along with a set of possible assignments to input variables.
     **/
-  def repair(function: Expr, functionType: Type, newOut: Expr, letPrevAssignments: Expr => Expr)(implicit symbols: Symbols, cache: Cache): Stream[(Expr, Map[ValDef, Expr])] = {
+  def repair(function: Expr, currentValues: Map[ValDef, Expr], functionType: Type, newOut: Expr)(implicit symbols: Symbols, cache: Cache): Stream[(Expr, Map[ValDef, Expr])] = {
     if(function == newOut) return Stream((function, Map()))
 
     function match {
       case Let(vd@ValDef(id, tpe, flags), expr, body) =>
-        for {(newBody, newAssignment) <- repair(body, functionType, newOut, ((x: Expr) => Let(vd, expr, x)) andThen letPrevAssignments ) // Later: Change assignments to constraints
+        val currentVdValue = evalWithCache(letm(currentValues) in expr)
+
+        for {(newBody, newAssignment) <- repair(body, currentValues + (vd -> currentVdValue), functionType, newOut ) // Later: Change assignments to constraints
               newValValue = newAssignment.getOrElse(vd, expr)
-             (newExpr, newAssignment2) <- repair(expr, tpe, newValValue, letPrevAssignments)
+             (newExpr, newAssignment2) <- repair(expr, currentValues, tpe, newValValue)
               newFunction = Let(vd, newExpr, newBody)
               finalAssignments = (newAssignment ++ newAssignment2) - vd
         } yield (newFunction, finalAssignments)
 
       case v@Variable(id, tpe, flags) =>
-        Stream((v, Map(v.toVal -> newOut))) // newOut should be a value
+        Stream((v, Map(v.toVal -> newOut))) // newOut is a value
 
       case ADT(ADTType(tp, tpArgs), args) =>
         newOut match {
@@ -81,7 +94,7 @@ object ReverseProgram {
             val adt = castOrFail[ADTDefinition, ADTConstructor](symbols.adts(tp))
             val tadt = adt.typed(tpArgs)
             val seqOfStreamSolutions = (args.zip(args2).zip(tadt.fields).map{ case ((aFun, aVal), avd) =>
-              repair(aFun, avd.getType, aVal, letPrevAssignments).map((_, avd, () => evalWithCache(letPrevAssignments(aFun))))
+              repair(aFun, currentValues, avd.getType, aVal).map((_, avd, () => evalWithCache(letm(currentValues) in aFun)))
             })
             val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
             for{ seq <- streamOfSeqSolutions
@@ -91,7 +104,7 @@ object ReverseProgram {
                        println("Warning: Merging following assignments")
                        println(mm)
                        println(m)
-                       val realValue = evalWithCache(letPrevAssignments(m.keys.head.toVariable))
+                       val realValue = evalWithCache(letm(currentValues) in m.keys.head.toVariable)
                        println(s"Real value of ${m.keys.head}: $realValue")
                        println(s"Value which was going to update: ${m(m.keys.head)}")
                        if(realValue == m(m.keys.head)) { // The value did not change ! We shall not put it in the assignment map.
@@ -109,7 +122,7 @@ object ReverseProgram {
               (ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
             }
           case ADT(ADTType(tp2, tpArgs2), args2) => // Maybe the newOut just wrapped the previous value of function
-            val functionValue = evalWithCache(letPrevAssignments(function))
+            val functionValue = evalWithCache(letm(currentValues) in function)
 
             // Check if the old value is inside the new value, in which case we add a wrapper.
             if(exprOps.exists{
@@ -132,10 +145,16 @@ object ReverseProgram {
             }
 
           case a => // Another value in the type hierarchy. But Maybe sub-trees are shared !
-
-            ???
+            throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
         }
-      case _ => Stream((newOut, Map()))
+      case l: Literal[_] => Stream((newOut, Map()))
+      case m@Application(lambdaExpr, arguments) =>
+        // Prioritize reversing lambdas first if it exists. Later: compile the reverse methods to be faster.
+
+        throw new Exception(s"Don't know how to handle this case : $m of type ${m.getClass.getName}")
+
+      case m => throw new Exception(s"Don't know how to handle this case : $m of type ${m.getClass.getName}")
+        ??? // Stream((newOut, Map()))
     }
   }
 }
