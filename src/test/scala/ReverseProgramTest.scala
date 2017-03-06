@@ -251,6 +251,29 @@ class ReverseProgramTest extends FunSuite {
       Application(b, Seq("Hello world"))
       ))(inoxTypeOf[Element])
     val prog = mkProg(funDef)
+    checkProg(expected1, funDef.id, prog)
+    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
+    checkProg(expected2, funId2, prog2)
+    // testing that the lambda changed but keeps the variable.
+    prog2 getBodyOf funId2 andMatch {
+      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+    }
+  }
+
+  val lambda2 = Lambda(Seq(v.toVal),
+    _Element("div", _List[WebElement](_WebElement(_Element("b", _List[WebElement](_WebElement(_TextNode(v))),
+      _List[WebAttribute](), _List[WebStyle]()))), _List[WebAttribute](), _List[WebStyle]()))
+
+  test("Change a lambda's shape by unwrapping an element") {
+    val expected1 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
+    val expected2 = Element("div", WebElement(TextNode("Hello world"))::Nil)
+    val funDef = function(
+      let(build.toVal, lambda2)(b =>
+        Application(b, Seq("Hello world"))
+      ))(inoxTypeOf[Element])
+    val prog = mkProg(funDef)
+    checkProg(expected1, funDef.id, prog)
     val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
     checkProg(expected2, funId2, prog2)
     // testing that the lambda changed but keeps the variable.

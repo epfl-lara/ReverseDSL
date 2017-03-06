@@ -62,6 +62,10 @@ object ReverseProgram {
     a.asInstanceOf[B]
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
+    * Basically, we solve the problem:
+    *  let variables = values in function = newOut
+    * by trying to change the variables values, or the function body itself.
+    *
     * @param function An expression that computed the value before newOut
     * @param currentValues Values from which function depends, with theyr original values.
     * @param functionType The declared return type of the function
@@ -69,92 +73,174 @@ object ReverseProgram {
     * @return A set of possible expressions, along with a set of possible assignments to input variables.
     **/
   def repair(function: Expr, currentValues: Map[ValDef, Expr], functionType: Type, newOut: Expr)(implicit symbols: Symbols, cache: Cache): Stream[(Expr, Map[ValDef, Expr])] = {
-    if(function == newOut) return Stream((function, Map()))
+    //println(s"\n@solving ${currentValues.map{ case (k, v) => s"val ${k.id} = $v\n"}.mkString("")}$function = $newOut")
+    if(function == newOut)
+      return { //println("@return original");
+        Stream((function, Map())) }
 
-    function match {
-      case Let(vd@ValDef(id, tpe, flags), expr, body) =>
-        val currentVdValue = evalWithCache(letm(currentValues) in expr)
+    lazy val functionValue = evalWithCache(letm(currentValues) in function) // TODO: Optimize this ?
 
-        for {(newBody, newAssignment) <- repair(body, currentValues + (vd -> currentVdValue), functionType, newOut ) // Later: Change assignments to constraints
-              newValValue = newAssignment.getOrElse(vd, expr)
-             (newExpr, newAssignment2) <- repair(expr, currentValues, tpe, newValValue)
-              newFunction = Let(vd, newExpr, newBody)
-              finalAssignments = (newAssignment ++ newAssignment2) - vd
-        } yield (newFunction, finalAssignments)
+    //val res: Stream[(Expr, Map[ValDef, Expr])] =
+    {
+      functionType match {
+        case a: ADTType =>
+          function match {
+            case l: Let => Stream.empty[(Expr, Map[ValDef, Expr])] // No need to wrap a let expression, we can always do this later. Indeed,
+              //f{val x = A; B} = {val x = A; f(B)}
+            case _ =>
+              maybeWrap(function, newOut, functionValue) #::: maybeUnwrap(function, newOut, functionValue)
+          }
+        case _ => Stream.empty[(Expr, Map[ValDef, Expr])]
+      }
+    } #::: {
+      val res: Stream[(Expr, Map[ValDef, Expr])] = function match {
+        case Let(vd@ValDef(id, tpe, flags), expr, body) =>
+          val currentVdValue = evalWithCache(letm(currentValues) in expr)
 
-      case v@Variable(id, tpe, flags) =>
-        Stream((v, Map(v.toVal -> newOut))) // newOut is a value
+          for {(newBody, newAssignment) <- repair(body, currentValues + (vd -> currentVdValue), functionType, newOut) // Later: Change assignments to constraints
+               newValValue = newAssignment.getOrElse(vd, expr)
+               (newExpr, newAssignment2) <- repair(expr, currentValues, tpe, newValValue)
+               newFunction = Let(vd, newExpr, newBody)
+               finalAssignments = (newAssignment ++ newAssignment2) - vd
+          } yield (newFunction, finalAssignments)
 
-      case ADT(ADTType(tp, tpArgs), args) =>
-        newOut match {
-          case ADT(ADTType(tp2, tpArgs2), args2) if tp2 == tp && tpArgs2 == tpArgs => // Same type ! Maybe the arguments will change or move.
-            if(args.length == 0) {
-              return Stream((newOut, Map()))
-            } // Now args.length > 0
-            val adt = castOrFail[ADTDefinition, ADTConstructor](symbols.adts(tp))
-            val tadt = adt.typed(tpArgs)
-            val seqOfStreamSolutions = (args.zip(args2).zip(tadt.fields).map{ case ((aFun, aVal), avd) =>
-              repair(aFun, currentValues, avd.getType, aVal).map((_, avd, () => evalWithCache(letm(currentValues) in aFun)))
-            })
-            val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
-            for{ seq <- streamOfSeqSolutions
-                 reduced = ((List[Expr](), Map[ValDef, Expr]()) /: seq) {
-                   case ((ls, mm), ((l, m), field, recompute)) =>
-                     if((mm.keys.toSet intersect m.keys.toSet).nonEmpty) { // TODO: Rewrite this so that we discard values which did not changed in the intersection.
-                       println("Warning: Merging following assignments")
-                       println(mm)
-                       println(m)
-                       val realValue = evalWithCache(letm(currentValues) in m.keys.head.toVariable)
-                       println(s"Real value of ${m.keys.head}: $realValue")
-                       println(s"Value which was going to update: ${m(m.keys.head)}")
-                       if(realValue == m(m.keys.head)) { // The value did not change ! We shall not put it in the assignment map.
-                         (l::ls, mm)
-                       } else {
-                         (l::ls, mm ++ m)
-                       }
-                     } else {
-                       (l::ls, mm ++ m)
-                     }
-                 } // TODO: Will be wrong in case of conflicts. Need to replace only changed values.
-                 newArgs = reduced._1.reverse
-                 assignments = reduced._2
-            } yield {
-              (ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
-            }
-          case ADT(ADTType(tp2, tpArgs2), args2) => // Maybe the newOut just wrapped the previous value of function
-            val functionValue = evalWithCache(letm(currentValues) in function)
+        case v@Variable(id, tpe, flags) =>
+          Stream((v, Map(v.toVal -> newOut))) // newOut is a value
 
-            // Check if the old value is inside the new value, in which case we add a wrapper.
-            if(exprOps.exists{
-              case t if t == functionValue => true
-              case _ => false
-            }(newOut)) {
-              // We wrap the computation of functionValue with ADT construction
+        case ADT(ADTType(tp, tpArgs), args) =>
+          newOut match {
+            case ADT(ADTType(tp2, tpArgs2), args2) if tp2 == tp && tpArgs2 == tpArgs => // Same type ! Maybe the arguments will change or move.
+              if (args.length == 0) {
+                return {
+                  //println("@return original");
+                  Stream((newOut, Map()))
+                }
+              }
+              // Now args.length > 0
+              val adt = castOrFail[ADTDefinition, ADTConstructor](symbols.adts(tp))
+              val tadt = adt.typed(tpArgs)
+              val seqOfStreamSolutions = (args.zip(args2).zip(tadt.fields).map { case ((aFun, aVal), avd) =>
+                repair(aFun, currentValues, avd.getType, aVal).map((_, avd, () => evalWithCache(letm(currentValues) in aFun)))
+              })
+              val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
+              for {seq <- streamOfSeqSolutions
+                   reduced = combineResults(seq, currentValues)
+                   newArgs = reduced._1.reverse
+                   assignments = reduced._2
+              } yield {
+                (ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
+              }
+            case ADT(ADTType(tp2, tpArgs2), args2) => // Maybe the newOut just wrapped the previous value of function
+              // TODO: If anything else but has been wrapped from the output, should be able to do this.
+              //val functionValue = evalWithCache(letm(currentValues) in function)
+              //maybeWrap(function, newOut, functionValue)
+              Stream.empty
 
-              val newFunction = exprOps.postMap{
-                case t if t == functionValue => Some(function)
-                case _ => None
-              }(newOut)
+            case a => // Another value in the type hierarchy. But Maybe sub-trees are shared !
+              throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
+          }
+        case l: Literal[_] => Stream((newOut, Map()))
+        case l: Lambda => Stream((newOut, Map())) // A Lambda is a literal value.
 
-              Stream((newFunction, Map()))
-            } else {
-              println(s"After evaluation, got $functionValue")
-              println(s"Original program $function")
-              println(s"Wanting to plug-in $newOut")
-              ???
-            }
+        case m@Application(v: Variable, arguments) =>
+          // Prioritize reversing lambdas first if it exists. Later: compile the reverse methods to be faster.
+          val originalValue = currentValues.getOrElse(v.toVal, evalWithCache(letm(currentValues) in v))
+          originalValue match {
+            case l@Lambda(argNames, body) =>
+              // First, we try to inverse its arguments - but it's built in !
+              // Second, we try to inverse the body of the lambda itself
+              val argumentValues = argNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
+              val repaired = repair(body, argumentValues, l.getType, newOut)
+              //println("body before: " + body)
+              //println("body after: " + repaired)
+              for {(newBody, assignments) <- repaired
+                   isSameBody = newBody == body
+                   //_ = println(s"isNewBody? : ${isSameBody}")
+                   newLambda = if (isSameBody) l else Lambda(argNames, newBody)
+                   //_ = println(s"isNewBody? : ${isSameBody}")
+                   newArgumentsAssignments <- inox.utils.StreamUtils.cartesianProduct(arguments.zip(argNames).map { case (arg, v) =>
+                     repair(arg, currentValues, v.getType, assignments.getOrElse(v, argumentValues(v)))
+                   })
+                   newArguments = newArgumentsAssignments.map(_._1)
+                   finalApplication = Application(v, newArguments)
+                   newAssignments = Map[ValDef, Expr]() ++ (if (isSameBody) Nil else List(v.toVal -> newLambda)) ++
+                     newArgumentsAssignments.flatMap(_._2.toList) // TODO: Deal with variable value merging like above.
+              } yield {
+                (finalApplication: Expr, newAssignments)
+              }
+            case _ => throw new Exception(s"Don't know how to handle this case : $m of type ${m.getClass.getName}")
+          }
 
-          case a => // Another value in the type hierarchy. But Maybe sub-trees are shared !
-            throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
-        }
-      case l: Literal[_] => Stream((newOut, Map()))
-      case m@Application(lambdaExpr, arguments) =>
-        // Prioritize reversing lambdas first if it exists. Later: compile the reverse methods to be faster.
-
+        case anyExpr =>
+          //val functionValue = evalWithCache(letm(currentValues) in function)
+          println(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue\nand I will try to wrap it to match $newOut")
+          //maybeWrap(function, newOut, functionValue)
+          Stream.empty
+        /*
         throw new Exception(s"Don't know how to handle this case : $m of type ${m.getClass.getName}")
-
-      case m => throw new Exception(s"Don't know how to handle this case : $m of type ${m.getClass.getName}")
         ??? // Stream((newOut, Map()))
+        */
+      }
+      res
+    }
+    //println(s"@return $res")
+    //res
+  }
+
+  private def combineResults(seq: List[((Expr, Map[ValDef,Expr]), ValDef, () => inox.trees.Expr)], currentValues: Map[ValDef,Expr])
+            (implicit symbols: Symbols, cache: Cache) =
+    ((List[Expr](), Map[ValDef, Expr]()) /: seq) {
+    case ((ls, mm), ((l, m), field, recompute)) =>
+      if ((mm.keys.toSet intersect m.keys.toSet).nonEmpty && {
+        // Compare new assignment with the original value.
+        val realValue = evalWithCache(letm(currentValues) in m.keys.head.toVariable)
+        realValue == m(m.keys.head)
+      }) {
+        // The value did not change ! We shall not put it in the assignment map.
+        (l :: ls, mm)
+      } else (l :: ls, mm ++ m)
+  }
+
+  private def maybeWrap(function: Expr, newOut: Expr, functionValue: Expr): Stream[(Expr, Map[ValDef, Expr])] = {
+    // Checks if the old value is inside the new value, in which case we add a wrapper.
+    if (exprOps.exists {
+      case t if t == functionValue => true
+      case _ => false
+    }(newOut)) {
+      // We wrap the computation of functionValue with ADT construction
+
+      val newFunction = exprOps.postMap {
+        case t if t == functionValue => Some(function)
+        case _ => None
+      }(newOut)
+
+      Stream((newFunction, Map()))
+    } else {
+      println(s"After evaluation, got $functionValue")
+      println(s"Original program $function")
+      println(s"Wanting to plug-in $newOut")
+      println(s"Returning empty stream")
+      Stream.empty
+    }
+  }
+
+  // Should be called on functions ADT only.
+  private def maybeUnwrap(function: Expr, newOut: Expr, functionValue: Expr): Stream[(Expr, Map[ValDef, Expr])] = {
+    if(functionValue == newOut) return Stream((function, Map()))
+
+    (function, functionValue) match {
+      case (ADT(ADTType(tp, tpArgs), args), ADT(ADTType(tp2, tpArgs2), argsValue)) =>
+        // Checks if the old value is inside the new value, in which case we add a wrapper.
+        argsValue.toStream.zipWithIndex.filter{ case (arg, i) =>
+          exprOps.exists {
+            case t if t == newOut => true
+            case _ => false
+          }(arg)
+        }.flatMap{ case (arg, i) =>
+          maybeUnwrap(args(i), newOut, arg)
+        }
+
+      case _ => Stream.empty
     }
   }
 }
