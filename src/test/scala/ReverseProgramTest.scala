@@ -189,6 +189,7 @@ class ReverseProgramTest extends FunSuite {
   test("Variable assigment used twice") {
     val initial   = Element("div", WebElement(TextNode("red"))::Nil,  Nil, WebStyle("color", "red")::Nil)
     val out2      = Element("div", WebElement(TextNode("blue"))::Nil, Nil, WebStyle("color", "red")::Nil)
+    val out2bis      = Element("div", WebElement(TextNode("red"))::Nil, Nil, WebStyle("color", "blue")::Nil)
     val expected2 = Element("div", WebElement(TextNode("blue"))::Nil, Nil, WebStyle("color", "blue")::Nil)
 
     val funDef = function(
@@ -200,6 +201,12 @@ class ReverseProgramTest extends FunSuite {
 
     val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, out2)
     checkProg(expected2, funId2, prog2)
+
+    val (prog3: InoxProgram, funId3: FunctionEntry) = repairProgram(funDef, prog, out2bis)
+    checkProg(expected2, funId3, prog3)
+
+    val (prog4: InoxProgram, funId4: FunctionEntry) = repairProgram(funDef, prog, out2)
+    checkProg(expected2, funId4, prog4)
   }
 
   test("Variable assigment same, outer structure") {
@@ -302,11 +309,37 @@ class ReverseProgramTest extends FunSuite {
     }
   }
 
+  test("Change a variable which went through a lambda") {
+    val expected1 = Element("div", WebElement(TextNode("Hello world"))::WebElement(TextNode("Hello world"))::Nil)
+    val expected2 = Element("div", WebElement(TextNode("We are the children"))::WebElement(TextNode("Hello world"))::Nil)
+    val expected2bis = Element("div", WebElement(TextNode("Hello world"))::WebElement(TextNode("We are the children"))::Nil)
+    val expected3 = Element("div", WebElement(TextNode("We are the children"))::WebElement(TextNode("We are the children"))::Nil)
+    val lambda = Lambda(Seq(v.toVal),
+      _Element("div", _List[WebElement](_WebElement(_TextNode(v)),_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]()))
+
+    val funDef = function(
+      let(build.toVal, lambda)(b =>
+        Application(b, Seq("Hello world"))
+      ))(inoxTypeOf[Element])
+
+    val prog = mkProg(funDef)
+    checkProg(expected1, funDef.id, prog)
+
+    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
+    checkProg(expected3, funId2, prog2)
+
+    val (prog3, funId3) = repairProgram(funDef, prog, expected2bis)
+    checkProg(expected3, funId3, prog3)
+
+    val (prog4, funId4) = repairProgram(funDef, prog, expected3)
+    checkProg(expected3, funId4, prog4)
+  }
+
   /* Add tests for:
-     change in the shape of the way the program is built.
-     change in a sub-function
      List mapping, flatten, flatmap, filter.
-
-
+     Multiple arguments changed in lambdas
+     String concatenation
+     Integers operations
+     Migrate to constraint solving?
     */
 }
