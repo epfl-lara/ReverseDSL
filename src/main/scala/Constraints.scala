@@ -30,6 +30,9 @@ object Utils {
   val leftConstructor = mkConstructor(left)("A", "B")(Some(either))(stp => Seq(ValDef(value, stp(0))))
   val rightConstructor = mkConstructor(right)("A", "B")(Some(either))(stp => Seq(ValDef(value, stp(1))))
 
+  val xmlNode: Identifier = FreshIdentifier("Node")
+  val xmlAttribute: Identifier = FreshIdentifier("Attribute")
+
   val webTree: Identifier = FreshIdentifier("WebTree")
   val webElement: Identifier = FreshIdentifier("WebElement")
   val inner: Identifier = FreshIdentifier("inner")
@@ -53,10 +56,19 @@ object Utils {
         ValDef(children, T(list)(T(webElement)())),
         ValDef(attributes, T(list)(T(webAttribute)())),
         ValDef(styles, T(list)(T(webStyle)()))))
-  val webAttributeConstructor = mkConstructor(webAttribute)()(Some(webTree))(stp => Seq(
+  val webAttributeConstructor = mkConstructor(webAttribute)()(Some(webTree))(_ => Seq(
         ValDef(name, StringType),
         ValDef(value, StringType)))
-  val webStyleConstructor = mkConstructor(webStyle)()(Some(webTree))(stp => Seq(
+  val webStyleConstructor = mkConstructor(webStyle)()(Some(webTree))(_ => Seq(
+    ValDef(name, StringType),
+    ValDef(value, StringType)))
+
+  val xmlNodeConstructor = mkConstructor(xmlNode)()(None)(stp =>
+    Seq(ValDef(tag, StringType),
+      ValDef(attributes, T(list)(T(xmlAttribute)())),
+      ValDef(children, T(list)(T(xmlNode)()))))
+
+  val xmlAttributeConstructor = mkConstructor(xmlAttribute)()(None)(_ => Seq(
     ValDef(name, StringType),
     ValDef(value, StringType)))
 
@@ -76,7 +88,9 @@ object Utils {
     textNodeConstructor,
     elementConstructor,
     webAttributeConstructor,
-    webStyleConstructor
+    webStyleConstructor,
+    xmlNodeConstructor,
+    xmlAttributeConstructor
   )
 
   val defaultSymbols =
@@ -275,6 +289,35 @@ object Constrainable {
     def recoverFrom(e: inox.trees.Expr): Unit = ()
   }
 
+  implicit val XMLConstrainable: Constrainable[XmlTrees.Node] = new Constrainable[XmlTrees.Node] {
+    import Utils._
+    def getType = T(xmlNode)()
+    def produce(a: XmlTrees.Node): inox.trees.Expr = a match {
+      case XmlTrees.Node(tag, attrs, children) =>
+        ADT(ADTType(xmlNode, Seq()),
+          Seq(inoxExprOf[String](tag), inoxExprOf[List[XmlTrees.XMLAttribute]](attrs), inoxExprOf[List[XmlTrees.Node]](children)))
+    }
+    def recoverFrom(e: inox.trees.Expr): XmlTrees.Node = e match {
+      case ADT(ADTType(`xmlNode`, Seq()), Seq(tag, attributes, children)) =>
+        XmlTrees.Node(exprOfInox[String](tag), exprOfInox[List[XmlTrees.XMLAttribute]](attributes), exprOfInox[List[XmlTrees.Node]](children))
+      case _ => throw new Exception("Could not recover XmlTrees.Node from " + e)
+    }
+  }
+
+  implicit val XMLAttributeConstrainable: Constrainable[XmlTrees.XMLAttribute] = new  Constrainable[XmlTrees.XMLAttribute] {
+    import Utils._
+    def getType: inox.trees.dsl.trees.Type = T(xmlAttribute)()
+    def produce(a: XmlTrees.XMLAttribute): inox.trees.Expr = a match {
+      case XmlTrees.XMLAttribute(name, value) => ADT(ADTType(xmlAttribute, Seq()),
+        Seq(inoxExprOf[String](name), inoxExprOf[String](value)))
+    }
+    def recoverFrom(e: inox.trees.Expr): XmlTrees.XMLAttribute = e match {
+      case ADT(ADTType(`xmlAttribute`, Seq()), Seq(name, value)) =>
+        XmlTrees.XMLAttribute(exprOfInox[String](name), exprOfInox[String](value))
+      case _ => throw new Exception("Could not recover XmlTrees.XMLAttribute from " + e)
+    }
+  }
+
   /** Obtains the inox type of a given type. */
   def inoxTypeOf[A:Constrainable] = implicitly[Constrainable[A]].getType
 
@@ -306,6 +349,9 @@ object Constrainable {
   def _None[A: Constrainable] = ADT(ADTType(Utils.none, Seq(inoxTypeOf[A])), Seq())
   def _Left[A: Constrainable, B: Constrainable](e: Expr) = ADT(ADTType(Utils.left, Seq(inoxTypeOf[A], inoxTypeOf[B])), Seq(e))
   def _Right[A: Constrainable, B: Constrainable](e: Expr) = ADT(ADTType(Utils.right, Seq(inoxTypeOf[A], inoxTypeOf[B])), Seq(e))
+  def _XMLAttribute(key: Expr, value: Expr) = ADT(ADTType(Utils.xmlAttribute, Seq()), Seq(key, value))
+  def _XMLNode(tag: Expr, attributes: Expr, children: Expr) =
+    ADT(ADTType(Utils.xmlNode, Seq()), Seq(tag, attributes, children))
 }
 import Constrainable._
 

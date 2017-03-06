@@ -360,7 +360,7 @@ class ReverseProgramTest extends FunSuite {
   }
 
   /* Add tests for:
-     Closures
+     Closures ?
      List mapping, flatten, flatmap, filter.
      Multiple arguments changed in lambdas
      String concatenation

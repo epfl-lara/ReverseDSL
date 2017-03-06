@@ -8,6 +8,7 @@ import inox.trees._
 import inox.trees.dsl._
 import Constrainable._
 import inox.evaluators.EvaluationResults
+import org.apache.commons.lang3.StringEscapeUtils
 
 /** Lense class.
   * Should provide the method get and put.
@@ -398,8 +399,23 @@ case class ListSplit[A: Constrainable](p: A => Boolean) extends (List[A] %~> (Li
   }
 }
 
+object XmlTrees {
+  private var displayNiceDSL = true
+
+  case class Node(tag: String, attributes: List[XMLAttribute], children: List[Node]) {
+    override def toString = if(displayNiceDSL) {
+      "<"+tag+attributes.map(_.toString)+">"+children.map(x => "\n" + x.toString)+"\n</"+tag+">"
+    } else s"Node($tag, $attributes, $children)"
+  }
+  case class XMLAttribute(name: String, value: String) {
+    override def toString = if(displayNiceDSL) {
+      " " + name + "=\"" + StringEscapeUtils.escapeJava(value) + "\""
+    } else s"XMLAttribute($name, $value)"
+  }
+}
+
 object WebTrees {
-  var displayNiceDSL = true
+  private var displayNiceDSL = true
 
   implicit def toWebTree(i: InnerWebElement) = WebElement(i)
   implicit def toWebTree2(i: List[InnerWebElement]): List[WebTree] = i.map(WebElement.apply _)

@@ -80,7 +80,6 @@ object ReverseProgram {
 
     lazy val functionValue = evalWithCache(letm(currentValues) in function) // TODO: Optimize this ?
 
-    //val res: Stream[(Expr, Map[ValDef, Expr])] =
     {
       functionType match {
         case a: ADTType =>
@@ -140,9 +139,6 @@ object ReverseProgram {
                 (ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
               }
             case ADT(ADTType(tp2, tpArgs2), args2) => // Maybe the newOut just wrapped the previous value of function
-              // TODO: If anything else but has been wrapped from the output, should be able to do this.
-              //val functionValue = evalWithCache(letm(currentValues) in function)
-              //maybeWrap(function, newOut, functionValue)
               Stream.empty
 
             case a => // Another value in the type hierarchy. But Maybe sub-trees are shared !
@@ -150,7 +146,6 @@ object ReverseProgram {
           }
 
         case m@Application(lambdaExpr, arguments) =>
-          // Prioritize reversing lambdas first if it exists. Later: compile the reverse methods to be faster.
           val originalValue = lambdaExpr match {
             case v: Variable => currentValues.getOrElse(v.toVal, evalWithCache(letm(currentValues) in v))
             case l: Lambda => evalWithCache(letm(currentValues) in l)
@@ -158,8 +153,6 @@ object ReverseProgram {
           originalValue match {
             case l@Lambda(argNames, body) =>
               val argumentValues = argNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
-              //println("body before: " + body)
-              //println("body after: " + repaired)
               for { (newBody, assignments) <- repair(body, argumentValues, l.getType, newOut) // TODO: Incorporate changes in lambdas.
                     newArgumentsAssignments <- inox.utils.StreamUtils.cartesianProduct(arguments.zip(argNames).map { case (arg, v) =>
                      repair(arg, currentValues, v.getType, assignments.getOrElse(v, argumentValues(v)))
@@ -181,19 +174,11 @@ object ReverseProgram {
           }
 
         case anyExpr =>
-          //val functionValue = evalWithCache(letm(currentValues) in function)
           println(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue\nand I will try to wrap it to match $newOut")
-          //maybeWrap(function, newOut, functionValue)
           Stream.empty
-        /*
-        throw new Exception(s"Don't know how to handle this case : $m of type ${m.getClass.getName}")
-        ??? // Stream((newOut, Map()))
-        */
       }
       res
     }
-    //println(s"@return $res")
-    //res
   }
 
   private def combineResults(seq: List[((Expr, Map[ValDef,Expr]), ValDef, () => inox.trees.Expr)], currentValues: Map[ValDef,Expr])
