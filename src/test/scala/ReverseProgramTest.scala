@@ -3,6 +3,7 @@
   */
 
 import org.scalatest._
+import matchers._
 import Matchers.{=== => _, _}
 import ReverseProgram.FunctionEntry
 import Utils._
@@ -46,6 +47,20 @@ class ReverseProgramTest extends FunSuite {
     prog.getEvaluator.eval(FunctionInvocation(funDefId, Seq(), Seq())) match {
       case EvaluationResults.Successful(e) => exprOfInox[A](e) shouldEqual expected1
       case m => fail(s"Did not evaluate to $expected1. Error: $m")
+    }
+  }
+
+  implicit class Obtainable(p: Program) {
+    def get(f: Identifier) = new {
+      def andMatch(test: FunDef => Unit) = p.symbols.functions.get(f) match {
+        case None => fail("???")
+        case Some(funDef) => test(funDef)
+      }
+    }
+    def getBodyOf(f: Identifier) = new {
+      def andMatch(test: Expr => Unit) = get(f).andMatch{ funDef =>
+        test(funDef.fullBody)
+      }
     }
   }
 
@@ -96,6 +111,37 @@ class ReverseProgramTest extends FunSuite {
 
         case m => fail(s"eXpected let, got $m")
       }
+    }
+  }
+
+  test("Change in output not modifying a variable but keeping the shape") {
+    val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
+    val expected2 = Element("pre", WebElement(TextNode("Hello world"))::Nil)
+
+    val funDef = function(inoxTypeOf[Element])(
+      let(vText.toVal, StringLiteral("Hello world"))(v =>
+        _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
+      )
+    )
+    val prog = mkProg(funDef)
+    prog.getEvaluator.eval(FunctionInvocation(funDef.id, Seq(), Seq())) match {
+      case EvaluationResults.Successful(e) => exprOfInox[Element](e) shouldEqual expected1
+      case m => fail(s"Did not evaluate to $expected1. Error: $m")
+    }
+
+    val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
+    checkProg(expected2, funId2, prog2)
+
+    // testing the shape.
+    prog2 getBodyOf funId2 andMatch {
+      case l@Let(vd, expr, body) =>
+        val v = vd.toVariable
+        if(!inox.trees.exprOps.exists{
+          case v2:Variable => v2.id == v.id
+          case _ => false
+        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+
+      case m => fail(s"eXpected let, got $m")
     }
   }
 
