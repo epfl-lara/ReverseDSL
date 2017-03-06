@@ -58,8 +58,13 @@ class ReverseProgramTest extends FunSuite {
       }
     }
     def getBodyOf(f: Identifier) = new {
-      def andMatch(test: Expr => Unit) = get(f).andMatch{ funDef =>
-        test(funDef.fullBody)
+      def andMatch(test: PartialFunction[Expr,Unit]) = get(f).andMatch{ funDef =>
+        val body = funDef.fullBody
+        if(test.isDefinedAt(body)) {
+          test(body)
+        } else {
+          fail(s"Unexpected shape $body")
+        }
       }
     }
   }
@@ -106,8 +111,6 @@ class ReverseProgramTest extends FunSuite {
           case v2:Variable => v2.id == v.id
           case _ => false
         }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
-
-      case m => fail(s"eXpected Let, got $m")
     }
   }
 
@@ -134,8 +137,6 @@ class ReverseProgramTest extends FunSuite {
           case v2:Variable => v2.id == v.id
           case _ => false
         }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
-
-      case m => fail(s"eXpected let, got $m")
     }
   }
 
@@ -162,8 +163,6 @@ class ReverseProgramTest extends FunSuite {
           case v2:Variable => v2.id == v.id
           case _ => false
         }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
-
-      case m => fail(s"eXpected let, got $m")
     }
   }
 
@@ -200,8 +199,6 @@ class ReverseProgramTest extends FunSuite {
           case v2:Variable => v2.id == vv.id
           case _ => false
         }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
-
-      case m => fail(s"eXpected let, got $m")
     }
   }
 
@@ -246,7 +243,6 @@ class ReverseProgramTest extends FunSuite {
           case v2:Variable => v2.id == v.id
           case _ => false
         }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
-      case m => fail(s"eXpected let, got $m")
     }
   }
 
@@ -271,7 +267,6 @@ class ReverseProgramTest extends FunSuite {
     // testing the shape.
     prog2 getBodyOf funId2 andMatch {
       case Let(_, _, Application(_, Seq(StringLiteral(s)))) => s shouldEqual "We are the children"
-      case m => fail(s"eXpected 'We are the children' in application, got $m")
     }
   }
 
@@ -297,8 +292,6 @@ class ReverseProgramTest extends FunSuite {
           case v3:Variable => v2 == v2
           case _ => false
         }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
-
-      case m => fail(s"eXpected a let-lambda-application', got $m")
     }
   }
 
@@ -324,8 +317,6 @@ class ReverseProgramTest extends FunSuite {
           case v3:Variable => v2 == v2
           case _ => false
         }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
-
-      case m => fail(s"eXpected a let-lambda-application', got $m")
     }
   }
 
