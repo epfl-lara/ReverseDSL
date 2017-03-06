@@ -50,11 +50,11 @@ class ReverseProgramTest extends FunSuite {
     }
   }
 
-  implicit class Obtainable(p: Program) {
+  implicit class Obtainable(p: inox.InoxProgram) {
     def get(f: Identifier) = new {
       def andMatch(test: FunDef => Unit) = p.symbols.functions.get(f) match {
-        case None => fail("???")
         case Some(funDef) => test(funDef)
+        case None => fail("???")
       }
     }
     def getBodyOf(f: Identifier) = new {
@@ -99,18 +99,15 @@ class ReverseProgramTest extends FunSuite {
     checkProg(expected2, funId2, prog2)
 
     // testing the shape.
-    prog2.symbols.functions.get(funId2) match {
-      case None => fail("???")
-      case Some(funDef) => funDef.fullBody match {
-        case l@Let(vd, expr, body) =>
-          val v = vd.toVariable
-          if(!inox.trees.exprOps.exists{
-            case v2:Variable => v2.id == v.id
-            case _ => false
-          }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+    prog2 getBodyOf funId2 andMatch {
+      case l@Let(vd, expr, body) =>
+        val v = vd.toVariable
+        if(!inox.trees.exprOps.exists{
+          case v2:Variable => v2.id == v.id
+          case _ => false
+        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
 
-        case m => fail(s"eXpected let, got $m")
-      }
+      case m => fail(s"eXpected Let, got $m")
     }
   }
 
@@ -124,10 +121,7 @@ class ReverseProgramTest extends FunSuite {
       )
     )
     val prog = mkProg(funDef)
-    prog.getEvaluator.eval(FunctionInvocation(funDef.id, Seq(), Seq())) match {
-      case EvaluationResults.Successful(e) => exprOfInox[Element](e) shouldEqual expected1
-      case m => fail(s"Did not evaluate to $expected1. Error: $m")
-    }
+    checkProg(expected1, funDef.id, prog)
 
     val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
     checkProg(expected2, funId2, prog2)
@@ -155,27 +149,21 @@ class ReverseProgramTest extends FunSuite {
       )
     )
     val prog = mkProg(funDef)
-    prog.getEvaluator.eval(FunctionInvocation(funDef.id, Seq(), Seq())) match {
-      case EvaluationResults.Successful(e) => exprOfInox[Element](e) shouldEqual expected1
-      case m => fail(s"Did not evaluate to $expected1. Error: $m")
-    }
+    checkProg(expected1, funDef.id, prog)
 
     val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
     checkProg(expected2, funId2, prog2)
 
     // testing the shape.
-    prog2.symbols.functions.get(funId2) match {
-      case None => fail("???")
-      case Some(funDef) => funDef.fullBody match {
-        case l@Let(vd, expr, body) =>
-          val v = vd.toVariable
-          if(!inox.trees.exprOps.exists{
-            case v2:Variable => v2.id == v.id
-            case _ => false
-          }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+    prog2 getBodyOf funId2 andMatch {
+      case l@Let(vd, expr, body) =>
+        val v = vd.toVariable
+        if(!inox.trees.exprOps.exists{
+          case v2:Variable => v2.id == v.id
+          case _ => false
+        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
 
-        case m => fail(s"eXpected let, got $m")
-      }
+      case m => fail(s"eXpected let, got $m")
     }
   }
 
@@ -200,23 +188,20 @@ class ReverseProgramTest extends FunSuite {
     checkProg(expected2, funId2, prog2)
 
     // testing the shape.
-    prog2.symbols.functions.get(funId2) match {
-      case None => fail("???")
-      case Some(funDef) => funDef.fullBody match {
-        case l@Let(vd, expr, l2@Let(vd2, expr2, body)) =>
-          val v = vd.toVariable
-          if(!inox.trees.exprOps.exists{
-            case v2:Variable => v2.id == v.id
-            case _ => false
-          }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
-          val vv = vd2.toVariable
-          if(!inox.trees.exprOps.exists{
-            case v2:Variable => v2.id == vv.id
-            case _ => false
-          }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+    prog2 getBodyOf funId2 andMatch {
+      case l@Let(vd, expr, l2@Let(vd2, expr2, body)) =>
+        val v = vd.toVariable
+        if(!inox.trees.exprOps.exists{
+          case v2:Variable => v2.id == v.id
+          case _ => false
+        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        val vv = vd2.toVariable
+        if(!inox.trees.exprOps.exists{
+          case v2:Variable => v2.id == vv.id
+          case _ => false
+        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
 
-        case m => fail(s"eXpected let, got $m")
-      }
+      case m => fail(s"eXpected let, got $m")
     }
   }
 
@@ -253,18 +238,15 @@ class ReverseProgramTest extends FunSuite {
     checkProg(expected2, funId2, prog2)
 
     // testing the shape.
-    prog2.symbols.functions.get(funId2) match {
-      case None => fail("???")
-      case Some(funDef) => funDef.fullBody match {
-        case l@Let(vd, expr, body) =>
-          println(l)
-          val v = vd.toVariable
-          if(!inox.trees.exprOps.exists{
-            case v2:Variable => v2.id == v.id
-            case _ => false
-          }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
-        case m => fail(s"eXpected let, got $m")
-      }
+    prog2 getBodyOf funId2 andMatch {
+      case l@Let(vd, expr, body) =>
+        println(l)
+        val v = vd.toVariable
+        if(!inox.trees.exprOps.exists{
+          case v2:Variable => v2.id == v.id
+          case _ => false
+        }(body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+      case m => fail(s"eXpected let, got $m")
     }
   }
 
@@ -279,22 +261,17 @@ class ReverseProgramTest extends FunSuite {
       )
     )
     val prog = InoxProgram(ReverseProgram.context, Seq(funDef), allConstructors)
-    prog.getEvaluator.eval(FunctionInvocation(funDef.id, Seq(), Seq())) match {
-      case EvaluationResults.Successful(e) => exprOfInox[Element](e) shouldEqual expected1
-      case m => fail(s"Did not evaluate to $expected1. Error: $m")
-    }
+    checkProg(expected1, funDef.id, prog)
+
     val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
 
     val (prog2: InoxProgram, funId2: FunctionEntry) = repairProgram(funDef, prog, expected2)
     checkProg[Element](expected2, funId2, prog2)
 
     // testing the shape.
-    prog2.symbols.functions.get(funId2) match {
-      case None => fail("???")
-      case Some(funDef) => funDef.fullBody match {
-        case Let(_, _, Application(_, Seq(StringLiteral(s)))) => s shouldEqual "We are the children"
-        case m => fail(s"eXpected 'We are the children' in application, got $m")
-      }
+    prog2 getBodyOf funId2 andMatch {
+      case Let(_, _, Application(_, Seq(StringLiteral(s)))) => s shouldEqual "We are the children"
+      case m => fail(s"eXpected 'We are the children' in application, got $m")
     }
   }
 
@@ -314,17 +291,14 @@ class ReverseProgramTest extends FunSuite {
     checkProg(expected2, funId2, prog2)
 
     // testing that the lambda changed but keeps the variable.
-    prog2.symbols.functions.get(funId2) match {
-      case None => fail("???")
-      case Some(funDef) => funDef.fullBody match {
-        case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
-          if(!inox.trees.exprOps.exists{
-            case v3:Variable => v2 == v2
-            case _ => false
-          }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+    prog2 getBodyOf funId2 andMatch {
+      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
+        if(!inox.trees.exprOps.exists{
+          case v3:Variable => v2 == v2
+          case _ => false
+        }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
 
-        case m => fail(s"eXpected a let-lambda-application', got $m")
-      }
+      case m => fail(s"eXpected a let-lambda-application', got $m")
     }
   }
 
@@ -344,17 +318,14 @@ class ReverseProgramTest extends FunSuite {
     checkProg(expected2, funId2, prog2)
 
     // testing that the lambda changed but keeps the variable.
-    prog2.symbols.functions.get(funId2) match {
-      case None => fail("???")
-      case Some(funDef) => funDef.fullBody match {
-        case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
-          if(!inox.trees.exprOps.exists{
-            case v3:Variable => v2 == v2
-            case _ => false
-          }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+    prog2 getBodyOf funId2 andMatch {
+      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) =>
+        if(!inox.trees.exprOps.exists{
+          case v3:Variable => v2 == v2
+          case _ => false
+        }(body)) fail(s"There was no variable $v in the given lambda: $newLambda")
 
-        case m => fail(s"eXpected a let-lambda-application', got $m")
-      }
+      case m => fail(s"eXpected a let-lambda-application', got $m")
     }
   }
 
