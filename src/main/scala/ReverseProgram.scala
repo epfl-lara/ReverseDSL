@@ -126,7 +126,9 @@ object ReverseProgram {
         case l: Literal[_] => Stream((newOut, Map()))
         case lFun@Lambda(vd, body) => // Check for closures, i.e. free variables.
           val freeVars = exprOps.variablesOf(body).map(_.toVal) -- vd
-          if(freeVars.isEmpty) Stream((newOut, Map()))  else {
+          if(freeVars.isEmpty) {
+            Stream((newOut, Map()))
+          }  else {
             // We need to determine the values of these free variables.
             newOut match {
               case Lambda(vd2, body2) =>

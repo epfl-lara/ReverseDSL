@@ -396,11 +396,42 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     }
   }
 
+  test("Reverse simple string concatenation") {
+    val expected1 = "Hello world"
+    val expected2 = "Hello buddy"
+
+    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+    val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
+
+    val funDef = function(
+      let(ap, "Hello ")(av =>
+      let(bp, "world")(bv =>
+        StringConcat(av, bv)
+      )
+      ))(inoxTypeOf[String])
+
+    val prog = mkProg(funDef)
+    checkProg(expected1, funDef.id, prog)
+
+    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
+    checkProg(expected2, funId2, prog2)
+
+    prog2 getBodyOf funId2 andMatch {
+      case funBody@Let(Seq(v1: ValDef), StringLiteral(s), Let(Seq(v2: ValDef), StringLiteral(t), body@StringConcat(_, _)))
+      =>
+        println(funBody)
+
+        if(!isVarIn(v1.id, body)) fail(s"There was no variable $v1 in the given final expression: $funBody")
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given final expression: $funBody")
+        s shouldEqual "Hello "
+        s shouldEqual "buddy"
+    }
+  }
+
   /* Add tests for:
-     Closures ?
+     String concatenation
      List mapping, flatten, flatmap, filter.
      Multiple arguments changed in lambdas
-     String concatenation
      Integers operations
      Migrate to constraint solving?
 
