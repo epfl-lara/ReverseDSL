@@ -60,6 +60,35 @@ object ReverseProgram {
 
   @inline def castOrFail[A, B <: A](a: A): B =
     a.asInstanceOf[B]
+  
+  def defaultValue(t: Type)(implicit symbols: Symbols): Expr = {
+    import inox._
+    import inox.trees._
+    import inox.trees.dsl._
+    import inox.solvers._
+    t match {
+      case StringType => StringLiteral("#")
+      case Int32Type => IntLiteral(42)
+      case IntegerType => IntegerLiteral(BigInt(86))
+      case BooleanType => BooleanLiteral(true)
+      case t: ADTType =>
+        val tid = t.id
+        val tps = t.tps
+        symbols.adts(tid) match {
+          case e: ADTConstructor =>
+            ADT(t, e.typed(tps).fields.map(x => defaultValue(x.getType)))
+          case e: ADTSort => // Choose the smallest non-recursive value if possible. This is an heuristic but works in our cases.
+            val mainConstructor = e.constructors.sortBy { constructor =>
+              constructor.typed(tps).fields.map {
+                case s => if (s.getType == t) 10 else
+                  if (ADTType(t.getADT.definition.root.id, tps) == s.getType) 5
+                else 0
+              }.sum
+            }.head
+            defaultValue(ADTType(mainConstructor.id, tps))
+        }
+    }
+  }
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * Basically, we solve the problem:
@@ -95,7 +124,23 @@ object ReverseProgram {
       val res: Stream[(Expr, Map[ValDef, Expr])] = function match {
         // Values (including lambdas) should be immediately replaced by the new value
         case l: Literal[_] => Stream((newOut, Map()))
-        case l: Lambda => Stream((newOut, Map())) // TODO: Check for closures
+        case lFun@Lambda(vd, body) => // Check for closures, i.e. free variables.
+          val freeVars = exprOps.variablesOf(body).map(_.toVal) -- vd
+          if(freeVars.isEmpty) Stream((newOut, Map()))  else {
+            // We need to determine the values of these free variables.
+            newOut match {
+              case Lambda(vd2, body2) =>
+                val dummyInputs = vd.map{ v =>
+                  v -> defaultValue(v.getType)
+                }.toMap
+                for{(newBody, newAssignments) <- repair(body, dummyInputs ++ freeVars.map(fv => fv -> currentValues(fv)).toMap, lFun.getType, body2)
+                  newFreevarAssignments = freeVars.map(fv => fv -> newAssignments.getOrElse(fv, currentValues(fv))).toMap }
+                  yield {
+                    (Lambda(vd, newBody): Expr, newFreevarAssignments)
+                  }
+              case _ => ???
+            }
+          }
 
         // Variables are assigned the given value.
         case v@Variable(id, tpe, flags) =>
@@ -210,10 +255,6 @@ object ReverseProgram {
 
       Stream((newFunction, Map()))
     } else {
-      println(s"After evaluation, got $functionValue")
-      println(s"Original program $function")
-      println(s"Wanting to plug-in $newOut")
-      println(s"Returning empty stream")
       Stream.empty
     }
   }

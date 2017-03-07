@@ -368,6 +368,34 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     checkProg(expected3, funId4, prog4)
   }
 
+  test("Change a variable captured by a closure lambda") {
+    val expected1 = Element("div", WebElement(TextNode("Closure parameter"))::WebElement(TextNode("Hello world"))::Nil)
+    val expected2 = Element("div", WebElement(TextNode("Changed parameter"))::WebElement(TextNode("Hello world"))::Nil)
+
+    val closureParameter = ValDef(FreshIdentifier("closure"), inoxTypeOf[String], Set())
+    val lambda = Lambda(Seq(v.toVal),
+      _Element("div", _List[WebElement](_WebElement(_TextNode(closureParameter.toVariable)),_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]()))
+
+    val funDef = function(
+      let(closureParameter, "Closure parameter")(cp =>
+        Application(lambda, Seq("Hello world"))
+      ))(inoxTypeOf[Element])
+
+    val prog = mkProg(funDef)
+    checkProg(expected1, funDef.id, prog)
+
+    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
+    checkProg(expected2, funId2, prog2)
+
+    prog2 getBodyOf funId2 andMatch {
+      case funBody@Let(_, StringLiteral(s), Application(newLambda@Lambda(Seq(v2), body), Seq(StringLiteral(_))))
+      =>
+        println(funBody)
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+        s shouldEqual "Changed parameter"
+    }
+  }
+
   /* Add tests for:
      Closures ?
      List mapping, flatten, flatmap, filter.
