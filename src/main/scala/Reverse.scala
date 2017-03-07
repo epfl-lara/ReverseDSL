@@ -404,7 +404,7 @@ object XmlTrees {
 
   case class Node(tag: String, attributes: List[XMLAttribute], children: List[Node]) {
     override def toString = if(displayNiceDSL) {
-      "<"+tag+attributes.map(_.toString)+">"+children.map(x => "\n" + x.toString)+"\n</"+tag+">"
+      "<"+tag+attributes.map(_.toString).mkString+">"+children.map(x => "\n" + x.toString).mkString+"\n</"+tag+">"
     } else s"Node($tag, $attributes, $children)"
   }
   case class XMLAttribute(name: String, value: String) {

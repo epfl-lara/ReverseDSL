@@ -12,6 +12,7 @@ import inox._
 import inox.evaluators.EvaluationResults
 import inox.trees.{not => inoxNot, _}
 import inox.trees.dsl._
+import sun.swing.SwingUtilities2.RepaintListener
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -20,7 +21,8 @@ object Make {
   def apply[A: Constrainable, B](in: Id[A] => (A ~~> B)): (A ~~> B) = in(Id[A]())
 }
 
-class ReverseProgramTest extends FunSuite {
+/** Mixin for tests repairing programs */
+trait RepairProgramTest {
   import Constrainable._
 
   implicit def toStringLiteral(s: String): StringLiteral = StringLiteral(s)
@@ -69,16 +71,23 @@ class ReverseProgramTest extends FunSuite {
     }
   }
 
-  private def isVarIn(id: Identifier, body: inox.trees.Expr) = {
+  protected def isVarIn(id: Identifier, body: inox.trees.Expr) = {
     inox.trees.exprOps.exists {
       case v: Variable => v.id == id
       case _ => false
     }(body)
   }
 
-  def function(body: Expr)(returnType: Type) = mkFunDef(main)()(_ => (Seq(), returnType, _ => body))
-
   val main = FreshIdentifier("main")
+
+  protected def function(body: Expr)(returnType: Type) = mkFunDef(main)()(_ => (Seq(), returnType, _ => body))
+
+}
+
+
+class ReverseProgramTest extends FunSuite with RepairProgramTest {
+  import Constrainable._
+
   val build = Variable(FreshIdentifier("build"), FunctionType(Seq(inoxTypeOf[String]), inoxTypeOf[Element]), Set())
   val v = variable[String]("v")
   val vText = variable[String]("text")

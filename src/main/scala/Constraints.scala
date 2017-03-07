@@ -5,6 +5,8 @@ import inox.trees.dsl._
 import inox.solvers._
 import inox.InoxProgram
 
+import scala.xml.MetaData
+
 object Utils {
   val list: Identifier = FreshIdentifier("List")
   val cons: Identifier = FreshIdentifier("Cons")
@@ -92,6 +94,8 @@ object Utils {
     xmlNodeConstructor,
     xmlAttributeConstructor
   )
+
+  val filter = FreshIdentifier("filter")
 
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)
@@ -316,6 +320,24 @@ object Constrainable {
         XmlTrees.XMLAttribute(exprOfInox[String](name), exprOfInox[String](value))
       case _ => throw new Exception("Could not recover XmlTrees.XMLAttribute from " + e)
     }
+  }
+
+  implicit def scalaNodeToXmlNode(node: scala.xml.Node): XmlTrees.Node = node match {
+    case scala.xml.Text(text) =>
+      XmlTrees.Node(text.trim(), List(), List())
+    case n: scala.xml.Node =>
+      val (tag, attributes, children) = scala.xml.Node.unapplySeq(n).get
+      XmlTrees.Node(tag, scalaAttributesToXmlAttribute(attributes), children.toList.map(scalaNodeToXmlNode _).filter{
+        case XmlTrees.Node(s, _, _) if s == "" => false
+        case _ => true
+      })
+    case e =>
+      println(e.getClass.getDeclaredMethods.mkString("\n"))
+      throw new Exception(s"Could not match $e of class ${e.getClass}")
+  }
+
+  implicit def scalaAttributesToXmlAttribute(m: MetaData): List[XmlTrees.XMLAttribute] = {
+    m.asAttrMap.toList.map{ case (key, value) => XmlTrees.XMLAttribute(key, value) }
   }
 
   /** Obtains the inox type of a given type. */
