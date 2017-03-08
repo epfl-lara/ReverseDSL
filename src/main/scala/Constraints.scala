@@ -382,19 +382,9 @@ abstract class Tree[LeafValue, NodeValue]
 case class Node[LeafValue, NodeValue](left: Tree[LeafValue, NodeValue], value: NodeValue, right: Tree[LeafValue, NodeValue]) extends Tree[LeafValue, NodeValue]
 case class Leaf[LeafValue, NodeValue](value: LeafValue) extends Tree[LeafValue, NodeValue]
 
-/** A wrapper around an inox Expr which can enumerate solutions*/
-case class Constraint[A: Constrainable](private val formula: Expr,
-                                        functions: Map[Identifier, ManualReverse[_, _]] = Map())/* extends ConstraintInterface[A]*/ {
-  /** Adds a new assignment to this constraint */
-  def apply[A: Constrainable](tuple: (inox.trees.Variable, A)) = this && tuple._1 === inoxExprOf[A](tuple._2)
-
-  /** Adds a new conjunct to this constraint */
-  def &&(b: Expr) = Constraint[A](formula && b, functions)
-
-  /** Adds a new conjunct to this constraint */
-  def &&[B: Constrainable](b: Constraint[B]): Constraint[A] = Constraint[A](formula && b.formula, functions ++ b.functions)
-  def <&&[B: Constrainable](b: Constraint[B]): Constraint[B] = Constraint[B](formula && b.formula, functions ++ b.functions)
-
+abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formula: Expr,
+                                 functions: Map[Identifier, ManualReverse[_, _]])
+{
   import inox.solvers._
   import SolverResponses._
 
@@ -403,14 +393,16 @@ case class Constraint[A: Constrainable](private val formula: Expr,
       .withFunctions(Seq())
       .withADTs(allTupleConstructors ++ Utils.allConstructors)
   }
+
   // The program
   lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
   lazy val prog = InoxProgram(context, symbols)
-
   type ThisSolver = solvers.combinators.TimeoutSolver { val program: prog.type }
 
+  def copyWithNewFormula(newFormula: Expr): A
+
   /** Simplify the formula by replacing String method calls, removing equalities between identifiers */
-  def simplify(solutionVar: Variable): Constraint[A] = {
+  def simplify(solutionVars: Set[Variable]): A = {
     val assignments = {
       val TopLevelAnds(conjuncts) = formula
       conjuncts.collect{
@@ -458,8 +450,23 @@ case class Constraint[A: Constrainable](private val formula: Expr,
 
     val toplevelIdentityRemoved = (x: Expr) => x match {
       case TopLevelAnds(ands) =>
-        val topEqualities = ands.collect{ case Equals(v1: Variable, v2: Variable) => (if(v1 != solutionVar) v1 -> v2 else v2 -> v1):(Expr, Expr) }
-        inox.trees.exprOps.postMap(topEqualities.toMap.get)(x)
+        val topEqualities = ands.collect{
+          case Equals(v1: Variable, v2: Variable) => (if(!solutionVars(v1)) v1 -> v2 else v2 -> v1):(Expr, Expr)
+        }
+        val tewi = topEqualities.zipWithIndex
+        val topEqualitiesMap = tewi.filter{
+          case ((i1, i2), i) => if(tewi.exists{
+            case ((j1, j2), j) => j < i && j1 == i2
+          }) {
+            false // We remove back arrow assignments so that the assignment map is only forward.
+          } else true
+        }.map(_._1).toMap
+        // Prevent loops.
+        def transitiveTopEqualities(x: Expr): Option[Expr] = topEqualitiesMap.get(x) match {
+          case Some(newVar) => transitiveTopEqualities(newVar).orElse(Some(newVar))
+          case None => None
+        }
+        inox.trees.exprOps.postMap(transitiveTopEqualities _)(x)
       case _ => x
     }
     //println("#2 " + toplevelIdentityRemoved)
@@ -493,185 +500,217 @@ case class Constraint[A: Constrainable](private val formula: Expr,
       } _
 
     val finalFormula = (
-                toplevelIdentityRemoved
+      toplevelIdentityRemoved
         andThen removedAndTrue
         andThen removeFalseTrue
       )(formula)
 
-    Constraint(finalFormula)
+    copyWithNewFormula(finalFormula)
+  }
+
+  /** Converts the formula to a stream of conjuncts, each of one being able to yield solutions*/
+  def getStreamOfConjuncts(e: Expr): Stream[Seq[Expr]] = {
+    e match {
+      case And(Seq(a1, a2)) => for {a <- getStreamOfConjuncts(a1); b <- getStreamOfConjuncts(a2); c = a ++ b} yield c
+      case And(a1 +: at) => for {a <- getStreamOfConjuncts(a1); b <- getStreamOfConjuncts(And(at)); c = a ++ b} yield c
+      case Or(exprs) => exprs.toStream.flatMap(getStreamOfConjuncts)
+      case k => Stream(Seq(k))
+    }
+  }
+  /** the leaf values are regular expressions, the node value are function conversions. */
+  def splitAtUnknownFunctions(e: Seq[Expr]): Tree[Seq[Expr], Expr] = {
+    val (left, valueAndRight) = e.span{
+      case k@Equals(FunctionInvocation(identifier, Seq(), Seq(inId, inDefault)), _) if functions contains identifier => false
+      case k@Equals(_, FunctionInvocation(identifier, Seq(), Seq(inId, inDefault))) if functions contains identifier => false
+      case _ => true
+    }
+    if(valueAndRight.isEmpty) {
+      Leaf(left)
+    } else {
+      val value +: right = valueAndRight
+      if(right.isEmpty) throw new Exception("Could not find any value to recover the split at " + e)
+      Node(Leaf(left), value, splitAtUnknownFunctions(right))
+    }
+  }
+
+  /** Separates the "Maybe(a == b)" statements from the conjunct*/
+  def splitMaybe(e: Seq[Expr], notMaybes: Seq[Expr], maybes: Seq[Equals]): (List[Expr], List[Equals]) = {
+    e match {
+      case Seq() => (notMaybes.reverse.toList, maybes.reverse.toList)
+      case FunctionInvocation(Common.maybe, _, Seq(equality@Equals(a, b))) +: tail =>
+        splitMaybe(tail, notMaybes, equality +: maybes)
+      case a +: tail =>
+        splitMaybe(tail, a +: notMaybes, maybes)
+    }
+  }
+
+  /** An "Equals" here is the inner content of a "Maybe". We want to satisfy most of them if possible.
+    * If a combination of maybe is satisfiables with e._1, no sub-combination should be tested.
+    * The Int is startToDeleteAt: Int = 0, a way to know the number of Equals from the beginning we should not remove.
+    **/
+  def maxSMTMaybes(es: Stream[(List[Expr], List[Equals], Int)]): Stream[(ThisSolver, prog.Model)] = {
+    if(es.isEmpty) return Stream.empty
+    val e = es.head
+
+    /*
+       If there are top-level constructs of the form ... && function(in, [inValue]) == out && ...
+       and function is registered as manual reversing, we split the constraint into two constraints.
+       A = all the conjuncts to the left of this expression (containing in)
+       B = all the conjuncts to the right of this expression (containing out)
+       We solve B and obtain model M
+       We run putManual with the two given arguments to obtain a stream of in values.
+       For each in value V, we solve the equations
+       A && in == V && M
+    */
+    val constPart = e._1
+    val maybePart = e._2
+    val numForceMaybeToKeep = e._3
+    //println("The maybes are: " + e._2)
+
+    val solver = prog.getSolver.getNewSolver
+    //println("solving " + and(e._1 ++ e._2 : _*))
+    solver.assertCnstr(and(e._1 ++ e._2 : _*))
+    //println("#2")
+    solver.check(SolverResponses.Model) match {
+      case SatWithModel(model) =>
+        //println("One solution !")
+        val updatedStream = es.filterNot{ _._2.toSet.subsetOf(maybePart.toSet)}
+
+        (solver, model) #:: maxSMTMaybes(updatedStream)
+      case _ =>
+        //println("No solution. Removing maybes...")
+        maxSMTMaybes(es.tail #::: {
+          for {i <- (numForceMaybeToKeep until e._2.length).toStream
+               seq = e._2.take(i) ++ e._2.drop(i + 1)
+          } yield (constPart, seq, numForceMaybeToKeep)
+        })
+    }
+  }
+
+  /** Given a formula splitted at manual reversing functions (the tree t), returns a stream of solvers and associated modles.*/
+  def solveTrees(t: Tree[Seq[Expr], Expr]): Stream[(ThisSolver, prog.Model)] = {
+    t match {
+      case Leaf(seqExpr) =>
+        val (eqs, maybes)  = splitMaybe(seqExpr, Nil, Nil)
+        for{ solver <- maxSMTMaybes(Stream((eqs, maybes, 0))) } yield solver
+      case Node(Leaf(seqExpr), value, right) =>
+        //println("First we will solve " + right)
+        //println("Then we inverse " + value)
+        //println("And then we solve " + seqExpr)*
+        val (function: ManualReverse[_, _], inVar, inDefault, outVar) = value match {
+          case k@Equals(FunctionInvocation(identifier, Seq(), Seq(inVar: Variable, inDefault)), b: Variable) => (functions(identifier), inVar, inDefault, b)
+          case k@Equals(b: Variable, FunctionInvocation(identifier, Seq(), Seq(inVar: Variable, inDefault))) => (functions(identifier), inVar, inDefault, b)
+          case _ => throw new Exception("Cannot reverse this equality: " + value)
+        }
+
+        def getInValues[A, B](function: ManualReverse[A, B], outValue: Expr, inDefault: Expr): Iterable[Expr] = {
+          val realOutValue = function.constrainableOutput.recoverFrom(outValue)
+          val realDefaultValue = optionConstrainable(function.constrainableInput).recoverFrom(inDefault)
+          val inValues = function.putManual(realOutValue, realDefaultValue)
+          inValues.map(function.constrainableInput.produce)
+        }
+
+        for { solvermodel <- solveTrees(right)
+              model <- getStreamOfSolutions(outVar, solvermodel)
+              outValue = model.vars(outVar.toVal  : inox.trees.ValDef)
+              inValue <- getInValues(function, outValue, inDefault)
+              newSeqExpr = (seqExpr :+ Equals(inVar, inValue)) ++ model.vars.map{ case (v, e) => Equals(v.toVariable, e) }
+              //_ = println("Solving this :" + newSeqExpr)
+              (eqs, maybes)  = splitMaybe(newSeqExpr, Nil, Nil)
+              //_ = println("Solving maybe:" + x)
+              solver <- maxSMTMaybes(Stream((eqs, maybes, 0)))
+        } yield {
+          solver
+        }
+
+      case _ => throw new Exception("[Internal error] Does not support this shape of tree : " + t)
+    }
+  }
+
+  /** Given an input variable, returns a stream of models with valuations of this variable */
+  def getStreamOfSolutions(inputVar: Variable, e: (ThisSolver, prog.Model)): Stream[prog.Model] = {
+    val solver = e._1
+    val solutionInit = e._2
+    //println(s"Looking for $inputVar in $solutionInit")
+    val solutionInitExpr: Expr = solutionInit.vars(inputVar.toVal  : inox.trees.ValDef)
+    //println("Found solution " + solutionInitExpr)
+    //println("Supposing " + !(inputVar === solutionInit))
+
+    def otherSolutions(prevSol: inox.trees.Expr): Stream[prog.Model] = {
+      solver.check(SolverResponses.Model) match {
+        case SatWithModel(model) =>
+          // We are going to plug in the maximum number of equals possible until it breaks.
+          val solution: Expr = model.vars(inputVar.toVal  : inox.trees.ValDef)
+          //println("Found solution " + solution)
+          if (prevSol == solution) Stream.empty else {
+            model #:: {
+              //println("Supposing " + !(inputVar === solution))
+              solver.assertCnstr(!(inputVar === solution))
+              otherSolutions(solution)
+            }
+          }
+        case _ =>
+          //println("No more solutions")
+          Stream.empty[prog.Model]
+      }
+    }
+    solutionInit #:: {
+      solver.assertCnstr(!(inputVar === solutionInitExpr))
+      otherSolutions(solutionInitExpr)
+    }
   }
 
   /** Returns a stream of solutions satisfying the constraint */
-  def toStream(solutionVar: inox.trees.Variable): Stream[A] = {
-    val simplified = simplify(solutionVar).formula
+  def toStreamOfInoxExpr(solutionVar: inox.trees.Variable): Stream[Expr] = {
+    val simplified = simplify(Set(solutionVar)).formula
 
     println("######## Converting this formula to stream of solutions ######\n" + simplified)
 
-    // Convert the formula to a stream of conjuncts, each of one being able to yield solutions
-    def getStreamOfConjuncts(e: Expr): Stream[Seq[Expr]] = {
-      e match {
-        case And(Seq(a1, a2)) => for {a <- getStreamOfConjuncts(a1); b <- getStreamOfConjuncts(a2); c = a ++ b} yield c
-        case And(a1 +: at) => for {a <- getStreamOfConjuncts(a1); b <- getStreamOfConjuncts(And(at)); c = a ++ b} yield c
-        case Or(exprs) => exprs.toStream.flatMap(getStreamOfConjuncts)
-        case k => Stream(Seq(k))
-      }
-    }
-
-    /** the leaf values are regular expressions, the node value are function conversions. */
-    def splitAtUnknownFunctions(e: Seq[Expr]): Tree[Seq[Expr], Expr] = {
-      val (left, valueAndRight) = e.span{
-        case k@Equals(FunctionInvocation(identifier, Seq(), Seq(inId, inDefault)), _) if functions contains identifier => false
-        case k@Equals(_, FunctionInvocation(identifier, Seq(), Seq(inId, inDefault))) if functions contains identifier => false
-        case _ => true
-      }
-      if(valueAndRight.isEmpty) {
-        Leaf(left)
-      } else {
-        val value +: right = valueAndRight
-        if(right.isEmpty) throw new Exception("Could not find any value to recover the split at " + e)
-        Node(Leaf(left), value, splitAtUnknownFunctions(right))
-      }
-    }
-
-    // Separates the "Maybe(a == b)" statements from the conjunct
-    def splitMaybe(e: Seq[Expr], notMaybes: Seq[Expr], maybes: Seq[Equals]): (List[Expr], List[Equals]) = {
-      e match {
-        case Seq() => (notMaybes.reverse.toList, maybes.reverse.toList)
-        case FunctionInvocation(Common.maybe, _, Seq(equality@Equals(a, b))) +: tail =>
-          splitMaybe(tail, notMaybes, equality +: maybes)
-        case a +: tail =>
-          splitMaybe(tail, a +: notMaybes, maybes)
-      }
-    }
-
-    // An "Equals" here is the inner content of a "Maybe". We want to satisfy most of them if possible.
-    // If a combination of maybe is satisfiables with e._1, no sub-combination should be tested.
-    // The Int is startToDeleteAt: Int = 0, a way to know the number of Equals from the beginning we should not remove.
-    def maxSMTMaybes(es: Stream[(List[Expr], List[Equals], Int)]): Stream[(ThisSolver, prog.Model)] = {
-      if(es.isEmpty) return Stream.empty
-      val e = es.head
-
-      /*
-         If there are top-level constructs of the form ... && function(in, [inValue]) == out && ...
-         and function is registered as manual reversing, we split the constraint into two constraints.
-         A = all the conjuncts to the left of this expression (containing in)
-         B = all the conjuncts to the right of this expression (containing out)
-         We solve B and obtain model M
-         We run putManual with the two given arguments to obtain a stream of in values.
-         For each in value V, we solve the equations
-         A && in == V && M
-      */
-      val constPart = e._1
-      val maybePart = e._2
-      val numForceMaybeToKeep = e._3
-      println("The maybes are: " + e._2)
-
-      val solver = prog.getSolver.getNewSolver
-      println("solving " + and(e._1 ++ e._2 : _*))
-      solver.assertCnstr(and(e._1 ++ e._2 : _*))
-      //println("#2")
-      solver.check(SolverResponses.Model) match {
-        case SatWithModel(model) =>
-          println("One solution !")
-          val updatedStream = es.filterNot{ _._2.toSet.subsetOf(maybePart.toSet)}
-
-          (solver, model) #:: maxSMTMaybes(updatedStream)
-        case _ =>
-          //println("No solution. Removing maybes...")
-          maxSMTMaybes(es.tail #::: {
-            for {i <- (numForceMaybeToKeep until e._2.length).toStream
-                 seq = e._2.take(i) ++ e._2.drop(i + 1)
-            } yield (constPart, seq, numForceMaybeToKeep)
-          })
-      }
-    }
-
-    def getStreamOfSolutions(inputVar: Variable, e: (ThisSolver, prog.Model)): Stream[prog.Model] = {
-      val solver = e._1
-      val solutionInit = e._2
-      //println(s"Looking for $inputVar in $solutionInit")
-      val solutionInitExpr: Expr = solutionInit.vars(inputVar.toVal  : inox.trees.ValDef)
-      //println("Found solution " + solutionInitExpr)
-      //println("Supposing " + !(solutionVar === solutionInit))
-
-      def otherSolutions(prevSol: inox.trees.Expr): Stream[prog.Model] = {
-        solver.check(SolverResponses.Model) match {
-          case SatWithModel(model) =>
-            // We are going to plug in the maximum number of equals possible until it breaks.
-            val solution: Expr = model.vars(solutionVar.toVal  : inox.trees.ValDef)
-            //println("Found solution " + solution)
-            if (prevSol == solution) Stream.empty else {
-              model #:: {
-                //println("Supposing " + !(solutionVar === solution))
-                solver.assertCnstr(!(inputVar === solution))
-                otherSolutions(solution)
-              }
-            }
-          case _ =>
-            //println("No more solutions")
-            Stream.empty[prog.Model]
-        }
-      }
-      solutionInit #:: {
-        solver.assertCnstr(!(inputVar === solutionInitExpr))
-        otherSolutions(solutionInitExpr)
-      }
-    }
-
-    def solveTrees(t: Tree[Seq[Expr], Expr]): Stream[(ThisSolver, prog.Model)] = {
-      t match {
-        case Leaf(seqExpr) =>
-          val (eqs, maybes)  = splitMaybe(seqExpr, Nil, Nil)
-          for{ solver <- maxSMTMaybes(Stream((eqs, maybes, 0))) } yield solver
-        case Node(Leaf(seqExpr), value, right) =>
-          //println("First we will solve " + right)
-          //println("Then we inverse " + value)
-          //println("And then we solve " + seqExpr)*
-          val (function: ManualReverse[_, _], inVar, inDefault, outVar) = value match {
-            case k@Equals(FunctionInvocation(identifier, Seq(), Seq(inVar: Variable, inDefault)), b: Variable) => (functions(identifier), inVar, inDefault, b)
-            case k@Equals(b: Variable, FunctionInvocation(identifier, Seq(), Seq(inVar: Variable, inDefault))) => (functions(identifier), inVar, inDefault, b)
-            case _ => throw new Exception("Cannot reverse this equality: " + value)
-          }
-
-          def getInValues[A, B](function: ManualReverse[A, B], outValue: Expr, inDefault: Expr): Iterable[Expr] = {
-            val realOutValue = function.constrainableOutput.recoverFrom(outValue)
-            val realDefaultValue = optionConstrainable(function.constrainableInput).recoverFrom(inDefault)
-            val inValues = function.putManual(realOutValue, realDefaultValue)
-            inValues.map(function.constrainableInput.produce)
-          }
-
-          for { solvermodel <- solveTrees(right)
-                model <- getStreamOfSolutions(outVar, solvermodel)
-                outValue = model.vars(outVar.toVal  : inox.trees.ValDef)
-                inValue <- getInValues(function, outValue, inDefault)
-                newSeqExpr = (seqExpr :+ Equals(inVar, inValue)) ++ model.vars.map{ case (v, e) => Equals(v.toVariable, e) }
-                //_ = println("Solving this :" + newSeqExpr)
-                (eqs, maybes)  = splitMaybe(newSeqExpr, Nil, Nil)
-                //_ = println("Solving maybe:" + x)
-                solver <- maxSMTMaybes(Stream((eqs, maybes, 0)))
-          } yield {
-            solver
-          }
-
-        case _ => throw new Exception("[Internal error] Does not support this shape of tree : " + t)
-      }
-    }
 
     // The stream of conjuncts splitted with the maybes.
-    for{ a <- getStreamOfConjuncts(simplified)
+    for {a <- getStreamOfConjuncts(simplified)
          _ = println("Solving conjunct : " + a)
          splitted = splitAtUnknownFunctions(a)
          solver <- solveTrees(splitted)
          modelInox <- getStreamOfSolutions(solutionVar, solver)
          solutionInox = modelInox.vars(solutionVar.toVal: inox.trees.ValDef)
-         solution = exprOfInox[A](solutionInox)
     }
       yield {
-        println(s"solution: $solution class: ${solution.getClass}")
-        solution
+        solutionInox
       }
-  //println(streamOfConjuncts
-  //implicit val po = PrinterOptions.fromContext(Context.empty)
-  //println(symbols.explainTyping(streamOfConjuncts.head))
   }
+}
+
+/** A wrapper around an inox Expr which can enumerate solutions*/
+case class Constraint[A: Constrainable](protected val _formula: Expr,
+                                        functions: Map[Identifier, ManualReverse[_, _]] = Map())
+  extends GeneralConstraint[Constraint[A]](_formula, functions) {
+  /** Adds a new assignment to this constraint */
+  def apply[A: Constrainable](tuple: (inox.trees.Variable, A)) = this && tuple._1 === inoxExprOf[A](tuple._2)
+
+  /** Adds a new conjunct to this constraint */
+  def &&(b: Expr) = Constraint[A](formula && b, functions)
+
+  /** Adds a new conjunct to this constraint */
+  def &&[B: Constrainable](b: Constraint[B]): Constraint[A] = Constraint[A](formula && b.formula, functions ++ b.functions)
+  def <&&[B: Constrainable](b: Constraint[B]): Constraint[B] = Constraint[B](formula && b.formula, functions ++ b.functions)
+
+  import inox.solvers._
+  import SolverResponses._
+
+  def copyWithNewFormula(newFormula: Expr): Constraint[A] = {
+    Constraint[A](newFormula, functions)
+  }
+
+  /** Returns a stream of solutions satisfying the constraint */
+  def toStream(solutionVar: inox.trees.Variable): Stream[A] = {
+    toStreamOfInoxExpr(solutionVar).map(exprOfInox[A] _)
+  }
+}
+
+case class InoxConstraint(protected val _formula: Expr, functions: Map[Identifier, ManualReverse[_, _]] = Map())
+extends GeneralConstraint[InoxConstraint](_formula, functions)
+{
+  def copyWithNewFormula(newFormula: Expr) = this.copy(_formula = newFormula)
+
 }

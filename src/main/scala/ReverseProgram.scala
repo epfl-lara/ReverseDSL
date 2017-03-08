@@ -16,10 +16,41 @@ object ReverseProgram {
   type ModificationSteps = Unit
   type OutExpr = Expr
   type Cache = mutable.HashMap[Expr, Expr]
+  case class Formula(known: Map[ValDef, Expr], unknownConstraints: Expr) {
+    // The assignments and the formula containing the other expressions.
+    def determinizeAll(freeVariables: List[Variable]): Stream[Map[ValDef, Expr]] = {
+      if(freeVariables.isEmpty) return Stream(Map())
+      unknownConstraints match {
+        case BooleanLiteral(true) => Stream(freeVariables.map(fv => fv.toVal -> known(fv.toVal)).toMap)
+        case BooleanLiteral(false) => Stream.empty
+        case _ =>
+          val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
+          val constraint = InoxConstraint(input === tupleWrap(freeVariables) && unknownConstraints)
+          constraint.toStreamOfInoxExpr(input).map {
+            case Tuple(args) => freeVariables.zip(args).map{ case (fv: Variable, expr: Expr) => fv.toVal -> expr }.toMap
+            case e if freeVariables.length == 1 =>
+              Map(freeVariables.head.toVal -> e)
+          }
+      }
+    }
+  }
+
   import Utils._
   import Constrainable._
   lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
   implicit val symbols = defaultSymbols
+
+  implicit class BooleanSimplification(f: Expr) {
+    @inline def &<>&(other: Expr): Expr = other match {
+      case BooleanLiteral(true) => f
+      case BooleanLiteral(false) => other
+      case _ => f match {
+        case BooleanLiteral(true) => other
+        case BooleanLiteral(false) => f
+        case _ => f && other
+      }
+    }
+  }
 
   /** Reverses a parameterless function, if possible.*/
   def put[A: Constrainable](out: A, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
@@ -34,8 +65,14 @@ object ReverseProgram {
     val prevBody = prevFunction.fullBody
     val newMain = FreshIdentifier("main")
     implicit val cache = new mutable.HashMap[Expr, Expr]
-    for {(newOutExpr, _) <- repair(prevBody, Map(), prevFunction.returnType, outExpr)
-         newFunDef = mkFunDef(newMain)()(stp => (Seq(), prevFunction.returnType, _ => newOutExpr))
+    for {(newOutExpr, f) <- repair(prevBody, Map(), prevFunction.returnType, outExpr)
+         _ = println("Remaining formula: " + f)
+         _ = println("Remaining expression: " + newOutExpr)
+         assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toList)
+         _ = println("Found assignments: " + assignments)
+         finalNewOutExpr = exprOps.replaceFromSymbols(assignments, newOutExpr)
+         _ = println("Final  expression: " + finalNewOutExpr)
+         newFunDef = mkFunDef(newMain)()(stp => (Seq(), prevFunction.returnType, _ => finalNewOutExpr))
          newProgram = InoxProgram(context, Seq(newFunDef), allConstructors)
     } yield (newProgram, newMain)
   }
@@ -98,92 +135,138 @@ object ReverseProgram {
     * @param function An expression that computed the value before newOut
     * @param currentValues Values from which function depends, with theyr original values.
     * @param functionType The declared return type of the function
-    * @param newOut A *value* that prevOutExpr should produce
+    * @param newOut A value that prevOutExpr should produce. Occasionally a variable,
+    *               in which case the result may depend on this variable which will be assigned later.
     * @return A set of possible expressions, along with a set of possible assignments to input variables.
     **/
-  def repair(function: Expr, currentValues: Map[ValDef, Expr], functionType: Type, newOut: Expr)(implicit symbols: Symbols, cache: Cache): Stream[(Expr, Map[ValDef, Expr])] = {
+  def repair(function: Expr, currentValues: Map[ValDef, Expr], functionType: Type, newOut: Expr)
+            (implicit symbols: Symbols, cache: Cache): Stream[(Expr, Formula)] = {
     //println(s"\n@solving ${currentValues.map{ case (k, v) => s"val ${k.id} = $v\n"}.mkString("")}$function = $newOut")
-    if(function == newOut)
-      return { //println("@return original");
-        Stream((function, Map())) }
+    if(function == newOut) return { //println("@return original");
+      Stream((function, Formula(Map[ValDef, Expr](), BooleanLiteral(true))))
+    }
 
     lazy val functionValue = evalWithCache(letm(currentValues) in function) // TODO: Optimize this ?
 
     {
       functionType match {
-        case a: ADTType =>
+        case a: ADTType if !newOut.isInstanceOf[Variable] =>
           function match {
-            case l: Let => Stream.empty[(Expr, Map[ValDef, Expr])] // No need to wrap a let expression, we can always do this later. Indeed,
+            case l: Let => Stream.empty[(Expr, Formula)] // No need to wrap a let expression, we can always do this later. Indeed,
               //f{val x = A; B} = {val x = A; f(B)}
             case _ =>
               maybeWrap(function, newOut, functionValue) #::: maybeUnwrap(function, newOut, functionValue)
           }
-        case _ => Stream.empty[(Expr, Map[ValDef, Expr])]
+        case _ => Stream.empty[(Expr, Formula)]
       }
     } #::: {
-      val res: Stream[(Expr, Map[ValDef, Expr])] = function match {
+      val res: Stream[(Expr, Formula)] = function match {
         // Values (including lambdas) should be immediately replaced by the new value
-        case l: Literal[_] => Stream((newOut, Map()))
+        case l: Literal[_] =>
+          newOut match {
+            case l: Literal[_] => // Raw replacement
+              Stream((newOut, Formula(Map(), BooleanLiteral(true))))
+            case v: Variable => // Replacement with the variable newOut, with a maybe clause.
+              Stream((newOut, Formula(Map(), E(Common.maybe)(v === l))))
+            case _ => throw new Exception("Don't know what to do, not a Literal or a Variable: "+newOut)
+          }
         case lFun@Lambda(vd, body) => // Check for closures, i.e. free variables.
           val freeVars = exprOps.variablesOf(body).map(_.toVal) -- vd
           if(freeVars.isEmpty) {
-            Stream((newOut, Map()))
-          }  else {
+            newOut match {
+              case l: Lambda =>
+                Stream((newOut, Formula(Map(), BooleanLiteral(true))))
+              case v: Variable =>
+                Stream((newOut, Formula(Map(), E(Common.maybe)(v === lFun))))
+              case _ => ???
+            }
+          }  else { // Closure
             // We need to determine the values of these free variables.
             newOut match {
               case Lambda(vd2, body2) =>
-                val dummyInputs = vd.map{ v =>
-                  v -> defaultValue(v.getType)
-                }.toMap
-                for{(newBody, newAssignments) <- repair(body, dummyInputs ++ freeVars.map(fv => fv -> currentValues(fv)).toMap, lFun.getType, body2)
-                  newFreevarAssignments = freeVars.map(fv => fv -> newAssignments.getOrElse(fv, currentValues(fv))).toMap }
-                  yield {
-                    (Lambda(vd, newBody): Expr, newFreevarAssignments)
-                  }
+              val dummyInputs = vd.map{ v =>
+                v -> defaultValue(v.getType)
+              }.toMap
+              for{(newBody, Formula(newAssignments, constraint)) <-
+                  repair(body, dummyInputs ++ freeVars.map(fv => fv -> currentValues(fv)).toMap, lFun.getType, body2)
+                newFreevarAssignments = freeVars.flatMap(fv => newAssignments.get(fv).map(res => fv -> res)).toMap }
+                yield {
+                  (Lambda(vd, newBody): Expr, Formula(newFreevarAssignments, constraint))
+                }
+              case v: Variable => ???
               case _ => ???
             }
           }
 
         // Variables are assigned the given value.
         case v@Variable(id, tpe, flags) =>
-          Stream((v, Map(v.toVal -> newOut)))
+          newOut match {
+            case v2: Variable =>
+              Stream((v2, Formula(Map(), v2 === v)))
+            case _ =>
+              Stream((v, Formula(Map(v.toVal -> newOut), BooleanLiteral(true))))
+          }
 
         // Let expressions eval their variable, reverse their body and then their assigning expression
         // It comes from the fact that
         // let x = b in c[x]    is equivalent to      Application((\x. c[x]), (b))
-        // In theory with rewriting it could be dropped, but
+        // In theory with rewriting it could be dropped, but we still do inline it for now.
         case Let(vd@ValDef(id, tpe, flags), expr, body) =>
           val currentVdValue = evalWithCache(letm(currentValues) in expr)
 
-          for {(newBody, newAssignment) <- repair(body, currentValues + (vd -> currentVdValue), functionType, newOut) // Later: Change assignments to constraints
-               newValValue = newAssignment.getOrElse(vd, expr)
-               (newExpr, newAssignment2) <- repair(expr, currentValues, tpe, newValValue)
+          for { (newBody, Formula(newAssignment, constraint)) <-
+                 repair(body, currentValues + (vd -> currentVdValue), functionType, newOut) // Later: Change assignments to constraints
+               // If newAssignment does not contain vd, it means that newBody is a variable present in constraint.
+               newValValue = newAssignment.getOrElse(vd, ValDef(FreshIdentifier("t", true), tpe, Set()).toVariable)
+               (newExpr, Formula(newAssignment2, constraint2)) <- repair(expr, currentValues, tpe, newValValue)
                newFunction = Let(vd, newExpr, newBody)
                finalAssignments = (newAssignment ++ newAssignment2) - vd
-          } yield (newFunction, finalAssignments)
+          } yield (newFunction, Formula(finalAssignments, constraint2 &<>& constraint))
+
+        case StringConcat(expr1, expr2) =>
+          val left = ValDef(FreshIdentifier("left"), StringType, Set())
+          val right = ValDef(FreshIdentifier("right"), StringType, Set())
+
+          val leftRepair = repair(expr1, currentValues, StringType, left.toVariable)
+          val rightRepair = repair(expr2, currentValues, StringType, right.toVariable)
+
+          val bothRepair = inox.utils.StreamUtils.cartesianProduct(leftRepair, rightRepair)
+
+          bothRepair.map{ case ((leftExpr, f1@Formula(mp1, cs1)), (rightExpr, f2@Formula(mp2, cs2))) =>
+            println("Preparing a concatenation:")
+            println(s"$left, $right, $leftRepair, $rightRepair, $leftExpr, $rightExpr")
+            println(s"$f1")
+            println(s"$f2")
+            val newCs = cs1 &<>& cs2 &<>& newOut === StringConcat(left.toVariable, right.toVariable)
+            println(s"$newCs")
+            (StringConcat(leftExpr, rightExpr), Formula(mp1 ++ mp2, newCs))
+          }
 
         case ADT(ADTType(tp, tpArgs), args) =>
           newOut match {
+            case v: Variable =>
+              Stream((v, Formula(Map(), v === function))) // TODO: Might be too restrictive?
+
             case ADT(ADTType(tp2, tpArgs2), args2) if tp2 == tp && tpArgs2 == tpArgs => // Same type ! Maybe the arguments will change or move.
-              if (args.length == 0) {
-                return {
+              if (args.length == 0) { // Nil-like
                   //println("@return original");
-                  Stream((newOut, Map()))
+                  Stream((newOut, Formula(Map(), BooleanLiteral(true))))
+              } else {
+                // Now args.length > 0
+                val adt = castOrFail[ADTDefinition, ADTConstructor](symbols.adts(tp))
+                val tadt = adt.typed(tpArgs)
+                val seqOfStreamSolutions = (args.zip(args2).zip(tadt.fields).map { case ((aFun, aVal), avd) =>
+                  repair(aFun, currentValues, avd.getType, aVal).map(
+                    (_, avd, () => evalWithCache(letm(currentValues) in aFun)))
+                })
+                val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
+                for {seq <- streamOfSeqSolutions
+                     reduced = combineResults(seq, currentValues)
+                     newArgs = reduced._1.reverse
+                     assignments = reduced._2
+                } yield {
+                  (ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
                 }
-              }
-              // Now args.length > 0
-              val adt = castOrFail[ADTDefinition, ADTConstructor](symbols.adts(tp))
-              val tadt = adt.typed(tpArgs)
-              val seqOfStreamSolutions = (args.zip(args2).zip(tadt.fields).map { case ((aFun, aVal), avd) =>
-                repair(aFun, currentValues, avd.getType, aVal).map((_, avd, () => evalWithCache(letm(currentValues) in aFun)))
-              })
-              val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
-              for {seq <- streamOfSeqSolutions
-                   reduced = combineResults(seq, currentValues)
-                   newArgs = reduced._1.reverse
-                   assignments = reduced._2
-              } yield {
-                (ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
               }
             case ADT(ADTType(tp2, tpArgs2), args2) => // Maybe the newOut just wrapped the previous value of function
               Stream.empty
@@ -200,22 +283,28 @@ object ReverseProgram {
           originalValue match {
             case l@Lambda(argNames, body) =>
               val argumentValues = argNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
-              for { (newBody, assignments) <- repair(body, argumentValues, l.getType, newOut) // TODO: Incorporate changes in lambdas.
-                    newArgumentsAssignments <- inox.utils.StreamUtils.cartesianProduct(arguments.zip(argNames).map { case (arg, v) =>
+              for {(newBody, Formula(assignments, constraint)) <-
+                     repair(body, argumentValues, l.getType, newOut)
+                   argumentsReversed = arguments.zip(argNames).map { case (arg, v) =>
                      repair(arg, currentValues, v.getType, assignments.getOrElse(v, argumentValues(v)))
-                   })
+                   }.zipWithIndex.map{ case (x, i) =>
+                     if(x.isEmpty) Stream((argumentValues(argNames(i)), Formula(Map(), BooleanLiteral(true)))) else x
+                   }
+                   newArgumentsAssignments <- inox.utils.StreamUtils.cartesianProduct(argumentsReversed)
                    newArguments = newArgumentsAssignments.map(_._1)
                    isSameBody = newBody == body
                    newLambda = if (isSameBody) l else Lambda(argNames, newBody)
-                   (newAppliee, assignments2) <- lambdaExpr match {
-                     case v: Variable => Stream(v -> (if(isSameBody) Map() else Map(v.toVal -> newLambda)))
+                   (newAppliee, Formula(assignments2, cs)) <- lambdaExpr match {
+                     case v: Variable => Stream(v -> (
+                       if(isSameBody) Formula(Map(), BooleanLiteral(true)) else
+                         Formula(Map(v.toVal -> newLambda), BooleanLiteral(true))))
                      case l: Lambda => repair(lambdaExpr, currentValues, l.getType, newLambda)
                    }
                    finalApplication = Application(newAppliee, newArguments)
                    newAssignments = Map[ValDef, Expr]() ++ assignments2 ++
-                     newArgumentsAssignments.flatMap(_._2.toList) // TODO: Deal with variable value merging like above.
+                     newArgumentsAssignments.flatMap(_._2.known.toList) // TODO: Deal with variable value merging like above.
               } yield {
-                (finalApplication: Expr, newAssignments)
+                (finalApplication: Expr, Formula(newAssignments, constraint &<>& cs)) // TODO: Check order.
               }
             case _ => throw new Exception(s"Don't know how to handle this case : $m of type ${m.getClass.getName}")
           }
@@ -228,21 +317,27 @@ object ReverseProgram {
     }
   }
 
-  private def combineResults(seq: List[((Expr, Map[ValDef,Expr]), ValDef, () => inox.trees.Expr)], currentValues: Map[ValDef,Expr])
+  private def combineResults(seq: List[((Expr, Formula), ValDef, () => inox.trees.Expr)], currentValues: Map[ValDef,Expr])
             (implicit symbols: Symbols, cache: Cache) =
-    ((List[Expr](), Map[ValDef, Expr]()) /: seq) {
-    case ((ls, mm), ((l, m), field, recompute)) =>
+    ((List[Expr](), Formula(Map[ValDef, Expr](), BooleanLiteral(true))) /: seq) {
+    case ((ls, Formula(mm, cs1)), ((l, Formula(m, cs2)), field, recompute)) =>
       if ((mm.keys.toSet intersect m.keys.toSet).nonEmpty && {
         // Compare new assignment with the original value.
-        val realValue = evalWithCache(letm(currentValues) in m.keys.head.toVariable)
+        val realValue = currentValues(m.keys.head)
         realValue == m(m.keys.head)
       }) {
         // The value did not change ! We shall not put it in the assignment map.
-        (l :: ls, mm)
-      } else (l :: ls, mm ++ m)
+        (l :: ls, Formula(mm, cs1))
+      } else (l :: ls, Formula(mm ++ m, cs1 &<>& cs2))
   }
 
-  private def maybeWrap(function: Expr, newOut: Expr, functionValue: Expr): Stream[(Expr, Map[ValDef, Expr])] = {
+  /* Example:
+    function = v
+    functionValue = Element("b", List(), List(), List())
+    newOut = Element("div", List(Element("b", List(), List(), List())), List(), List())
+    result: Element("div", List(v), List(), List())
+  * */
+  private def maybeWrap(function: Expr, newOut: Expr, functionValue: Expr): Stream[(Expr, Formula)] = {
     // Checks if the old value is inside the new value, in which case we add a wrapper.
     if (exprOps.exists {
       case t if t == functionValue => true
@@ -255,15 +350,21 @@ object ReverseProgram {
         case _ => None
       }(newOut)
 
-      Stream((newFunction, Map()))
+      Stream((newFunction, Formula(Map(), BooleanLiteral(true))))
     } else {
       Stream.empty
     }
   }
 
-  // Should be called on functions ADT only.
-  private def maybeUnwrap(function: Expr, newOut: Expr, functionValue: Expr): Stream[(Expr, Map[ValDef, Expr])] = {
-    if(functionValue == newOut) return Stream((function, Map()))
+
+  /* Example:
+  *  function:      Element("b", List(v, Element("span", List(), List(), List())), List(), List())
+  *  functionValue: Element("b", List(Element("span", List(), List(), List()), Element("span", List(), List(), List())), List(), List())
+  *  newOut:        Element("span", List(), List(), List())
+  *  result:        v  #::   Element("span", List(), List(), List()) #:: Stream.empty
+  * */
+  private def maybeUnwrap(function: Expr, newOut: Expr, functionValue: Expr): Stream[(Expr, Formula)] = {
+    if(functionValue == newOut) return Stream((function, Formula(Map(), BooleanLiteral(true))))
 
     (function, functionValue) match {
       case (ADT(ADTType(tp, tpArgs), args), ADT(ADTType(tp2, tpArgs2), argsValue)) =>

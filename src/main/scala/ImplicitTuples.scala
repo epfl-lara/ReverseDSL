@@ -5,6 +5,9 @@ import inox.trees.dsl._
 import Constrainable._
 
 object ImplicitTuples {
+  def _Tuple2(tpe1: Type, tpe2: Type)(first: Expr, second: Expr) =
+    ADT(ADTType(tuple2, Seq(tpe1, tpe2)), Seq(first, second))
+
   /* Generic combination class. We wish to have everything there, but it is apparently not possible */
   abstract class Combination[Tuple <: Product](constrainables: Constrainable[_]*) extends Constrainable[Tuple] {
     def getType = ADTType(_tupleTypes(constrainables.length - 2), constrainables.map(_.getType))
