@@ -8,11 +8,22 @@ import inox.InoxProgram
 import scala.xml.MetaData
 
 object Utils {
+  /** Inner variables first */
+  val value: Identifier = FreshIdentifier("value")
+  val head: Identifier = FreshIdentifier("head")
+  val tail: Identifier = FreshIdentifier("tail")
+  val inner: Identifier = FreshIdentifier("inner")
+  val text: Identifier = FreshIdentifier("text")
+  val tag: Identifier = FreshIdentifier("tag")
+  val children: Identifier = FreshIdentifier("children")
+  val attributes: Identifier = FreshIdentifier("attributes")
+  val styles: Identifier = FreshIdentifier("styles")
+  val name: Identifier = FreshIdentifier("name")
+
+
   val list: Identifier = FreshIdentifier("List")
   val cons: Identifier = FreshIdentifier("Cons")
   val nil: Identifier = FreshIdentifier("Nil")
-  val head: Identifier = FreshIdentifier("head")
-  val tail: Identifier = FreshIdentifier("tail")
   val listSort = mkSort(list)("A")(Seq(cons, nil))
   val consConstructor = mkConstructor(cons)("A")(Some(list))( stp => Seq(ValDef(head, stp(0)), ValDef(tail, T(list)(stp(0)))))
   val nilConstructor = mkConstructor(nil)("A")(Some(list))( stp => Seq())
@@ -27,7 +38,6 @@ object Utils {
   val either: Identifier = FreshIdentifier("Either")
   val left: Identifier = FreshIdentifier("Left")
   val right: Identifier = FreshIdentifier("Right")
-  val value: Identifier = FreshIdentifier("value")
   val eitherSort = mkSort(either)("A", "B")(Seq(left, right))
   val leftConstructor = mkConstructor(left)("A", "B")(Some(either))(stp => Seq(ValDef(value, stp(0))))
   val rightConstructor = mkConstructor(right)("A", "B")(Some(either))(stp => Seq(ValDef(value, stp(1))))
@@ -37,18 +47,11 @@ object Utils {
 
   val webTree: Identifier = FreshIdentifier("WebTree")
   val webElement: Identifier = FreshIdentifier("WebElement")
-  val inner: Identifier = FreshIdentifier("inner")
   val innerWebElement: Identifier = FreshIdentifier("InnerWebElement")
   val textNode: Identifier = FreshIdentifier("TextNode")
   val element: Identifier = FreshIdentifier("Element")
   val webAttribute: Identifier = FreshIdentifier("WebAttribute")
   val webStyle: Identifier = FreshIdentifier("WebStyle")
-  val text: Identifier = FreshIdentifier("text")
-  val tag: Identifier = FreshIdentifier("tag")
-  val children: Identifier = FreshIdentifier("children")
-  val attributes: Identifier = FreshIdentifier("attributes")
-  val styles: Identifier = FreshIdentifier("styles")
-  val name: Identifier = FreshIdentifier("name")
   val webTreeSort = mkSort(webTree)()(Seq(webElement, webAttribute, webStyle))
   val innerWebElementSort = mkSort(innerWebElement)()(Seq(textNode, element))
   var webElementConstructor = mkConstructor(webElement)()(Some(webTree))(stp => Seq(ValDef(inner, T(innerWebElement)())))

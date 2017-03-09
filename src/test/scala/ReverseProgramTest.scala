@@ -25,18 +25,52 @@ object Make {
 trait RepairProgramTest {
   import Constrainable._
 
+  type PFun = (InoxProgram, Identifier)
+
   implicit def toStringLiteral(s: String): StringLiteral = StringLiteral(s)
 
-  def mkProg(funDef: FunDef) = InoxProgram(
-    ReverseProgram.context,
-    Seq(funDef), allConstructors
-  )
+  implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
+    @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {
+      case Some(funDef) => test(funDef)
+      case None => fail(s"There was no such function ${pf._2} in program:\n${pf._1}")
+    }
+    def matchBody(test: PartialFunction[Expr,Unit]) = matchFunDef{ funDef =>
+      val body = funDef.fullBody
+      if(test.isDefinedAt(body)) {
+        test(body)
+      } else {
+        fail(s"Unexpected shape:\n$body")
+      }
+    }
+    def getBody: Expr = {
+      pf._1.symbols.functions.get(pf._2).map(_.fullBody).getOrElse(throw new Exception(s"Non-existent function in program $pf"))
+    }
+  }
 
-  def repairProgram[A: Constrainable](funDef: inox.trees.dsl.trees.FunDef, prog: InoxProgram, expected2: A) = {
-    val progfuns2 = ReverseProgram.put(expected2, None, None, Some((prog, funDef.id)))
-    progfuns2.toStream.lengthCompare(1) should be >= 0
-    val (prog2, funId2) = progfuns2.head
-    (prog2, funId2)
+  def mkProg(funDef: FunDef) = {
+    InoxProgram(
+      ReverseProgram.context,
+      Seq(funDef), allConstructors
+    )
+  }
+
+  def sortStreamByDistance(s: Stream[PFun], num: Int, init: Expr) = {
+    s.take(num).sortBy((x: PFun) => Distances.distance(x.getBody, init)) #::: s.drop(num)
+  }
+
+  def repairProgram[A: Constrainable](
+      funDef: inox.trees.dsl.trees.FunDef, prog: InoxProgram, expected2: A,
+      lookInManyFirstSolutions: Int = 1): PFun = {
+    val progfuns2 = ReverseProgram.put(expected2, None, None, Some((prog, funDef.id))).toStream
+    progfuns2.lengthCompare(1) should be >= 0
+    val initialValue = (prog, funDef.id).getBody
+    val sorted = sortStreamByDistance(progfuns2, lookInManyFirstSolutions, initialValue)
+    println("Solutions: by order")
+    sorted.take(lookInManyFirstSolutions).foreach{ sol =>
+      println(sol.getBody)
+    }
+
+    sorted.head
   }
   def generateProgram[A: Constrainable](expected2: A) = {
     val progfuns2 = ReverseProgram.put(expected2, None, None, None)
@@ -57,20 +91,6 @@ trait RepairProgramTest {
     checkProg(expected1, progfun._1, progfun._2)
   }
 
-  implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
-    @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {
-      case Some(funDef) => test(funDef)
-      case None => fail(s"There was no such function ${pf._2} in program:\n${pf._1}")
-    }
-    def matchBody(test: PartialFunction[Expr,Unit]) = matchFunDef{ funDef =>
-      val body = funDef.fullBody
-      if(test.isDefinedAt(body)) {
-        test(body)
-      } else {
-        fail(s"Unexpected shape:\n$body")
-      }
-    }
-  }
 
   protected def isVarIn(id: Identifier, body: inox.trees.Expr) = {
     inox.trees.exprOps.exists {
@@ -339,10 +359,10 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     val expected4 = "Hello    world"
 
     val funDef = function(StringConcat("Hello ", "world"))(inoxTypeOf[String])
-    val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun@(prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
     val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
-    val pfun3 = checkProg(expected3, repairProgram(funDef, prog, expected3))
-    val pfun4 = checkProg(expected4, repairProgram(funDef, prog, expected4))
+    val pfun3 = checkProg(expected3, repairProgram(funDef, prog, expected3, 3))
+    val pfun4 = checkProg(expected4, repairProgram(funDef, prog, expected4, 3))
 
     pfun2 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
       s shouldEqual "Hello "
@@ -350,7 +370,7 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     }
     pfun3 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
       s shouldEqual "Hello "
-      t shouldEqual "bigword"
+      t shouldEqual "bigworld"
     }
     pfun4 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
       s shouldEqual "Hello    "
@@ -358,7 +378,29 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     }
   }
 
-  test("Reverse variable string concatenation") {
+  test("Reverse 1 variable string concatenation") {
+    val expected1 = "Hello world"
+    val expected2 = "Hello buddy"
+
+    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+
+    val funDef = function(
+      let(ap, "Hello ")(av =>
+        StringConcat(av, "world")
+      ))(inoxTypeOf[String])
+
+    val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    pfun2 matchBody {
+      case funBody@Let(v1, StringLiteral(s), body@StringConcat(_, StringLiteral(t)))
+      =>
+        if(!isVarIn(v1.id, body)) fail(s"There was no variable $v1 in the given final expression: $funBody")
+        s shouldEqual "Hello "
+        t shouldEqual "buddy"
+    }
+  }
+
+  test("Reverse 2 variables string concatenation") {
     val expected1 = "Hello world"
     val expected2 = "Hello buddy"
 
@@ -375,7 +417,7 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
     val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
     pfun2 matchBody {
-      case funBody@Let(Seq(v1: ValDef), StringLiteral(s), Let(Seq(v2: ValDef), StringLiteral(t), body@StringConcat(_, _)))
+      case funBody@Let(v1, StringLiteral(s), Let(v2, StringLiteral(t), body@StringConcat(_, _)))
       =>
         if(!isVarIn(v1.id, body)) fail(s"There was no variable $v1 in the given final expression: $funBody")
         if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given final expression: $funBody")

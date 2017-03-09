@@ -29,7 +29,8 @@ object Distances {
 
   def distance(a: Any, b: Any): Int = {
     if (a == b) 0 else {
-      println(s"Comparing two $a of type ${a.getClass}, $b of type ${b.getClass}")
+//      println(s"computing distance between $a and $b")
+//      println(s"Comparing $a of type ${a.getClass}, $b of type ${b.getClass}")
       (a, b) match {
         case (a: Char, b: Char) => 2 // Remove a and write b
         case (a: String, b: String) => Levenshtein.distance(a, b, distance, size)

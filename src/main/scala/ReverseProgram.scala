@@ -66,12 +66,12 @@ object ReverseProgram {
     val newMain = FreshIdentifier("main")
     implicit val cache = new mutable.HashMap[Expr, Expr]
     for {(newOutExpr, f) <- repair(prevBody, Map(), prevFunction.returnType, outExpr)
-         _ = println("Remaining formula: " + f)
-         _ = println("Remaining expression: " + newOutExpr)
+         //_ = println("Remaining formula: " + f)
+         //_ = println("Remaining expression: " + newOutExpr)
          assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toList)
-         _ = println("Found assignments: " + assignments)
+         //_ = println("Found assignments: " + assignments)
          finalNewOutExpr = exprOps.replaceFromSymbols(assignments, newOutExpr)
-         _ = println("Final  expression: " + finalNewOutExpr)
+         //_ = println("Final  expression: " + finalNewOutExpr)
          newFunDef = mkFunDef(newMain)()(stp => (Seq(), prevFunction.returnType, _ => finalNewOutExpr))
          newProgram = InoxProgram(context, Seq(newFunDef), allConstructors)
     } yield (newProgram, newMain)
@@ -202,7 +202,7 @@ object ReverseProgram {
         case v@Variable(id, tpe, flags) =>
           newOut match {
             case v2: Variable =>
-              Stream((v2, Formula(Map(), v2 === v)))
+              Stream((v, Formula(Map(), v2 === v)))
             case _ =>
               Stream((v, Formula(Map(v.toVal -> newOut), BooleanLiteral(true))))
           }
@@ -217,11 +217,18 @@ object ReverseProgram {
           for { (newBody, Formula(newAssignment, constraint)) <-
                  repair(body, currentValues + (vd -> currentVdValue), functionType, newOut) // Later: Change assignments to constraints
                // If newAssignment does not contain vd, it means that newBody is a variable present in constraint.
-               newValValue = newAssignment.getOrElse(vd, ValDef(FreshIdentifier("t", true), tpe, Set()).toVariable)
+               isAssigned = newAssignment.contains(vd)
+               newValValue = (if(isAssigned) newAssignment(vd) else ValDef(FreshIdentifier("t", true), tpe, Set()).toVariable)
                (newExpr, Formula(newAssignment2, constraint2)) <- repair(expr, currentValues, tpe, newValValue)
                newFunction = Let(vd, newExpr, newBody)
                finalAssignments = (newAssignment ++ newAssignment2) - vd
-          } yield (newFunction, Formula(finalAssignments, constraint2 &<>& constraint))
+          } yield {
+            if(isAssigned) {
+              (newFunction, Formula(finalAssignments, constraint2 &<>& constraint))
+            } else {
+              (newFunction, Formula(finalAssignments, constraint2 &<>& constraint && newValValue === vd.toVariable))
+            }
+          }
 
         case StringConcat(expr1, expr2) =>
           val left = ValDef(FreshIdentifier("left"), StringType, Set())
@@ -233,7 +240,7 @@ object ReverseProgram {
           val bothRepair = inox.utils.StreamUtils.cartesianProduct(leftRepair, rightRepair)
 
           bothRepair.map{ case ((leftExpr, f1@Formula(mp1, cs1)), (rightExpr, f2@Formula(mp2, cs2))) =>
-            println("Preparing a concatenation:")
+            println("Preparing a concatenation for " + function)
             println(s"$left, $right, $leftRepair, $rightRepair, $leftExpr, $rightExpr")
             println(s"$f1")
             println(s"$f2")
