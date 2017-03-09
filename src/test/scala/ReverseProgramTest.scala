@@ -45,28 +45,29 @@ trait RepairProgramTest {
     (prog2, funId2)
   }
 
-  def checkProg[A: Constrainable](expected1: A, funDefId: Identifier, prog: InoxProgram) = {
+  def checkProg[A: Constrainable](expected1: A, prog: InoxProgram, funDefId: Identifier): (InoxProgram, Identifier) = {
     prog.getEvaluator.eval(FunctionInvocation(funDefId, Seq(), Seq())) match {
       case EvaluationResults.Successful(e) => exprOfInox[A](e) shouldEqual expected1
       case m => fail(s"Did not evaluate to $expected1. Error: $m")
     }
+    (prog, funDefId)
   }
 
-  implicit class Obtainable(p: inox.InoxProgram) {
-    def get(f: Identifier) = new {
-      def andMatch(test: FunDef => Unit) = p.symbols.functions.get(f) match {
-        case Some(funDef) => test(funDef)
-        case None => fail("???")
-      }
+  def checkProg[A: Constrainable](expected1: A, progfun: (InoxProgram, Identifier)): (InoxProgram, Identifier) = {
+    checkProg(expected1, progfun._1, progfun._2)
+  }
+
+  implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
+    @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {
+      case Some(funDef) => test(funDef)
+      case None => fail(s"There was no such function ${pf._2} in program:\n${pf._1}")
     }
-    def getBodyOf(f: Identifier) = new {
-      def andMatch(test: PartialFunction[Expr,Unit]) = get(f).andMatch{ funDef =>
-        val body = funDef.fullBody
-        if(test.isDefinedAt(body)) {
-          test(body)
-        } else {
-          fail(s"Unexpected shape:\n$body")
-        }
+    def matchBody(test: PartialFunction[Expr,Unit]) = matchFunDef{ funDef =>
+      val body = funDef.fullBody
+      if(test.isDefinedAt(body)) {
+        test(body)
+      } else {
+        fail(s"Unexpected shape:\n$body")
       }
     }
   }
@@ -81,7 +82,6 @@ trait RepairProgramTest {
   val main = FreshIdentifier("main")
 
   protected def function(body: Expr)(returnType: Type) = mkFunDef(main)()(_ => (Seq(), returnType, _ => body))
-
 }
 
 
@@ -94,16 +94,14 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
 
   test("Create a program from scratch") {
     val out = Element("div", WebElement(TextNode("Hello world"))::Nil)
-    val (prog, fun) = generateProgram(out)
-    checkProg(out, fun, prog)
+    checkProg(out, generateProgram(out))
   }
 
   test("Change a constant output to another") {
     val out  = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val out2 = Element("pre", WebElement(TextNode("Hello code"))::Nil)
     val (prog, fun) = ReverseProgram.put(out, None, None, None).head
-    val (prog2, fun2) = ReverseProgram.put(out2, None, None, Some((prog, fun))).head
-    checkProg(out2, fun2, prog2)
+    checkProg(out2, ReverseProgram.put(out2, None, None, Some((prog, fun))).head)
   }
 
   test("Variable assigment keeps the shape") {
@@ -113,14 +111,9 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     val funDef = function(
       let(vText.toVal, "Hello world")(v => v)
     )(inoxTypeOf[String])
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-
-    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-    checkProg(expected2, funId2, prog2)
-
-    // testing the shape.
-    prog2 getBodyOf funId2 andMatch {
+    val (prog, funId) = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    pfun2 matchBody {
       case l@Let(vd, expr, body) =>
         if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
     }
@@ -134,14 +127,9 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
       ))(inoxTypeOf[Element])
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-
-    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-    checkProg(expected2, funId2, prog2)
-
-    // testing the shape.
-    prog2 getBodyOf funId2 andMatch {
+    val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    pfun2 matchBody {
       case l@Let(vd, expr, body) =>
         if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
     }
@@ -155,14 +143,9 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
       ))(inoxTypeOf[Element])
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-
-    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-    checkProg(expected2, funId2, prog2)
-
-    // testing the shape.
-    prog2 getBodyOf funId2 andMatch {
+    val (prog, _) = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    pfun2 matchBody {
       case l@Let(vd, expr, body) =>
         if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
     }
@@ -181,14 +164,9 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
           _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](a), _List[WebStyle]())
         )
       ))(inoxTypeOf[Element])
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-
-    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-    checkProg(expected2, funId2, prog2)
-
-    // testing the shape.
-    prog2 getBodyOf funId2 andMatch {
+    val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    pfun2 matchBody {
       case l@Let(vd, expr, l2@Let(vd2, expr2, body)) =>
         if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
         if(!isVarIn(vd2.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
@@ -205,17 +183,10 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
       let(vText.toVal, StringLiteral("red"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle](_WebStyle("color", v)))
       ))(inoxTypeOf[Element])
-    val prog = mkProg(funDef)
-    checkProg[Element](initial, funDef.id, prog)
-
-    val (prog2, funId2) = repairProgram(funDef, prog, out2)
-    checkProg(expected2, funId2, prog2)
-
-    val (prog3, funId3) = repairProgram(funDef, prog, out2bis)
-    checkProg(expected2, funId3, prog3)
-
-    val (prog4, funId4) = repairProgram(funDef, prog, out2)
-    checkProg(expected2, funId4, prog4)
+    val (prog, _) = checkProg[Element](initial, mkProg(funDef), funDef.id)
+    checkProg(expected2, repairProgram(funDef, prog, out2))
+    checkProg(expected2, repairProgram(funDef, prog, out2bis))
+    checkProg(expected2, repairProgram(funDef, prog, out2))
   }
 
   test("Variable assigment same, outer structure") {
@@ -226,14 +197,9 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
       ))(inoxTypeOf[Element])
-    val prog = mkProg(funDef)
-    checkProg[Element](expected1, funDef.id, prog)
-
-    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-    checkProg(expected2, funId2, prog2)
-
-    // testing the shape.
-    prog2 getBodyOf funId2 andMatch {
+    val (prog, _) = checkProg[Element](expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    pfun2 matchBody {
       case l@Let(vd, expr, body) =>
         if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
     }
@@ -250,12 +216,9 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
   )) test(msg) {
       val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
       val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
-      val prog = mkProg(funDef)
-      checkProg(expected1, funDef.id, prog)
-      val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-      checkProg[Element](expected2, funId2, prog2)
-      // testing the shape.
-      prog2 getBodyOf funId2 andMatch {
+      val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
+      val pfun2 = checkProg[Element](expected2, repairProgram(funDef, prog, expected2))
+      pfun2 matchBody {
         case Let(_, _, Application(_, Seq(StringLiteral(s)))) if msg == "Change a variable lambda's argument"
           => s shouldEqual "We are the children"
         case Application(_, Seq(StringLiteral(s))) if msg == "change an applied lambda's argument"
@@ -271,20 +234,15 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
   )) test(msg) {
       val expected1 = Element("div", WebElement(TextNode("Hello world")) :: Nil)
       val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world")) :: Nil)) :: Nil)
-      val prog = mkProg(funDef)
-      checkProg(expected1, funDef.id, prog)
-      val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-      checkProg(expected2, funId2, prog2)
-      // testing that the lambda changed but keeps the variable.
-      prog2 getBodyOf funId2 andMatch {
+      val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
+      val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+      pfun2 matchBody {
         case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
           if msg == "Change a variable lambda's shape by wrapping an element"
-        =>
-          if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
+        => if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
         case Application(newLambda@Lambda(Seq(v2), body), _)
           if msg == "Change an applied lambda's shape by wrapping an element"
-          =>
-          if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
+        => if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
       }
     }
 
@@ -300,21 +258,15 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
   )) test(msg) {
     val expected1 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
     val expected2 = Element("div", WebElement(TextNode("Hello world"))::Nil)
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-    checkProg(expected2, funId2, prog2)
-    // testing that the lambda changed but keeps the variable.
-    prog2 getBodyOf funId2 andMatch {
+    val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    pfun2 matchBody {
       case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
         if msg == "Change a variable lambda's shape by unwrapping an element"
-      =>
-        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+      => if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
       case Application(newLambda@Lambda(Seq(v2), body), _)
         if msg == "Change an applied lambda's shape by unwrapping an element"
-      => {
-        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
-      }
+      => if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
     }
   }
 
@@ -326,11 +278,8 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
   ))  test(msg) {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(Element("br"))::WebElement(TextNode("Hello world"))::Nil)
-    val (prog2, funId2) = repairProgram(funDef, mkProg(funDef), expected2)
-    checkProg(expected2, funId2, prog2)
-
-    // testing that the lambda changed but keeps the variable.
-    prog2 getBodyOf funId2 andMatch {
+    val pfun2 = checkProg(expected2, repairProgram(funDef, mkProg(funDef), expected2))
+    pfun2 matchBody {
       case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
         if msg == "Change a variable lambda's shape by inserting a constant element"
       =>
@@ -355,17 +304,10 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
         Application(b, Seq("Hello world"))
       ))(inoxTypeOf[Element])
 
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-
-    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-    checkProg(expected3, funId2, prog2)
-
-    val (prog3, funId3) = repairProgram(funDef, prog, expected2bis)
-    checkProg(expected3, funId3, prog3)
-
-    val (prog4, funId4) = repairProgram(funDef, prog, expected3)
-    checkProg(expected3, funId4, prog4)
+    val (prog, funId)  = checkProg(expected1, mkProg(funDef), funDef.id)
+    checkProg(expected3, repairProgram(funDef, prog, expected2))
+    checkProg(expected3, repairProgram(funDef, prog, expected2bis))
+    checkProg(expected3, repairProgram(funDef, prog, expected3))
   }
 
   test("Change a variable captured by a closure lambda") {
@@ -381,22 +323,42 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
         Application(lambda, Seq("Hello world"))
       ))(inoxTypeOf[Element])
 
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-
-    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-    checkProg(expected2, funId2, prog2)
-
-    prog2 getBodyOf funId2 andMatch {
+    val (prog, fundId)  = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    pfun2 matchBody {
       case funBody@Let(_, StringLiteral(s), Application(newLambda@Lambda(Seq(v2), body), Seq(StringLiteral(_))))
-      =>
-        println(funBody)
+      => //println(funBody)
         if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
         s shouldEqual "Changed parameter"
     }
   }
-
   test("Reverse simple string concatenation") {
+    val expected1 = "Hello world"
+    val expected2 = "Hello buddy"
+    val expected3 = "Hello bigworld"
+    val expected4 = "Hello    world"
+
+    val funDef = function(StringConcat("Hello ", "world"))(inoxTypeOf[String])
+    val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    val pfun3 = checkProg(expected3, repairProgram(funDef, prog, expected3))
+    val pfun4 = checkProg(expected4, repairProgram(funDef, prog, expected4))
+
+    pfun2 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
+      s shouldEqual "Hello "
+      t shouldEqual "buddy"
+    }
+    pfun3 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
+      s shouldEqual "Hello "
+      t shouldEqual "bigword"
+    }
+    pfun4 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
+      s shouldEqual "Hello    "
+      t shouldEqual "world"
+    }
+  }
+
+  test("Reverse variable string concatenation") {
     val expected1 = "Hello world"
     val expected2 = "Hello buddy"
 
@@ -410,21 +372,15 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
       )
       ))(inoxTypeOf[String])
 
-    val prog = mkProg(funDef)
-    checkProg(expected1, funDef.id, prog)
-
-    val (prog2, funId2) = repairProgram(funDef, prog, expected2)
-    checkProg(expected2, funId2, prog2)
-
-    prog2 getBodyOf funId2 andMatch {
+    val (prog, funId)   = checkProg(expected1, mkProg(funDef), funDef.id)
+    val pfun2 = checkProg(expected2, repairProgram(funDef, prog, expected2))
+    pfun2 matchBody {
       case funBody@Let(Seq(v1: ValDef), StringLiteral(s), Let(Seq(v2: ValDef), StringLiteral(t), body@StringConcat(_, _)))
       =>
-        println(funBody)
-
         if(!isVarIn(v1.id, body)) fail(s"There was no variable $v1 in the given final expression: $funBody")
         if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given final expression: $funBody")
         s shouldEqual "Hello "
-        s shouldEqual "buddy"
+        t shouldEqual "buddy"
     }
   }
 
