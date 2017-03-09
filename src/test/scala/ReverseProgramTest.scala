@@ -338,7 +338,6 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
   }
 
   test("Reverse 2 variables string concatenation, one used twice.") {
-
     val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
     val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
 
@@ -357,15 +356,28 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     checkProg("Mikael   Mikael", repairProgram(funDef, prog, "Mikael   Mikael", 3))
   }
 
+  test("Clone-and-paste simple") {
+    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+    val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
 
+    val funDef = function("Hello world,")(inoxTypeOf[String])
+
+    val clonedBody = let(ap, "world")(av =>
+      StringConcat(StringConcat(StringConcat("Hello ", av), ","), av)
+    )
+
+    val prog = mkProg(funDef)
+    val pfun2 = repairProgram(funDef, prog, clonedBody)
+    pfun2 matchBody {
+      case v => v shouldEqual clonedBody
+    }
+  }
 
   /* Add tests for:
-     String concatenation 3 times as before.
-
      Integers operations
      List mapping, flatten, flatmap, filter and custom user-defined lenses.
      Multiple arguments changed in lambdas
-
+     Merging programs to implement clone-and-paste.
      XML transformation as in the paper.
     */
 }

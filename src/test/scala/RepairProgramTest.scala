@@ -25,7 +25,7 @@ trait RepairProgramTest {
 
   type PFun = (InoxProgram, Identifier)
 
-  implicit def toStringLiteral(s: String): StringLiteral = StringLiteral(s)
+  implicit def toExpr[A : Constrainable](e: A): Expr = inoxExprOf[A](e)
 
   implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
     @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {
@@ -56,8 +56,15 @@ trait RepairProgramTest {
     s.take(num).sortBy((x: PFun) => Distances.distance(x.getBody, init)) #::: s.drop(num)
   }
 
-  def repairProgram[A: Constrainable](
-      funDef: inox.trees.dsl.trees.FunDef, prog: InoxProgram, expected2: A,
+  /*def repairProgram[A: Constrainable](
+       funDef: inox.trees.dsl.trees.FunDef, prog: InoxProgram, expected2: A,
+       lookInManyFirstSolutions: Int = 1): PFun = {
+    repairProgram(funDef, prog, inoxExprOf[A](expected2),
+      lookInManyFirstSolutions)
+  }
+*/
+  def repairProgram(
+      funDef: inox.trees.dsl.trees.FunDef, prog: InoxProgram, expected2: Expr,
       lookInManyFirstSolutions: Int = 1): PFun = {
     val progfuns2 = ReverseProgram.put(expected2, None, None, Some((prog, funDef.id))).toStream
     progfuns2.lengthCompare(1) should be >= 0
@@ -67,7 +74,6 @@ trait RepairProgramTest {
     sorted.take(lookInManyFirstSolutions).foreach{ sol =>
       println(sol.getBody)
     }
-
     sorted.head
   }
   def generateProgram[A: Constrainable](expected2: A) = {

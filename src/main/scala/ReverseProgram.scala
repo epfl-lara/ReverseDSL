@@ -51,10 +51,12 @@ object ReverseProgram {
       }
     }
   }
-
-  /** Reverses a parameterless function, if possible.*/
   def put[A: Constrainable](out: A, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
-    val outExpr = inoxExprOf[A](out)
+    put(inoxExprOf[A](out), prevOut, modif, prevIn)
+  }
+
+    /** Reverses a parameterless function, if possible.*/
+  def put(outExpr: Expr, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
     if(prevIn == None) {
       val main = FreshIdentifier("main")
       val fundef = mkFunDef(main)()(stp => (Seq(), outExpr.getType, _ => outExpr))
@@ -168,9 +170,11 @@ object ReverseProgram {
               Stream((newOut, Formula(Map(), BooleanLiteral(true))))
             case v: Variable => // Replacement with the variable newOut, with a maybe clause.
               Stream((newOut, Formula(Map(), E(Common.maybe)(v === l))))
-            case _ => throw new Exception("Don't know what to do, not a Literal or a Variable: "+newOut)
+            case l@Let(cloned: ValDef, _, _) =>
+              Stream((newOut, Formula(Map(), BooleanLiteral(true))))
+            case _ => throw new Exception("Don't know what to do, not a Literal, a Variable, or a let: "+newOut)
           }
-        case lFun@Lambda(vd, body) => // Check for closures, i.e. free variables.
+        case lFun@Lambda(vd, body) =>  // Check for closures, i.e. free variables.
           val freeVars = exprOps.variablesOf(body).map(_.toVal) -- vd
           if(freeVars.isEmpty) {
             newOut match {
