@@ -45,30 +45,21 @@ trait RepairProgramTest {
     }
   }
 
-  def mkProg(funDef: FunDef) = {
+  private def mkProg(funDef: FunDef) = {
     InoxProgram(
       ReverseProgram.context,
       Seq(funDef), allConstructors
     )
   }
 
-  def sortStreamByDistance(s: Stream[PFun], num: Int, init: Expr) = {
+  private def sortStreamByDistance(s: Stream[PFun], num: Int, init: Expr) = {
     s.take(num).sortBy((x: PFun) => Distances.distance(x.getBody, init)) #::: s.drop(num)
   }
 
-  /*def repairProgram[A: Constrainable](
-       funDef: inox.trees.dsl.trees.FunDef, prog: InoxProgram, expected2: A,
-       lookInManyFirstSolutions: Int = 1): PFun = {
-    repairProgram(funDef, prog, inoxExprOf[A](expected2),
-      lookInManyFirstSolutions)
-  }
-*/
-  def repairProgram(
-      funDef: inox.trees.dsl.trees.FunDef, prog: InoxProgram, expected2: Expr,
-      lookInManyFirstSolutions: Int = 1): PFun = {
-    val progfuns2 = ReverseProgram.put(expected2, None, None, Some((prog, funDef.id))).toStream
+  def repairProgram(pf: PFun, expected2: Expr, lookInManyFirstSolutions: Int = 1): PFun = {
+    val progfuns2 = ReverseProgram.put(expected2, None, None, Some(pf)).toStream
     progfuns2.lengthCompare(1) should be >= 0
-    val initialValue = (prog, funDef.id).getBody
+    val initialValue = pf.getBody
     val sorted = sortStreamByDistance(progfuns2, lookInManyFirstSolutions, initialValue)
     println("Solutions: by order")
     sorted.take(lookInManyFirstSolutions).foreach{ sol =>
@@ -76,6 +67,7 @@ trait RepairProgramTest {
     }
     sorted.head
   }
+
   def generateProgram[A: Constrainable](expected2: A) = {
     val progfuns2 = ReverseProgram.put(expected2, None, None, None)
     progfuns2.toStream.lengthCompare(1) should be >= 0
@@ -105,6 +97,9 @@ trait RepairProgramTest {
 
   val main = FreshIdentifier("main")
 
-  protected def function(body: Expr)(returnType: Type) = mkFunDef(main)()(_ => (Seq(), returnType, _ => body))
+  protected def function(body: Expr)(returnType: Type): PFun = {
+    val funDef = mkFunDef(main)()(_ => (Seq(), returnType, _ => body))
+    (mkProg(funDef), funDef.id)
+  }
 }
 
