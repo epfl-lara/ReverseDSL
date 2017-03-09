@@ -231,22 +231,51 @@ object ReverseProgram {
           }
 
         case StringConcat(expr1, expr2) =>
-          val left = ValDef(FreshIdentifier("left"), StringType, Set())
-          val right = ValDef(FreshIdentifier("right"), StringType, Set())
+          lazy val leftValue = evalWithCache(letm(currentValues) in expr1)
+          lazy val rightValue = evalWithCache(letm(currentValues) in expr2)
 
-          val leftRepair = repair(expr1, currentValues, StringType, left.toVariable)
-          val rightRepair = repair(expr2, currentValues, StringType, right.toVariable)
+          def defaultCase = {
+            val left = ValDef(FreshIdentifier("left"), StringType, Set())
+            val right = ValDef(FreshIdentifier("right"), StringType, Set())
 
-          val bothRepair = inox.utils.StreamUtils.cartesianProduct(leftRepair, rightRepair)
+            val leftRepair = repair(expr1, currentValues, StringType, left.toVariable)
+            val rightRepair = repair(expr2, currentValues, StringType, right.toVariable)
 
-          bothRepair.map{ case ((leftExpr, f1@Formula(mp1, cs1)), (rightExpr, f2@Formula(mp2, cs2))) =>
-            println("Preparing a concatenation for " + function)
-            println(s"$left, $right, $leftRepair, $rightRepair, $leftExpr, $rightExpr")
-            println(s"$f1")
-            println(s"$f2")
-            val newCs = cs1 &<>& cs2 &<>& newOut === StringConcat(left.toVariable, right.toVariable)
-            println(s"$newCs")
-            (StringConcat(leftExpr, rightExpr), Formula(mp1 ++ mp2, newCs))
+            val bothRepair = inox.utils.StreamUtils.cartesianProduct(leftRepair, rightRepair)
+
+            bothRepair.map { case ((leftExpr, f1@Formula(mp1, cs1)), (rightExpr, f2@Formula(mp2, cs2))) =>
+              val newCs = cs1 &<>& cs2 &<>& newOut === StringConcat(left.toVariable, right.toVariable)
+              (StringConcat(leftExpr, rightExpr), Formula(mp1 ++ mp2, newCs))
+            }
+          }
+
+          // Prioritize changes that touch only one of the two expressions.
+          newOut match{
+            case StringLiteral(s) =>
+              (leftValue match {
+                case StringLiteral(lv) =>
+                if(s.startsWith(lv)) {
+                  val right = ValDef(FreshIdentifier("right"), StringType, Set())
+                  val rightRepair = repair(expr2, currentValues, StringType, StringLiteral(s.substring(lv.length)))
+                  rightRepair.map { case (rightExpr, f) =>
+                    (StringConcat(expr1, rightExpr), f)
+                  }
+                } else Stream.empty
+                case _  => Stream.empty }) #::: (
+                rightValue match {
+                  case StringLiteral(rv) =>
+                  if(s.endsWith(rv)) {
+                    val left = ValDef(FreshIdentifier("left"), StringType, Set())
+                    val leftRepair = repair(expr1, currentValues, StringType, StringLiteral(s.substring(0, s.length - rv.length)))
+                    leftRepair.map { case (leftExpr, f) =>
+                      (StringConcat(leftExpr, expr2), f)
+                    }
+                  } else Stream.empty
+                case _  => Stream.empty
+                }
+              ) #::: defaultCase
+            case newOut: Variable => defaultCase
+            case _ => throw new Exception(s"Don't know how to handle $newOut")
           }
 
         case ADT(ADTType(tp, tpArgs), args) =>
