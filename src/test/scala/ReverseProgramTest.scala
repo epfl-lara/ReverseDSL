@@ -114,7 +114,7 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
       let(vText.toVal, StringLiteral("red"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle](_WebStyle("color", v)))
       ))(inoxTypeOf[Element])
-    checkProg[Element](initial, pfun)
+    checkProg(initial, pfun)
     checkProg(expected2, repairProgram(pfun, out2))
     checkProg(expected2, repairProgram(pfun, out2bis))
     checkProg(expected2, repairProgram(pfun, out2))
@@ -128,7 +128,7 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
       ))(inoxTypeOf[Element])
-    checkProg[Element](expected1, pfun)
+    checkProg(expected1, pfun)
     val pfun2 = checkProg(expected2, repairProgram(pfun, expected2))
     pfun2 matchBody {
       case l@Let(vd, expr, body) =>

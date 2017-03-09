@@ -71,19 +71,18 @@ trait RepairProgramTest {
   def generateProgram[A: Constrainable](expected2: A) = {
     val progfuns2 = ReverseProgram.put(expected2, None, None, None)
     progfuns2.toStream.lengthCompare(1) should be >= 0
-    val (prog2, funId2) = progfuns2.head
-    (prog2, funId2)
+    progfuns2.head
   }
 
-  def checkProg[A: Constrainable](expected1: A, prog: InoxProgram, funDefId: Identifier): (InoxProgram, Identifier) = {
+  def checkProg(expected1: Expr, prog: InoxProgram, funDefId: Identifier): (InoxProgram, Identifier) = {
     prog.getEvaluator.eval(FunctionInvocation(funDefId, Seq(), Seq())) match {
-      case EvaluationResults.Successful(e) => exprOfInox[A](e) shouldEqual expected1
+      case EvaluationResults.Successful(e) => e shouldEqual expected1
       case m => fail(s"Did not evaluate to $expected1. Error: $m")
     }
     (prog, funDefId)
   }
 
-  def checkProg[A: Constrainable](expected1: A, progfun: (InoxProgram, Identifier)): (InoxProgram, Identifier) = {
+  def checkProg(expected1: Expr, progfun: (InoxProgram, Identifier)): (InoxProgram, Identifier) = {
     checkProg(expected1, progfun._1, progfun._2)
   }
 
