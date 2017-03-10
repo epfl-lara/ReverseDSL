@@ -355,39 +355,92 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     checkProg("Mikael   Mikael", repairProgram(pfun, "Mikael   Mikael", 3))
   }
 
-  test("Clone-and-paste simple") {
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+  test("Reverse filter") {
+    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[Int], Set())
+    val pfun = function(
+      FunctionInvocation(Utils.filter,Seq(inoxTypeOf[Int]),
+        Seq(
+          _List[Int](0, 1, 2, 6, 5, 5, 8),
+          Lambda(Seq(ap), Modulo(ap.toVariable, 2) === 0)
+        )
+      )
+    )(inoxTypeOf[List[Int]])
 
-    val pfun = function("Hello world,")(inoxTypeOf[String])
-    val clonedBody = let(ap, "world")(av =>
-      StringConcat(StringConcat(StringConcat("Hello ", av), ","), av)
-    )
-    val pfun2 = repairProgram(pfun, clonedBody)
-    pfun2 matchBody { case v => v shouldEqual clonedBody }
-  }
-
-  test("Clone-and-paste the whole with an existing variable") {
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
-    val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
-
-    val initBody = let(ap, "world")(av =>
-      StringConcat("Hello ", av)
-    )
-    val clonedBody = let(bp, "Hello")(bv =>
-      StringConcat(StringConcat(bv, " world"), bv)
-    )
-    val pfun = function(initBody)(inoxTypeOf[String])
-    val pfun2 = repairProgram(pfun, clonedBody)
-    checkProg("Hello worldHello", pfun2)
-    val pfun3 = repairProgram(pfun2, "Hi worldHello")
-    checkProg("Hi worldHi", pfun2)
+    checkProg(_List[Int](0, 2, 6, 8), pfun)
+    repairProgram(pfun, _List[Int](0, 2, 10, 6, 8)) matchBody {
+      case FunctionInvocation(_, _, Seq(list, _)) =>
+        list shouldEqual _List[Int](0, 1, 2, 10, 6, 5, 5, 8)
+    }
   }
 
   /* Add tests for:
      Integers operations
+     filter with propagating variables.
      List mapping, flatten, flatmap, filter and custom user-defined lenses.
      Multiple arguments changed in lambdas
      Merging programs to implement clone-and-paste.
      XML transformation as in the paper.
+
+     How to be faster btw?
     */
+
+  /*
+    test("Clone-and-paste simple") {
+      val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+
+      val pfun = function("Hello world,")(inoxTypeOf[String])
+      val clonedBody = let(ap, "world")(av =>
+        StringConcat(StringConcat(StringConcat("Hello ", av), ","), av)
+      )
+      val pfun2 = repairProgram(pfun, clonedBody)
+      pfun2 matchBody { case v => v shouldEqual clonedBody }
+    }
+
+
+    test("Clone-and-paste the left part with an existing variable") {
+      val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+      val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
+
+      val initBody = let(ap, "world")(av =>
+        StringConcat("Hello ", av)
+      )
+      val clonedBody = let(bp, "Hello")(bv =>
+        StringConcat(StringConcat(bv, " world"), bv)
+      )
+      val pfun = function(initBody)(inoxTypeOf[String])
+      val pfun2 = repairProgram(pfun, clonedBody)
+      checkProg("Hello worldHello", pfun2)
+      val pfun3 = repairProgram(pfun2, "Hi worldHello")
+      checkProg("Hi worldHi", pfun2)
+
+      pfun3 matchBody {
+        case funBody@Let(v1, StringLiteral(s), Let(v2, StringLiteral(t), body@StringConcat(_, _))) =>
+          s shouldEqual "Hi"
+          t shouldEqual "world"
+      }
+    }
+
+    test("Clone-and-paste overlapping another variable") {
+      val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+      val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
+
+      val initBody = let(ap, "big world")(av =>
+        StringConcat("Hello ", av)
+      )
+      val clonedBody = let(bp, "Hello big")(bv =>
+        StringConcat(StringConcat(bv, " world"), bv)
+      )
+      val pfun = function(initBody)(inoxTypeOf[String])
+      val pfun2 = repairProgram(pfun, clonedBody)
+      checkProg("Hello big worldHello big", pfun2)
+      val pfun3 = repairProgram(pfun2, "Hi big worldHello big")
+      checkProg("Hi big worldHi big", pfun2)
+
+      pfun3 matchBody {
+        case funBody@Let(v1, StringLiteral(s), Let(v2, StringLiteral(t), body@StringConcat(_, _))) =>
+          s shouldEqual "Hi big"
+          t shouldEqual " world"
+      }
+    }*/
+
 }

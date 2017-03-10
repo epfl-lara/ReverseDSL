@@ -828,52 +828,48 @@ case class MapReverse[A: Constrainable, B: Constrainable](fr: A ~~> B) extends (
   }// ensuring res => res.forall(sol => map(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, map(sol, f)))
 }
 
-case class FilterReverse[A: Constrainable](f: A => Boolean) extends (List[A] %~> List[A]) {
+trait FilterLike[A] {
+  def filter(l: List[A], f: A => Boolean): List[A] = l filter f
+
+  def filterRev(l: List[A], f: A => Boolean, out: List[A]): Stream[List[A]] = {
+    if (l.filter(f) == out) Stream(l) else
+      (l match {
+        case Nil =>
+          if(out forall f) Stream(out) else Stream.empty
+        case hd::tl =>
+          if(!f(hd)) {
+            filterRev(tl, f, out).map(hd::_)
+          } else { // hd has to be kept
+            out match {
+              case Nil => Stream(tl.filter(x => !f(x)))
+              case outhd::outtl =>
+                if(outhd == hd) {
+                  filterRev(tl, f, outtl).map(outhd::_)
+                } else { // Find if elements have been deleted.
+                // hd != outhd, either we can find it later or it has been deleted.
+                val expectedFiltered_l = l.filter(f)
+                  val k = out.indexOfSlice(expectedFiltered_l)
+                  if(k > 0) { // There has been some additions in out, we add them directly.
+                    filterRev(l, f, out.drop(k)).map(out.take(k)++_)
+                  } else {
+                    // Maybe some elements have been deleted.
+                    filterRev(tl, f, out)
+                  }
+                }
+            }
+          }
+      })
+  }
+}
+
+case class FilterReverse[A: Constrainable](f: A => Boolean) extends (List[A] %~> List[A]) with FilterLike[A] {
   def get(in: Input) = filter(in, f)
   val methodName = "filter"+ Math.abs(this.hashCode()/2)
   def putManual(out2: Output, in: Option[Input]) = Implicits.report(s"FilterReverse.put($out2, $in) = %s"){in match {
     case None => filterRev(Nil, f, out2)
     case Some(in) => filterRev(in, f, out2)
-  }
-  }
-
-  def filter(l: List[A], f: A => Boolean): List[A] = l filter f
-  
-  def filterRev(l: List[A], f: A => Boolean, out: List[A]): List[List[A]] = {
-    if (l.filter(f) == out) List(l) else
-    (l match {
-      case Nil => 
-        if(out forall f) List(out) else Nil
-      case hd::tl =>
-        if(!f(hd)) {
-          /*for{sol <- filterRev(tl, f, out)
-            c = sol.indexWhere((x: A) => !f(x))
-            i <- 0 to (if(c == -1) sol.length else c)
-          } yield {
-            sol.take(i) ++ (hd ::sol.drop(i))
-          }*/ // Too much possibilities
-          filterRev(tl, f, out).map(hd::_)
-        } else { // hd has to be kept
-          out match {
-            case Nil => List(tl.filter(x => !f(x)))
-            case outhd::outtl =>
-              if(outhd == hd) {
-                filterRev(tl, f, outtl).map(outhd::_)
-              } else { // Find if elements have been deleted.
-                // hd != outhd, either we can find it later or it has been deleted.
-                val expectedFiltered_l = l.filter(f)
-                val k = out.indexOfSlice(expectedFiltered_l)
-                if(k > 0) { // There has been some additions in out, we add them directly.
-                  filterRev(l, f, out.drop(k)).map(out.take(k)++_)
-                } else {
-                  // Maybe some elements have been deleted.
-                  filterRev(tl, f, out)
-                }
-              }
-          }
-        }
-    })
-  }// ensuring res => res.forall(sol => filter(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, filter(sol, f))
+  }}
+  // ensuring res => res.forall(sol => filter(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, filter(sol, f))
 }
 
 case class FlatMap[A: Constrainable, B: Constrainable](fr: A ~~> List[B]) extends (List[A] %~> List[B]) {

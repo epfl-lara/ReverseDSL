@@ -99,6 +99,7 @@ object Utils {
   )
 
   val filter = FreshIdentifier("filter")
+  val map = FreshIdentifier("map")
 
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)
