@@ -153,7 +153,7 @@ object ReverseProgram {
     **/
   def repair(function: Expr, currentValues: Map[ValDef, Expr], newOut: Expr)
             (implicit symbols: Symbols, cache: Cache): Stream[(Expr, Formula)] = {
-    //println(s"\n@solving ${currentValues.map{ case (k, v) => s"val ${k.id} = $v\n"}.mkString("")}$function = $newOut")
+    println(s"\n@solving ${currentValues.map{ case (k, v) => s"val ${k.id} = $v\n"}.mkString("")}$function = $newOut")
     if(function == newOut) return { //println("@return original");
       Stream((function, Formula(Map[ValDef, Expr](), BooleanLiteral(true))))
     }
@@ -303,7 +303,7 @@ object ReverseProgram {
               **/
               ???
 
-            case _ => throw new Exception(s"Don't know how to handle $newOut")
+            case _ => throw new Exception(s"Don't know how to handle $newOut for $function")
           }
 
         case ADT(ADTType(tp, tpArgs), args) =>
@@ -389,16 +389,35 @@ object ReverseProgram {
     }
   }
 
-  val reversions = Map[Identifier, Reverser](
-    FilterReverser.mapping
+  val reversers = List[Reverser](
+    FilterReverser,
+    MapReverser
   )
+
+  val reversions = reversers.map(x => x.identifier -> x).toMap
+  val funDefs = reversers.map(_.funDef)
 
   abstract class Reverser {
     def identifier: Identifier
     def mapping = identifier -> this
+    def funDef: FunDef
     def apply(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)]
   }
 
+  def unwrapList(e: Expr): List[Expr] = e match {
+    case ADT(ADTType(Utils.cons, tps), Seq(head, tail)) =>
+      head :: unwrapList(tail)
+    case ADT(ADTType(Utils.nil, tps), Seq()) =>
+      Nil
+  }
+  def wrapList(e: List[Expr], tps: Seq[Type]): Expr = e match {
+    case head :: tail =>
+      ADT(ADTType(Utils.cons, tps), Seq(head, wrapList(tail, tps)))
+    case Nil =>
+      ADT(ADTType(Utils.nil, tps), Seq())
+  }
+
+  /** Lense-like filter */
   case object FilterReverser extends Reverser with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.
     val identifier = Utils.filter
     def unwrapList(e: Expr): List[Expr] = e match {
@@ -418,9 +437,98 @@ object ReverseProgram {
       val originalInput = originalArgsValues.head
       //println(s"Reversing $originalArgs: $originalOutput => $newOutput")
       filterRev(unwrapList(originalInput), (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true), unwrapList(newOutput)).map{ (e: List[Expr]) =>
-        println(s"First solution: $e")
         (Seq(wrapList(e, tpes), lambda), Formula(Map(), BooleanLiteral(true)))
       }
+    }
+
+    // filter definition in inox
+    val funDef = mkFunDef(identifier)("A"){ case Seq(tp) =>
+      (Seq("ls" :: T(Utils.list)(tp), "f" :: FunctionType(Seq(tp), BooleanType)),
+        T(Utils.list)(tp),
+        { case Seq(ls, f) =>
+          if_(ls.isInstOf(T(Utils.cons)(tp))) {
+            let("c"::T(Utils.cons)(tp), ls.asInstOf(T(Utils.cons)(tp)))(c =>
+              let("head"::tp, c.getField(Utils.head))( head =>
+                if_(Application(f, Seq(head))){
+                  ADT(T(Utils.cons)(tp), Seq(head, E(identifier)(tp)(c.getField(Utils.tail), f)))
+                } else_ {
+                  E(identifier)(tp)(c.getField(Utils.tail), f)
+                }
+              )
+            )
+          } else_ {
+            ADT(T(Utils.nil)(tp), Seq())
+          }
+        })
+    }
+  }
+
+  /** Lense-like map, with the possibility of changing the mapping lambda. */
+  case object MapReverser extends Reverser {
+    val identifier = Utils.map
+
+    def apply(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+      println(s"map.apply($newOutput)")
+      val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
+      val originalInput = originalArgsValues.head
+      val uniqueString = "#§#_#aagjmairjmmlkjsdf"
+      // Maybe we change only arguments. If not possible, we will try to change the lambda.
+      val mapr = new MapReverseLike[Expr, Expr, (Expr, Lambda)] {
+        override def f = (expr: Expr) => evalWithCache(Application(lambda, Seq(expr)))
+
+        override def fRev = (prevIn: Option[Expr], out: Expr) => {
+          println(s"fRev: $prevIn, $out")
+          val (Seq(in), newCurrentvalues) =
+            prevIn.map(x => (Seq(x), Map[ValDef, Expr]())).getOrElse {
+              val unknown = ValDef(FreshIdentifier("unknown"),lambda.args.head.getType)
+              (Seq(unknown.toVariable), Map[ValDef, Expr](unknown -> StringLiteral(uniqueString)))
+            }
+          println(s"in:$in")
+          val res= repair(Application(lambda, Seq(in)), newCurrentvalues, out).map {
+            case (Application(_, Seq(in2)), Formula(mapping, _)) if in2 != in => Left(in)
+            case (Application(_, Seq(in2)), Formula(mapping, _)) if in2 == in && in2.isInstanceOf[Variable] =>
+              Left(evalWithCache(letm(mapping) in in2))
+            case (Application(lambda2: Lambda, Seq(in2)), f@Formula(mapping, _)) if in2 == in && lambda2 != lambda =>
+              Right((in, castOrFail[Expr, Lambda](evalWithCache(letm(mapping) in lambda2))))
+            case e@(app, f) =>
+              throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
+          }.filterNot(_ == Left(StringLiteral(uniqueString)))
+          println(s"res=${res.take(3).toList}")
+          res
+        }
+      }
+
+      //println(s"Reversing $originalArgs: $originalOutput => $newOutput")
+      mapr.mapRev(unwrapList(originalInput), unwrapList(newOutput)).flatMap{ (e: List[Either[Expr, (Expr, Lambda)]]) =>
+        println("Final solution : " + e)
+        val argumentsChanged = e.map{
+          case Left(e) => e
+          case Right((e, lambda)) => e
+        }
+        val newLambdas = if(e.exists(_.isInstanceOf[Right[_, _]])) {
+          e.collect{ case Right((lambda, expr)) => lambda }.toStream
+        } else Stream(lambda)
+        for(l <- newLambdas) yield {
+          (Seq(wrapList(argumentsChanged, tpes.take(1)), l), Formula(Map(), BooleanLiteral(true)))
+        }
+      }
+    }
+
+    // Map definition in inox
+    val funDef = mkFunDef(identifier)("A", "B"){ case Seq(tA, tB) =>
+      (Seq("ls" :: T(Utils.list)(tA), "f" :: FunctionType(Seq(tA), tB)),
+        T(Utils.list)(tB),
+        { case Seq(ls, f) =>
+          if_(ls.isInstOf(T(Utils.cons)(tA))) {
+            let("c"::T(Utils.cons)(tA), ls.asInstOf(T(Utils.cons)(tA)))(c =>
+              let("head"::tA, c.getField(Utils.head))( head =>
+                ADT(T(Utils.cons)(tB), Seq(Application(f, Seq(head)), E(identifier)(tA, tB)(c.getField(Utils.tail), f)))
+              )
+            )
+          } else_ {
+            ADT(T(Utils.nil)(tB), Seq())
+          }
+        })
     }
   }
 

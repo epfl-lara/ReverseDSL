@@ -45,31 +45,10 @@ trait RepairProgramTest {
     }
   }
 
-  val filterDef = mkFunDef(Utils.filter)("A"){ case Seq(tp) =>
-    (Seq("ls" :: T(Utils.list)(tp), "f" :: FunctionType(Seq(tp), BooleanType)),
-    T(Utils.list)(tp),
-     { case Seq(ls, f) =>
-      if_(ls.isInstOf(T(Utils.cons)(tp))) {
-        let("c"::T(Utils.cons)(tp), ls.asInstOf(T(Utils.cons)(tp)))(c =>
-          let("head"::tp, c.getField(Utils.head))( head =>
-            if_(Application(f, Seq(head))){
-              ADT(T(Utils.cons)(tp), Seq(head, E(Utils.filter)(tp)(c.getField(Utils.tail), f)))
-            } else_ {
-              E(Utils.filter)(tp)(c.getField(Utils.tail), f)
-            }
-          )
-        )
-      } else_ {
-        ADT(T(Utils.nil)(tp), Seq())
-      }
-    })
-  }
-
-
   private def mkProg(funDef: FunDef) = {
     InoxProgram(
       ReverseProgram.context,
-      Seq(funDef, filterDef), allConstructors
+      funDef::ReverseProgram.funDefs, allConstructors
     )
   }
 

@@ -373,6 +373,29 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     }
   }
 
+  test("Reverse map") {
+    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+    val pfun = function(
+      FunctionInvocation(Utils.map,Seq(inoxTypeOf[String], inoxTypeOf[String]),
+        Seq(
+          _List[String]("Margharita", "Salami", "Royal"),
+          Lambda(Seq(ap), StringConcat("Pizza ", ap.toVariable))
+        )
+      )
+    )(inoxTypeOf[List[String]])
+
+    checkProg(_List[String]("Pizza Margharita", "Pizza Salami", "Pizza Royal"), pfun)
+    repairProgram(pfun, _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal")) matchBody {
+      case FunctionInvocation(_, _, Seq(list, _)) =>
+        list shouldEqual _List[String]("Margharita", "Salami", "Sushi", "Royal")
+    }
+    repairProgram(pfun, _List[String]("The pizza Margharita", "Pizza Salami","Pizza Royal")) matchBody {
+      case FunctionInvocation(_, _, Seq(list, Lambda(vds, StringConcat(prefix, _)))) =>
+        list shouldEqual _List[String]("Margharita", "Salami", "Royal")
+        prefix shouldEqual StringLiteral("The pizza")
+    }
+  }
+
   /* Add tests for:
      Integers operations
      filter with propagating variables.

@@ -758,76 +758,92 @@ case class Flatten[A: Constrainable]() extends %~>[List[List[A]], List[A]]()(lis
   } // ensuring res => res.forall(sol => sol.flatten == out && lehvenstein(l, sol) == lehvenstein(out, sol.flatten))
 }
 
-case class MapReverse[A: Constrainable, B: Constrainable](fr: A ~~> B) extends (List[A] %~> List[B]) {
-  val f: A => B = fr.get _
-  val fRev = (in: Option[A], b: B) => fr.put(b, in).toList
-  def get(in: Input) = map(in)
-  val methodName = "map"+ Math.abs(this.hashCode()/2)
-  def putManual(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"MapReverse.put($out2, $in) = %s"){
-    in match {
-    case None => mapRev(Nil, out2)
-    case Some(in) => mapRev(in, out2)
-  }
-  }
-
+// The F parameter allows to modify the mapping function itself.
+trait MapReverseLike[A, B, F] {
   def map(l: List[A]): List[B] = l map f
-  
-  def combinatorialMap(l: List[B]): List[List[A]] = report(s"combinatorialMap($l)=%s"){
+
+  def f: A => B
+  def fRev: (Option[A], B) => Stream[Either[A, F]]
+
+  def combinatorialMap(l: List[B]): Stream[List[Either[A, F]]] = report(s"combinatorialMap($l)=%s"){
     l match {
-      case Nil => List(Nil)
-      case a::b => 
+      case Nil => Stream(Nil)
+      case a::b =>
+        println("#1")
         fRev(None, a).flatMap(fb => combinatorialMap(b).map(fb::_))
     }
   }
-  
-  def mapRev(l: List[A], out: List[B]): List[List[A]] = {
+
+  private def mapRevAux(l: List[A], lOut: List[B], out: List[B]): Stream[List[Either[A, F]]] = {
+    println(s"mapRevAux1:$l\nmapRevAux2:$lOut\nmapRevAux3:$out")
     l match {
-      case Nil => 
+      case Nil =>
         out match {
-          case Nil => List(Nil)
-          /*case outhd::Nil => fRev(outhd).map(List(_))*/
-          case outhd::outtail => 
+          case Nil => Stream(Nil)
+          case outhd::outtail =>
             val revOutHd = fRev(None, outhd)
-            for{ sol <- mapRev(l, outtail)
+            for{ sol <- mapRevAux(l, lOut, outtail)
                  other_a <- revOutHd } yield {
               other_a :: sol
             }
         }
       case hd::tl =>
-       out match {
-         case Nil => List(Nil)
-         /*case outhd::Nil =>
-           val revOutHd = fRev(outhd)
-           val p = revOutHd.filter(_ == hd)
-           if(p.isEmpty) {
-             revOutHd.map(List(_))
-           } else {
-             p.map(List(_))
-           }*/
-         case outhd::outtail =>
-           val revOutHd = fRev(Some(hd), outhd)
-           val p = revOutHd.filter(_ == hd)
-           if(p.isEmpty) { // Looking for a deleted element maybe ?
-             val expectedOut = l map f
-             val k = expectedOut.indexOfSlice(out)
-             if(k > 0) { // There has been a deletion, but we are able to find the remaining elements.
-               mapRev(l.drop(k), out)
-             } else {
-               val k2 = out.indexOfSlice(expectedOut)
-               if (k2 > 0) { // Some elements were added at some point.
-                 val tailSolutions = mapRev(l, out.drop(k2))
-                 // Now for each of out.take(k2), we take all possible inverses.
-                 combinatorialMap(out.take(k2)).flatMap(l => tailSolutions.map(l ++ _))
-               } else {
-                 revOutHd.flatMap(s => mapRev(tl, outtail).map(s::_))
-               }
-             }
-           } else {
-             p.flatMap(s => mapRev(tl, outtail).map(s::_))
-           }
-       }
+        out match {
+          case Nil => Stream(Nil)
+          case outhd::outtail =>
+            if(lOut.head == outhd) {
+              mapRevAux(l.tail, lOut.tail, out.tail).map(Left(hd)::_)
+            } else {
+              // Looking for a deleted element maybe ?
+              val expectedOut = lOut
+              val k = expectedOut.indexOfSlice(out)
+              if (k > 0) {
+                // There has been a deletion, but we are able to find the remaining elements.
+                mapRevAux(l.drop(k), lOut.drop(k), out)
+              } else {
+                val k2 = out.indexOfSlice(expectedOut)
+                if (k2 > 0) {
+                  // Some elements were added at some point.
+                  val tailSolutions = mapRevAux(l, lOut, out.drop(k2))
+                  // Now for each of out.take(k2), we take all possible inverses.
+                  combinatorialMap(out.take(k2)).flatMap(l => tailSolutions.map(l ++ _))
+                } else {
+                  val revOutHd = fRev(Some(hd), outhd)
+                  val p = revOutHd.filter(_ == Left(hd))
+                  if (p.isEmpty) {
+                    revOutHd.flatMap(s => mapRevAux(tl, lOut.tail, outtail).map(s :: _))
+                  } else {
+                    p.flatMap(s => mapRevAux(tl, lOut.tail, outtail).map(s :: _))
+                  }
+                }
+              }
+            }
+        }
     }
-  }// ensuring res => res.forall(sol => map(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, map(sol, f)))
+  }
+
+  def mapRev(l: List[A], out: List[B]): Stream[List[Either[A, F]]] = {
+    mapRevAux(l, l.map(f), out)
+  }
+}
+
+case class MapReverse[A: Constrainable, B: Constrainable](fr: A ~~> B) extends (List[A] %~> List[B]) with MapReverseLike[A, B, Nothing] {
+  val f: A => B = fr.get _
+  val fRev = (in: Option[A], b: B) => fr.put(b, in).toStream.map(Left(_))
+  def get(in: Input) = map(in)
+  val methodName = "map"+ Math.abs(this.hashCode()/2)
+  @tailrec private def filterOnlyValChangeOrFail(in: List[Either[A, Nothing]],
+                                                 collected: ListBuffer[A] = ListBuffer()): List[List[A]] = in match {
+    case Nil => List(collected.toList)
+    case Left(a)::tail => filterOnlyValChangeOrFail(tail, collected += a)
+    case _ => Nil
+  }
+  def putManual(out2: Output, in: Option[Input]): Iterable[Input] = Implicits.report(s"MapReverse.put($out2, $in) = %s"){
+    (in match {
+    case None => mapRev(Nil, out2)
+    case Some(in) => mapRev(in, out2)
+    }).flatMap(filterOnlyValChangeOrFail(_))
+  }
 }
 
 trait FilterLike[A] {
