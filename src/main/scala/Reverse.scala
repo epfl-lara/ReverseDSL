@@ -10,6 +10,8 @@ import Constrainable._
 import inox.evaluators.EvaluationResults
 import org.apache.commons.lang3.StringEscapeUtils
 
+import scala.annotation.tailrec
+
 /** Lense class.
   * Should provide the method get and put.
   */
@@ -831,34 +833,54 @@ case class MapReverse[A: Constrainable, B: Constrainable](fr: A ~~> B) extends (
 trait FilterLike[A] {
   def filter(l: List[A], f: A => Boolean): List[A] = l filter f
 
-  def filterRev(l: List[A], f: A => Boolean, out: List[A]): Stream[List[A]] = {
-    if (l.filter(f) == out) Stream(l) else
-      (l match {
-        case Nil =>
-          if(out forall f) Stream(out) else Stream.empty
+  @tailrec private def equalFilter(l: List[A], b: List[Boolean], out: List[A]): Boolean = {
+    l match {
+      case head :: tail => if(b.head) (
+        if(!out.isEmpty && out.head == head) equalFilter(tail, b.tail, out.tail)
+        else false) else equalFilter(tail, b.tail, out)
+      case Nil => true
+    }
+  }
+
+  @tailrec private def keepIfFalse(l: List[A], b: List[Boolean], result: List[A] = Nil): List[A] = l match {
+    case head::tail =>
+      if(!b.head) keepIfFalse(tail, b.tail, head::result)
+      else keepIfFalse(tail, b.tail, result)
+    case Nil => result.reverse
+  }
+
+  @tailrec private def filterRevAux(l: List[A], lPass: List[Boolean], out: List[A], outPass: List[Boolean], prepend: ListBuffer[A]): Stream[List[A]] = {
+    if (equalFilter(l, lPass, out)) Stream(prepend.toList ++ l) else
+      l match {
+        case Nil => Stream(prepend.toList ++ out)
         case hd::tl =>
-          if(!f(hd)) {
-            filterRev(tl, f, out).map(hd::_)
+          if(!lPass.head) {
+            filterRevAux(tl, lPass.tail, out, outPass, prepend += hd)
           } else { // hd has to be kept
             out match {
-              case Nil => Stream(tl.filter(x => !f(x)))
+              case Nil => // Everything was deleted ! We keep only the elements that could not have appeared in out
+                Stream(keepIfFalse(tl, lPass.tail))
               case outhd::outtl =>
-                if(outhd == hd) {
-                  filterRev(tl, f, outtl).map(outhd::_)
+                if(outhd == hd) { // The element is the same.
+                  filterRevAux(tl, lPass.tail, outtl, outPass.tail, prepend += outhd)
                 } else { // Find if elements have been deleted.
                 // hd != outhd, either we can find it later or it has been deleted.
-                val expectedFiltered_l = l.filter(f)
+                  val expectedFiltered_l = l.zip(lPass).filter(_._2).map(_._1)
                   val k = out.indexOfSlice(expectedFiltered_l)
                   if(k > 0) { // There has been some additions in out, we add them directly.
-                    filterRev(l, f, out.drop(k)).map(out.take(k)++_)
+                    filterRevAux(l, lPass, out.drop(k), outPass.drop(k), prepend ++= out.take(k))
                   } else {
                     // Maybe some elements have been deleted.
-                    filterRev(tl, f, out)
+                    filterRevAux(tl, lPass.tail, out, outPass, prepend)
                   }
                 }
             }
           }
-      })
+      }
+  }
+
+  def filterRev(l: List[A], f: A => Boolean, out: List[A]): Stream[List[A]] = {
+    filterRevAux(l, l.map(f), out, out.map(f), ListBuffer())
   }
 }
 
