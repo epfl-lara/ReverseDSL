@@ -19,18 +19,28 @@ object ReverseProgram {
   case class Formula(known: Map[ValDef, Expr], unknownConstraints: Expr)(implicit symbols: Symbols) {
     // The assignments and the formula containing the other expressions.
     def determinizeAll(freeVariables: List[Variable]): Stream[Map[ValDef, Expr]] = {
-      if(freeVariables.isEmpty) return Stream(Map())
+      println("Trying to get all solutions of \n" + this)
+
+      if(freeVariables.isEmpty) return Stream(known)
       unknownConstraints match {
         case BooleanLiteral(true) => Stream(freeVariables.map(fv => fv.toVal -> known(fv.toVal)).toMap)
         case BooleanLiteral(false) => Stream.empty
         case _ =>
           val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
-          val constraint = InoxConstraint(input === tupleWrap(freeVariables) && unknownConstraints)
+          val constraint = InoxConstraint(input === tupleWrap(freeVariables) && unknownConstraints && and(known.toSeq.map{ case (k, v) => k.toVariable === v} : _*))
           constraint.toStreamOfInoxExpr(input).map {
             case Tuple(args) => freeVariables.zip(args).map{ case (fv: Variable, expr: Expr) => fv.toVal -> expr }.toMap
             case e if freeVariables.length == 1 =>
               Map(freeVariables.head.toVal -> e)
           }
+      }
+    }
+
+    /* Force the evaluation of the constraints to evaluate an expression*/
+    def evalPossible(e: Expr)(implicit cache: Cache, symbols: Symbols): Stream[Expr] = {
+      val freevariables = exprOps.variablesOf(e).toList
+      for(assignment <- determinizeAll(freevariables)) yield {
+        evalWithCache(letm(known ++ assignment) in e)
       }
     }
   }
@@ -153,7 +163,7 @@ object ReverseProgram {
     **/
   def repair(function: Expr, currentValues: Map[ValDef, Expr], newOut: Expr)
             (implicit symbols: Symbols, cache: Cache): Stream[(Expr, Formula)] = {
-    println(s"\n@solving ${currentValues.map{ case (k, v) => s"val ${k.id} = $v\n"}.mkString("")}$function = $newOut")
+    //println(s"\n@solving ${currentValues.map{ case (k, v) => s"val ${k.id} = $v\n"}.mkString("")}$function = $newOut")
     if(function == newOut) return { //println("@return original");
       Stream((function, Formula(Map[ValDef, Expr](), BooleanLiteral(true))))
     }
@@ -385,6 +395,7 @@ object ReverseProgram {
           println(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")
           Stream.empty
       }
+      //println(s"@return $res")
       res
     }
   }
@@ -471,42 +482,44 @@ object ReverseProgram {
       println(s"map.apply($newOutput)")
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
       val originalInput = originalArgsValues.head
-      val uniqueString = "#§#_#aagjmairjmmlkjsdf"
+      val uniqueString = "_"
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
       val mapr = new MapReverseLike[Expr, Expr, (Expr, Lambda)] {
         override def f = (expr: Expr) => evalWithCache(Application(lambda, Seq(expr)))
 
         override def fRev = (prevIn: Option[Expr], out: Expr) => {
-          println(s"fRev: $prevIn, $out")
+          //println(s"fRev: $prevIn, $out")
           val (Seq(in), newCurrentvalues) =
             prevIn.map(x => (Seq(x), Map[ValDef, Expr]())).getOrElse {
               val unknown = ValDef(FreshIdentifier("unknown"),lambda.args.head.getType)
               (Seq(unknown.toVariable), Map[ValDef, Expr](unknown -> StringLiteral(uniqueString)))
             }
-          println(s"in:$in")
-          val res= repair(Application(lambda, Seq(in)), newCurrentvalues, out).map {
-            case (Application(_, Seq(in2)), Formula(mapping, _)) if in2 != in => Left(in)
-            case (Application(_, Seq(in2)), Formula(mapping, _)) if in2 == in && in2.isInstanceOf[Variable] =>
-              Left(evalWithCache(letm(mapping) in in2))
-            case (Application(lambda2: Lambda, Seq(in2)), f@Formula(mapping, _)) if in2 == in && lambda2 != lambda =>
-              Right((in, castOrFail[Expr, Lambda](evalWithCache(letm(mapping) in lambda2))))
+          //println(s"in:$in")
+          val res= repair(Application(lambda, Seq(in)), newCurrentvalues, out).flatMap {
+            case (Application(_, Seq(in2)), Formula(mapping, _)) if in2 != in => Stream(Left(in))
+            case (Application(_, Seq(in2)), f@Formula(mapping, _)) if in2 == in && in2.isInstanceOf[Variable] =>
+              //println("#2, in = $in")
+              f.evalPossible(in2).map(Left(_))
+            case e@(Application(lambda2: Lambda, Seq(in2)), f@Formula(mapping, _)) if in2 == in && lambda2 != lambda =>
+              //println(s"#3: $lambda, $lambda2, $f, in = $in")
+              f.evalPossible(lambda2).map(lambda => Right((in, castOrFail[Expr, Lambda](lambda))))
             case e@(app, f) =>
               throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
           }.filterNot(_ == Left(StringLiteral(uniqueString)))
-          println(s"res=${res.take(3).toList}")
+          //println(s"res=${res.take(3).toList}")
           res
         }
       }
 
       //println(s"Reversing $originalArgs: $originalOutput => $newOutput")
       mapr.mapRev(unwrapList(originalInput), unwrapList(newOutput)).flatMap{ (e: List[Either[Expr, (Expr, Lambda)]]) =>
-        println("Final solution : " + e)
+        //println("Final solution : " + e)
         val argumentsChanged = e.map{
           case Left(e) => e
           case Right((e, lambda)) => e
         }
         val newLambdas = if(e.exists(_.isInstanceOf[Right[_, _]])) {
-          e.collect{ case Right((lambda, expr)) => lambda }.toStream
+          e.collect{ case Right((expr, lambda: Lambda)) => lambda }.toStream
         } else Stream(lambda)
         for(l <- newLambdas) yield {
           (Seq(wrapList(argumentsChanged, tpes.take(1)), l), Formula(Map(), BooleanLiteral(true)))

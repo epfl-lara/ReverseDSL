@@ -769,13 +769,13 @@ trait MapReverseLike[A, B, F] {
     l match {
       case Nil => Stream(Nil)
       case a::b =>
-        println("#1")
+        //println("#1")
         fRev(None, a).flatMap(fb => combinatorialMap(b).map(fb::_))
     }
   }
 
   private def mapRevAux(l: List[A], lOut: List[B], out: List[B]): Stream[List[Either[A, F]]] = {
-    println(s"mapRevAux1:$l\nmapRevAux2:$lOut\nmapRevAux3:$out")
+    //println(s"mapRevAux1:$l\nmapRevAux2:$lOut\nmapRevAux3:$out")
     l match {
       case Nil =>
         out match {

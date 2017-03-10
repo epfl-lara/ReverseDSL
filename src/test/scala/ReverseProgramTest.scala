@@ -389,10 +389,11 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
       case FunctionInvocation(_, _, Seq(list, _)) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Sushi", "Royal")
     }
-    repairProgram(pfun, _List[String]("The pizza Margharita", "Pizza Salami","Pizza Royal")) matchBody {
+    val pfun3 = repairProgram(pfun, _List[String]("The pizza Margharita", "Pizza Salami","Pizza Royal"))
+    checkProg(_List[String]("The pizza Margharita", "The pizza Salami", "The pizza Royal"), pfun3) matchBody {
       case FunctionInvocation(_, _, Seq(list, Lambda(vds, StringConcat(prefix, _)))) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Royal")
-        prefix shouldEqual StringLiteral("The pizza")
+        prefix shouldEqual StringLiteral("The pizza ")
     }
   }
 
