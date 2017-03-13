@@ -505,7 +505,7 @@ object ReverseProgram {
               f.evalPossible(lambda2).map(lambda => Right((in, castOrFail[Expr, Lambda](lambda))))
             case e@(app, f) =>
               throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
-          }.filterNot(_ == Left(StringLiteral(uniqueString)))
+          }.filter(_ != Left(StringLiteral(uniqueString)))
           //println(s"res=${res.take(3).toList}")
           res
         }
