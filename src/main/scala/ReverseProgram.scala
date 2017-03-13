@@ -7,6 +7,7 @@ import inox.evaluators.EvaluationResults
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
+import mutable.ListBuffer
 
 /**
   * Created by Mikael on 03/03/2017.
@@ -16,7 +17,7 @@ object ReverseProgram {
   type ModificationSteps = Unit
   type OutExpr = Expr
   type Cache = mutable.HashMap[Expr, Expr]
-  case class Formula(known: Map[ValDef, Expr], unknownConstraints: Expr)(implicit symbols: Symbols) {
+  case class Formula(known: Map[ValDef, Expr] = Map(), unknownConstraints: Expr = BooleanLiteral(true))(implicit symbols: Symbols) {
     // The assignments and the formula containing the other expressions.
     def determinizeAll(freeVariables: List[Variable]): Stream[Map[ValDef, Expr]] = {
       println("Trying to get all solutions of \n" + this)
@@ -109,9 +110,14 @@ object ReverseProgram {
   }
 
   object StringConcats {
-    def unapply(s: Expr): Some[Seq[Expr]] = s match {
+    def unapply(s: Expr): Some[List[Expr]] = s match {
       case StringConcat(a, b) => Some(this.unapply(a).get ++ this.unapply(b).get)
-      case x => Some(Seq(x))
+      case x => Some(List(x))
+    }
+    def apply(s: List[Expr]): Expr = s match {
+      case Nil => StringLiteral("")
+      case a :: Nil => a
+      case a :: tail => StringConcat(a, apply(tail))
     }
   }
 
@@ -165,7 +171,7 @@ object ReverseProgram {
             (implicit symbols: Symbols, cache: Cache): Stream[(Expr, Formula)] = {
     //println(s"\n@solving ${currentValues.map{ case (k, v) => s"val ${k.id} = $v\n"}.mkString("")}$function = $newOut")
     if(function == newOut) return { //println("@return original");
-      Stream((function, Formula(Map[ValDef, Expr](), BooleanLiteral(true))))
+      Stream((function, Formula()))
     }
 
     lazy val functionValue = evalWithCache(letm(currentValues) in function) // TODO: Optimize this ?
@@ -179,6 +185,12 @@ object ReverseProgram {
             case _ =>
               maybeWrap(function, newOut, functionValue) #::: maybeUnwrap(function, newOut, functionValue)
           }
+        /*case StringType if !newOut.isInstanceOf[Variable] =>
+          function match {
+            case l: Let => Stream.empty[(Expr, Formula)]
+            case _ => // Can be a StringConcat with constants to add or to remove.
+              maybeWrapString(function, newOut, functionValue) #::: maybeUnwrapString(function, newOut, functionValue)
+          }*/
         case _ => Stream.empty[(Expr, Formula)]
       }
     } #::: {
@@ -548,7 +560,7 @@ object ReverseProgram {
 
   private def combineResults(seq: List[((Expr, Formula), ValDef, () => inox.trees.Expr)], currentValues: Map[ValDef,Expr])
             (implicit symbols: Symbols, cache: Cache) =
-    ((List[Expr](), Formula(Map[ValDef, Expr](), BooleanLiteral(true))) /: seq) {
+    ((List[Expr](), Formula()) /: seq) {
     case ((ls, Formula(mm, cs1)), ((l, Formula(m, cs2)), field, recompute)) =>
       if ((mm.keys.toSet intersect m.keys.toSet).nonEmpty && {
         // Compare new assignment with the original value.
@@ -567,6 +579,8 @@ object ReverseProgram {
     result: Element("div", List(v), List(), List())
   * */
   private def maybeWrap(function: Expr, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[(Expr, Formula)] = {
+    if(functionValue == newOut) return Stream.empty[(Expr, Formula)] // Value returned in maybeUnwrap
+
     // Checks if the old value is inside the new value, in which case we add a wrapper.
     if (exprOps.exists {
       case t if t == functionValue => true
@@ -579,7 +593,7 @@ object ReverseProgram {
         case _ => None
       }(newOut)
 
-      Stream((newFunction, Formula(Map(), BooleanLiteral(true))))
+      Stream((newFunction, Formula()))
     } else {
       Stream.empty
     }
@@ -593,7 +607,7 @@ object ReverseProgram {
   *  result:        v  #::   Element("span", List(), List(), List()) #:: Stream.empty
   * */
   private def maybeUnwrap(function: Expr, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[(Expr, Formula)] = {
-    if(functionValue == newOut) return Stream((function, Formula(Map(), BooleanLiteral(true))))
+    if(functionValue == newOut) return Stream((function, Formula()))
 
     (function, functionValue) match {
       case (ADT(ADTType(tp, tpArgs), args), ADT(ADTType(tp2, tpArgs2), argsValue)) =>
@@ -607,6 +621,84 @@ object ReverseProgram {
           maybeUnwrap(args(i), newOut, arg)
         }
 
+      case _ => Stream.empty
+    }
+  }
+
+  /* Example:
+    function = f(a) + v + "boss"
+    functionValue = "I am the boss"
+    newOut =  "Therefore, I am the boss"
+    result: "Therefore, " + (f(a) + v + "boss")
+  * */
+  private def maybeWrapString(function: Expr, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[(Expr, Formula)] = {
+    if(functionValue == newOut) return Stream((function, Formula()))
+
+    newOut match {
+      case StringLiteral(s) =>
+        functionValue match {
+          case StringLiteral(t) =>(
+            if(s.startsWith(t)) {
+              Stream((StringConcat(function, StringLiteral(s.substring(t.length))), Formula()))
+            } else Stream.empty) #::: (
+            if(s.endsWith(t)) {
+              Stream((StringConcat(StringLiteral(s.substring(0, s.length - t.length)), function), Formula()))
+            } else Stream.empty
+            )
+          case _ => Stream.empty
+        }
+      case _ => Stream.empty
+    }
+  }
+
+  /* Example:
+    function = "Therefore, " + f(a) + v + "boss"
+    functionValue = "Therefore, I am the boss"
+    newOut =  "I am the boss"
+    result: f(a) + v + "boss" (we remove the empty string)
+  * */
+  private def maybeUnwrapString(function: Expr, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[(Expr, Formula)] = {
+    if(functionValue == newOut) return Stream.empty
+
+    def dropRightIfPossible(lReverse: List[Expr], toRemoveRight: String): Option[List[Expr]] =
+      if(toRemoveRight == "") Some(lReverse.reverse) else lReverse match {
+      case Nil => None
+      case StringLiteral(last) :: lReverseTail =>
+        if(toRemoveRight.endsWith(last))
+          dropRightIfPossible(lReverseTail, toRemoveRight.substring(0, last.length))
+        else if(last.endsWith(toRemoveRight))
+          Some((StringLiteral(last.substring(0, last.length - toRemoveRight.length)) :: lReverseTail).reverse)
+        else None
+      case _ => None
+    }
+
+    def dropLeftIfPossible(l: List[Expr], toRemoveLeft: String): Option[List[Expr]] =
+      if(toRemoveLeft == "") Some(l) else l match {
+        case Nil => None
+        case StringLiteral(first) :: lTail =>
+          if(toRemoveLeft.startsWith(first))
+            dropLeftIfPossible(lTail, toRemoveLeft.substring(0, first.length))
+          else if(first.startsWith(toRemoveLeft))
+            Some(StringLiteral(first.substring(toRemoveLeft.length)) :: lTail)
+          else None
+        case _ => None
+      }
+
+    newOut match {
+      case StringLiteral(s) =>
+        functionValue match {
+        case StringLiteral(t) =>(
+          if(t.startsWith(s)) {
+            val StringConcats(seq) = function
+            dropRightIfPossible(seq.reverse, t.substring(s.length)).toStream.map(x => (StringConcats(x), Formula()))
+          } else Stream.empty) #::: (
+          if(t.endsWith(s)) {
+            val StringConcats(seq) = function
+            dropLeftIfPossible(seq, t.substring(0, t.length - s.length)).toStream.map(x => (StringConcats(x), Formula()))
+          } else Stream.empty
+          )
+          case _ => Stream.empty
+        }
       case _ => Stream.empty
     }
   }
