@@ -777,48 +777,38 @@ trait MapReverseLike[A, B, F] {
   private def mapRevAux(l: List[A], lOut: List[B], out: List[B]): Stream[List[Either[A, F]]] = {
     //println(s"mapRevAux1:$l\nmapRevAux2:$lOut\nmapRevAux3:$out")
     l match {
-      case Nil =>
-        out match {
-          case Nil => Stream(Nil)
-          case outhd::outtail =>
-            val revOutHd = fRev(None, outhd)
-            for{ sol <- mapRevAux(l, lOut, outtail)
-                 other_a <- revOutHd } yield {
-              other_a :: sol
+    case Nil =>
+      out match {
+        case Nil => Stream(Nil)
+        case outhd::outtail =>
+          val revOutHd = fRev(None, outhd)
+          for{ sol <- mapRevAux(l, lOut, outtail)
+               other_a <- revOutHd } yield {
+            other_a :: sol
+          }
+      }
+    case hd::tl =>
+      out match {
+      case Nil => Stream(Nil)
+      case outhd::outtail =>
+        if(lOut.head == outhd) { // The out element is the right one, we don't touch it.
+          mapRevAux(l.tail, lOut.tail, out.tail).map(Left(hd)::_)
+        } else {
+          val k = lOut.indexOfSlice(out)
+          if (k > 0) { // There has been a deletion, but we are able to find the remaining elements.
+            mapRevAux(l.drop(k), lOut.drop(k), out)
+          } else {
+            val k2 = out.indexOfSlice(lOut)
+            if (k2 > 0) { // Some elements were added at some point.
+              val tailSolutions = mapRevAux(l, lOut, out.drop(k2))
+              // Now for each of out.take(k2), we take all possible inverses.
+              combinatorialMap(out.take(k2)).flatMap(l => tailSolutions.map(l ++ _))
+            } else { // No deletion, no insertion, hence modifications.
+              fRev(Some(hd), outhd).flatMap(s => mapRevAux(tl, lOut.tail, outtail).map(s :: _))
             }
+          }
         }
-      case hd::tl =>
-        out match {
-          case Nil => Stream(Nil)
-          case outhd::outtail =>
-            if(lOut.head == outhd) {
-              mapRevAux(l.tail, lOut.tail, out.tail).map(Left(hd)::_)
-            } else {
-              // Looking for a deleted element maybe ?
-              val expectedOut = lOut
-              val k = expectedOut.indexOfSlice(out)
-              if (k > 0) {
-                // There has been a deletion, but we are able to find the remaining elements.
-                mapRevAux(l.drop(k), lOut.drop(k), out)
-              } else {
-                val k2 = out.indexOfSlice(expectedOut)
-                if (k2 > 0) {
-                  // Some elements were added at some point.
-                  val tailSolutions = mapRevAux(l, lOut, out.drop(k2))
-                  // Now for each of out.take(k2), we take all possible inverses.
-                  combinatorialMap(out.take(k2)).flatMap(l => tailSolutions.map(l ++ _))
-                } else {
-                  val revOutHd = fRev(Some(hd), outhd)
-                  val p = revOutHd.filter(_ == Left(hd))
-                  if (p.isEmpty) {
-                    revOutHd.flatMap(s => mapRevAux(tl, lOut.tail, outtail).map(s :: _))
-                  } else {
-                    p.flatMap(s => mapRevAux(tl, lOut.tail, outtail).map(s :: _))
-                  }
-                }
-              }
-            }
-        }
+      }
     }
   }
 

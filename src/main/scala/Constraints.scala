@@ -578,7 +578,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
     solver.check(SolverResponses.Model) match {
       case SatWithModel(model) =>
         //println("One solution !")
-        val updatedStream = es.filterNot{ _._2.toSet.subsetOf(maybePart.toSet)}
+        val updatedStream = es.filter{ x =>  !x._2.toSet.subsetOf(maybePart.toSet)}
 
         (solver, model) #:: maxSMTMaybes(updatedStream)
       case _ =>
@@ -668,7 +668,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
   def toStreamOfInoxExpr(solutionVar: inox.trees.Variable): Stream[Expr] = {
     val simplified = simplify(Set(solutionVar)).formula
 
-    println("######## Converting this formula to stream of solutions ######\n" + simplified)
+    println(s"######## Converting this formula to stream of solutions for $solutionVar ######\n" + simplified)
 
 
     // The stream of conjuncts splitted with the maybes.
