@@ -569,20 +569,20 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
     val constPart = e._1
     val maybePart = e._2
     val numForceMaybeToKeep = e._3
-    //println("The maybes are: " + e._2)
+    println("The maybes are: " + e._2)
 
     val solver = prog.getSolver.getNewSolver
-    //println("solving " + and(e._1 ++ e._2 : _*))
+    println("solving " + and(e._1 ++ e._2 : _*))
     solver.assertCnstr(and(e._1 ++ e._2 : _*))
     //println("#2")
     solver.check(SolverResponses.Model) match {
       case SatWithModel(model) =>
-        //println("One solution !")
+        println("One solution !")
         val updatedStream = es.filter{ x =>  !x._2.toSet.subsetOf(maybePart.toSet)}
 
         (solver, model) #:: maxSMTMaybes(updatedStream)
       case _ =>
-        //println("No solution. Removing maybes...")
+        println("No solution. Removing maybes...")
         maxSMTMaybes(es.tail #::: {
           for {i <- (numForceMaybeToKeep until e._2.length).toStream
                seq = e._2.take(i) ++ e._2.drop(i + 1)

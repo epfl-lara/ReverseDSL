@@ -348,11 +348,15 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
         )
       ))(inoxTypeOf[String])
 
+    checkProg("Hi Hi",   repairProgram(pfun, "Hi Hi"))
     checkProg("Mikael Mikael", pfun)
     checkProg("Hi Hi",   repairProgram(pfun, "Mikael Hi", 2))
-    checkProg("Hi Hi",   repairProgram(pfun, "Hi Mikael"))
-    checkProg("Hi Hi",   repairProgram(pfun, "Mikael Hi"))
-    checkProg("Mikael   Mikael", repairProgram(pfun, "Mikael   Mikael", 3))
+    checkProg("Hi Hi",   repairProgram(pfun, "Hi Mikael", 2))
+    checkProg("Mikael   Mikael", repairProgram(pfun, "Mikael   Mikael", 3)) matchBody {
+      case Let(_, StringLiteral(s), Let(_, StringLiteral(t), _)) =>
+        s shouldEqual "Mikael"
+        t shouldEqual "   "
+    }
   }
 
   test("Reverse filter") {

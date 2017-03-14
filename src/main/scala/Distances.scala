@@ -19,6 +19,7 @@ object Distances {
       case (s, n) => (if(s == constSize + 2) s else s + 2) +size(p.productElement(n))
     }
     case c: Char => 3
+    case _ => a.toString.length
   }
   
   def innerSize(a: Any): Int = a match {
@@ -41,7 +42,7 @@ object Distances {
               case (s, i) => s + distance(a.productElement(i), b.productElement(i))
             }
           } else {
-            println(s"Comparing two non-related products: $a of type ${a.getClass}, $b of type ${b.getClass}")
+            //println(s"Comparing two non-related products: $a of type ${a.getClass}, $b of type ${b.getClass}")
             size(a) + size(b) // remove a and write b
           }
         case (true, false) => 4
@@ -49,7 +50,7 @@ object Distances {
         case (a: Int, b: Int) =>
           distance(a.toString, b.toString)
         case (a, b) =>
-          println(s"Comparing two non-related objects: $a, $b")
+          //println(s"Comparing two non-related objects: $a, $b")
           size(a) + size(b)
       }
     }

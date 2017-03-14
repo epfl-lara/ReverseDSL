@@ -58,12 +58,11 @@ trait RepairProgramTest {
 
   def repairProgram(pf: PFun, expected2: Expr, lookInManyFirstSolutions: Int = 1): PFun = {
     val progfuns2 = ReverseProgram.put(expected2, None, None, Some(pf)).toStream
-    progfuns2.lengthCompare(1) should be >= 0
+    progfuns2.lengthCompare(0) should be > 0
     val initialValue = pf.getBody
     val sorted = sortStreamByDistance(progfuns2, lookInManyFirstSolutions, initialValue)
-    println("Solutions: by order")
-    sorted.take(lookInManyFirstSolutions).foreach{ sol =>
-      println(sol.getBody)
+    sorted.take(lookInManyFirstSolutions).toList.zipWithIndex.foreach{ case (sol, i) =>
+      println(s"Solution $i:" + sol.getBody)
     }
     sorted.head
   }
