@@ -258,7 +258,7 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
     val pfun2 = checkProg(expected2, repairProgram(pfun, expected2))
     pfun2 matchBody {
       case funBody@Let(_, StringLiteral(s), Application(newLambda@Lambda(Seq(v2), body), Seq(StringLiteral(_))))
-      => //println(funBody)
+      => //Log(funBody)
         if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
         s shouldEqual "Changed parameter"
     }
@@ -358,6 +358,30 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
         t shouldEqual "   "
     }
   }
+
+  test("Reverse curried string arguments") {
+    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+    val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
+
+    val pfun = function(
+      Application(
+        Application(
+        Lambda(Seq(ap),
+          Lambda(Seq(bp),
+            StringConcat(StringConcat(ap.toVariable, ":"), bp.toVariable)
+          )
+        ), Seq("Winner")), Seq("Mikael"))
+      )(inoxTypeOf[String])
+
+    Log(pfun.getBody)
+    checkProg("Winner:Mikael", pfun)
+    checkProg("Winner:Viktor",   repairProgram(pfun, "Winner:Viktor")) matchBody {
+      case Application(Application(_, Seq(StringLiteral(s))), Seq(StringLiteral(t))) =>
+        s shouldEqual "Winner"
+        t shouldEqual "Viktor"
+    }
+  }
+
 
   test("Reverse filter") {
     val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[Int], Set())

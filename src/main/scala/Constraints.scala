@@ -473,7 +473,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
         inox.trees.exprOps.postMap(transitiveTopEqualities _)(x)
       case _ => x
     }
-    //println("#2 " + toplevelIdentityRemoved)
+    //Log("#2 " + toplevelIdentityRemoved)
     val removedAndTrue =
       inox.trees.exprOps.postMap{
         case And(exprs) =>
@@ -569,20 +569,20 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
     val constPart = e._1
     val maybePart = e._2
     val numForceMaybeToKeep = e._3
-    println("The maybes are: " + e._2)
+    Log("The maybes are: " + e._2)
 
     val solver = prog.getSolver.getNewSolver
-    println("solving " + and(e._1 ++ e._2 : _*))
+    Log("solving " + and(e._1 ++ e._2 : _*))
     solver.assertCnstr(and(e._1 ++ e._2 : _*))
-    //println("#2")
+    //Log("#2")
     solver.check(SolverResponses.Model) match {
       case SatWithModel(model) =>
-        println("One solution !")
+        Log("One solution !")
         val updatedStream = es.filter{ x =>  !x._2.toSet.subsetOf(maybePart.toSet)}
 
         (solver, model) #:: maxSMTMaybes(updatedStream)
       case _ =>
-        println("No solution. Removing maybes...")
+        Log("No solution. Removing maybes...")
         maxSMTMaybes(es.tail #::: {
           for {i <- (numForceMaybeToKeep until e._2.length).toStream
                seq = e._2.take(i) ++ e._2.drop(i + 1)
@@ -598,9 +598,9 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
         val (eqs, maybes)  = splitMaybe(seqExpr, Nil, Nil)
         for{ solver <- maxSMTMaybes(Stream((eqs, maybes, 0))) } yield solver
       case Node(Leaf(seqExpr), value, right) =>
-        //println("First we will solve " + right)
-        //println("Then we inverse " + value)
-        //println("And then we solve " + seqExpr)*
+        //Log("First we will solve " + right)
+        //Log("Then we inverse " + value)
+        //Log("And then we solve " + seqExpr)*
         val (function: ManualReverse[_, _], inVar, inDefault, outVar) = value match {
           case k@Equals(FunctionInvocation(identifier, Seq(), Seq(inVar: Variable, inDefault)), b: Variable) => (functions(identifier), inVar, inDefault, b)
           case k@Equals(b: Variable, FunctionInvocation(identifier, Seq(), Seq(inVar: Variable, inDefault))) => (functions(identifier), inVar, inDefault, b)
@@ -619,9 +619,9 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
               outValue = model.vars(outVar.toVal  : inox.trees.ValDef)
               inValue <- getInValues(function, outValue, inDefault)
               newSeqExpr = (seqExpr :+ Equals(inVar, inValue)) ++ model.vars.map{ case (v, e) => Equals(v.toVariable, e) }
-              //_ = println("Solving this :" + newSeqExpr)
+              //_ = Log("Solving this :" + newSeqExpr)
               (eqs, maybes)  = splitMaybe(newSeqExpr, Nil, Nil)
-              //_ = println("Solving maybe:" + x)
+              //_ = Log("Solving maybe:" + x)
               solver <- maxSMTMaybes(Stream((eqs, maybes, 0)))
         } yield {
           solver
@@ -635,26 +635,26 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
   def getStreamOfSolutions(inputVar: Variable, e: (ThisSolver, prog.Model)): Stream[prog.Model] = {
     val solver = e._1
     val solutionInit = e._2
-    //println(s"Looking for $inputVar in $solutionInit")
+    //Log(s"Looking for $inputVar in $solutionInit")
     val solutionInitExpr: Expr = solutionInit.vars(inputVar.toVal  : inox.trees.ValDef)
-    //println("Found solution " + solutionInitExpr)
-    //println("Supposing " + !(inputVar === solutionInit))
+    //Log("Found solution " + solutionInitExpr)
+    //Log("Supposing " + !(inputVar === solutionInit))
 
     def otherSolutions(prevSol: inox.trees.Expr): Stream[prog.Model] = {
       solver.check(SolverResponses.Model) match {
         case SatWithModel(model) =>
           // We are going to plug in the maximum number of equals possible until it breaks.
           val solution: Expr = model.vars(inputVar.toVal  : inox.trees.ValDef)
-          //println("Found solution " + solution)
+          //Log("Found solution " + solution)
           if (prevSol == solution) Stream.empty else {
             model #:: {
-              //println("Supposing " + !(inputVar === solution))
+              //Log("Supposing " + !(inputVar === solution))
               solver.assertCnstr(!(inputVar === solution))
               otherSolutions(solution)
             }
           }
         case _ =>
-          //println("No more solutions")
+          //Log("No more solutions")
           Stream.empty[prog.Model]
       }
     }
@@ -668,12 +668,12 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
   def toStreamOfInoxExpr(solutionVar: inox.trees.Variable): Stream[Expr] = {
     val simplified = simplify(Set(solutionVar)).formula
 
-    println(s"######## Converting this formula to stream of solutions for $solutionVar ######\n" + simplified)
+    Log(s"######## Converting this formula to stream of solutions for $solutionVar ######\n" + simplified)
 
 
     // The stream of conjuncts splitted with the maybes.
     for {a <- getStreamOfConjuncts(simplified)
-         _ = println("Solving conjunct : " + a)
+         _ = Log("Solving conjunct : " + a)
          splitted = splitAtUnknownFunctions(a)
          solver <- solveTrees(splitted)
          modelInox <- getStreamOfSolutions(solutionVar, solver)

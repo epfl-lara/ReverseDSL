@@ -1,4 +1,5 @@
-import inox.{Options, Program}
+import inox.evaluators.{HasDefaultGlobalContext, HasDefaultRecContext}
+import inox._
 
 /**
   * Created by Mikael on 13/03/2017.

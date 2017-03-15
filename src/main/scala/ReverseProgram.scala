@@ -54,7 +54,7 @@ object ReverseProgram {
     // The assignments and the formula containing the other expressions.
     def determinizeAll(/*freeVariablesOriginal: Seq[ValDef]*/)(implicit symbols: Symbols): Stream[Map[ValDef, Expr]] = {
 
-      println(s"Trying to get all solutions for $varsToAssign of \n" + this)
+      Log(s"Trying to get all solutions for $varsToAssign of \n" + this)
       val freeVariables = varsToAssign.toSeq
 
       //if(freeVariables.isEmpty) return Stream(known)
@@ -65,13 +65,13 @@ object ReverseProgram {
           if(freeVariables.isEmpty) throw new Exception("Should not ask this question?!")
           val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
           val constraint = InoxConstraint(input === tupleWrap(freeVariables.map(_.toVariable)) && unknownConstraints && and(known.toSeq.map{ case (k, v) => k.toVariable === v} : _*))
-          println(s"Solving for $constraint")
+          Log(s"Solving for $constraint")
           constraint.toStreamOfInoxExpr(input).map {
             case Tuple(args) => freeVariables.zip(args).map{ case (fv: ValDef, expr: Expr) => fv -> expr }.toMap
             case e if freeVariables.length == 1 =>
               Map(freeVariables.head -> e)
             case e =>
-              println("other solution : " + e)
+              Log("other solution : " + e)
               Map[ValDef, Expr]()
           }
       }
@@ -119,12 +119,12 @@ object ReverseProgram {
     val newMain = FreshIdentifier("main")
     implicit val cache = new mutable.HashMap[Expr, Expr]
     for {ProgramFormula(newOutExpr, f) <- repair(ProgramFormula(prevBody), outExpr)
-         _ = println("Remaining formula: " + f)
-         _ = println("Remaining expression: " + newOutExpr)
+         _ = Log("Remaining formula: " + f)
+         _ = Log("Remaining expression: " + newOutExpr)
          assignments <- f.determinizeAll(/*exprOps.variablesOf(newOutExpr)*/)
-         _ = println("Found assignments: " + assignments)
+         _ = Log("Found assignments: " + assignments)
          finalNewOutExpr = exprOps.replaceFromSymbols(assignments, newOutExpr)
-         _ = println("Final  expression: " + finalNewOutExpr)
+         _ = Log("Final  expression: " + finalNewOutExpr)
          newFunDef = mkFunDef(newMain)()(stp => (Seq(), prevFunction.returnType, _ => finalNewOutExpr))
          newProgram = InoxProgram(context, symbols.withFunctions(Seq(newFunDef)))
     } yield (newProgram, newMain)
@@ -141,18 +141,24 @@ object ReverseProgram {
     import evaluators._
     val funDef = mkFunDef(FreshIdentifier("main"))()(stp => (Seq(), expr.getType, _ => expr))
     val p = InoxProgram(context, symbols)
-    val evaluator = new {
+    val evaluator = LambdaPreservingEvaluator(p)
+    evaluator.eval(expr) match {
+      case EvaluationResults.Successful(e) => e
+      case m => throw new Exception(s"Could not evaluate: $expr, got $m")
+    }
+  })
+
+  /** Returns an evaluator which preserves lambda shapes */
+  def LambdaPreservingEvaluator(p: InoxProgram) = {
+    import evaluators._
+    new {
       val program: p.type = p
       val options = context.options
     } with LambdaPreservingEvaluator
       with HasDefaultGlobalContext with HasDefaultRecContext {
       val semantics: p.Semantics = p.getSemantics
     }
-    evaluator.eval(expr) match {
-      case EvaluationResults.Successful(e) => e
-      case m => throw new Exception(s"Could not evaluate: $expr, got $m")
-    }
-  })
+  }
 
   private case class letm(v: Map[ValDef, Expr]) {
     @inline def in(res: Expr) = {
@@ -213,12 +219,12 @@ object ReverseProgram {
     (originalInput, output) match {
       case (v: Variable, l) =>
         if(freeVars(v)) {
-          println(s"$v is a free variable")
+          Log(s"$v is a free variable")
           if(!(originalAssignments contains v.toVal) || l == originalAssignments(v.toVal)) {
-            println(s"Value unchanged")
+            Log(s"Value unchanged")
             Stream(Map())
           } else {
-            println(s"Value updated: $l")
+            Log(s"Value updated: $l")
             Stream(Map(v.toVal -> l))
           }
         } else Stream(Map())
@@ -228,10 +234,10 @@ object ReverseProgram {
             subtrees.zip(subtrees2).map{ case (a, b) => obtainMapping(a, freeVars, originalAssignments, b)}
           ).flatMap{ (e: Seq[Map[ValDef, Expr]]) =>
             def combineAll(remaining: Seq[Map[ValDef, Expr]], current: Map[ValDef, Expr]): Stream[Map[ValDef, Expr]] = {
-              //println(s"combineAll($remaining, $current)")
+              //Log(s"combineAll($remaining, $current)")
               remaining match {
               case Seq() =>
-                //println(s"returning $current")
+                //Log(s"returning $current")
                 Stream(current)
               case head +: tail =>
                 val intersection = inox.utils.StreamUtils.cartesianProduct(
@@ -243,7 +249,7 @@ object ReverseProgram {
                     }
                   } ++ (head.keySet -- current.keys).map{ key => Stream(key -> head(key))}
                 ).map{ _.toMap }
-                //println(s"intersection = $intersection")
+                //Log(s"intersection = $intersection")
                 if(intersection.nonEmpty) {
                   // We get all variants from the intersection
                   intersection.flatMap{ possiblity => combineAll(tail, current ++ possiblity )}
@@ -274,8 +280,8 @@ object ReverseProgram {
             (implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
     val function = program.program
     val currentValues = program.formula.known
-    println(s"\n@solving ${currentValues.map{ case (k, v) => s"${k.id} -> $v"}.mkString(", ")}: (\n$function ) should equal\n$newOut")
-    if(function == newOut) return { println("@return original");
+    Log(s"\n@solving ${currentValues.map{ case (k, v) => s"${k.id} -> $v"}.mkString(", ")}: (\n$function ) should equal\n$newOut")
+    if(function == newOut) return { Log("@return original");
       Stream(program.copy(formula = program.formula.copy(known = Map(), varsToAssign = Set())))
     }
 
@@ -324,7 +330,7 @@ object ReverseProgram {
                 for {maybeMapping <- obtainMapping(l, freeVarsOfOut, Map(), lFun)
                      constraint = and(maybeMapping.toSeq.map { case (k, v) => E(Common.maybe)(k.toVariable === v) }: _*)
                 } yield {
-                  println(s"constraint:$constraint")
+                  Log(s"constraint:$constraint")
                   val isConstraintVariable = exprOps.variablesOf(constraint).map(_.toVal)
                   val variables = freeVarsOfOut.map(_.toVal)
                   val (constrainedVariables, unconstraintedVariables) = variables.partition(isConstraintVariable)
@@ -354,7 +360,7 @@ object ReverseProgram {
                 val bodyWithDummyInputs = exprOps.replaceFromSymbols(dummyFresh.mapValues(_.toVariable), body)
               val dummyInputsOld = dummyFresh.mapValues(dummyInputs)
                 val variablesToAssign = program.formula.varsToAssign ++ dummyFresh.values
-                println(s"variablesToAssign: $variablesToAssign, dummy = $dummyFresh")
+                Log(s"variablesToAssign: $variablesToAssign, dummy = $dummyFresh")
                 //TODO: We place values which may be replaced, can we enforce that they should not move?
               for{ProgramFormula(newBody, f@Formula(newAssignments, varsToAssign, unchanged, constraint)) <-
                   repair(ProgramFormula(bodyWithDummyInputs,
@@ -362,20 +368,20 @@ object ReverseProgram {
                       variablesToAssign
                     )),
                     simplify(exprOps.replaceFromSymbols(dummyInputsOld, body2)))
-                _ = println(s"Going to test if lambda can be repaired using $newBody, $f, $dummyInputs, $newAssignments")
+                _ = Log(s"Going to test if lambda can be repaired using $newBody, $f, $dummyInputs, $newAssignments")
                 /*if dummyInputs.forall{ case (key, value) =>
-                  println(s"$key -> $value")
-                  println("New: " + newAssignments.get(key))
+                  Log(s"$key -> $value")
+                  Log("New: " + newAssignments.get(key))
                   newAssignments.get(key).forall(_ == value)}
-                _ = println(s"ok for formula = $f")*/
+                _ = Log(s"ok for formula = $f")*/
                 newFreevarAssignments = freeVars.flatMap(fv => newAssignments.get(fv).map(res => fv -> res)).toMap }
                 yield {
                   val newConstraint = constraint &<>& and(dummyInputs.toSeq.map{ case (k, v) => k.toVariable === v}: _*)
-                  println(s"Returning lambda using $newBody, $f, $dummyInputs, \n$newFreevarAssignments")
+                  Log(s"Returning lambda using $newBody, $f, $dummyInputs, \n$newFreevarAssignments")
                   val fullNewBody = exprOps.replaceFromSymbols(dummyNotFresh.mapValues(_.toVariable), newBody)
                   //val newUnchanged =
                   val res = ProgramFormula(Lambda(vd, fullNewBody): Expr, Formula(newFreevarAssignments, varsToAssign -- vd2, unchanged -- vd2 -- dummyInputs.keys, newConstraint))
-                  println(res)
+                  Log(res)
                   res
                 }
               case v: Variable => ???
@@ -433,11 +439,11 @@ object ReverseProgram {
 
           def defaultCase: Stream[ProgramFormula] = {
             //return Stream.empty
-            //println(Thread.currentThread().getStackTrace.mkString("\n"))
+            //Log(Thread.currentThread().getStackTrace.mkString("\n"))
 
             val left = ValDef(FreshIdentifier("l", true), StringType, Set())
             val right = ValDef(FreshIdentifier("r", true), StringType, Set())
-            println(s"Default case: ${left.id} + ${right.id} == $newOut")
+            Log(s"Default case: ${left.id} + ${right.id} == $newOut")
 
             val leftRepair = repair(ProgramFormula(expr1, Formula(currentValues, currentValues.keySet)), left.toVariable)
             val rightRepair = repair(ProgramFormula(expr2, Formula(currentValues, currentValues.keySet)), right.toVariable)
@@ -448,7 +454,7 @@ object ReverseProgram {
             for((ProgramFormula(leftExpr, f1@Formula(mp1, varstoAssign1, unchanged1, cs1)),
                  ProgramFormula(rightExpr, f2@Formula(mp2, varstoAssign2, unchanged2, cs2))) <- bothRepair) yield {
               val newCs = cs1 &<>& cs2 &<>& newOut === StringConcat(left.toVariable, right.toVariable)
-              println(s"Default case s first solution: $newCs\n${StringConcat(leftExpr, rightExpr)}")
+              Log(s"Default case s first solution: $newCs\n${StringConcat(leftExpr, rightExpr)}")
               val conflict = (mp1.keySet intersect mp2.keySet).filter{ k => mp1(k) != mp2(k) }
               val assignmentsForSure = (mp1 ++ mp2 -- conflict)
               val newVarsToAssign =  varstoAssign1 ++ varstoAssign2 ++ Set(left, right)
@@ -482,7 +488,7 @@ object ReverseProgram {
                     ProgramFormula(StringConcat(expr1, rightExpr),
                       Formula(known, bounded, unbounded, newUnknownConstraints)
                     )
-                    println(s"left return: $res")
+                    Log(s"left return: $res")
                     res
                   }
                 } else Stream.empty
@@ -501,7 +507,7 @@ object ReverseProgram {
                       val res =
                       ProgramFormula(StringConcat(leftExpr, expr2),
                         Formula(known, bounded, unbounded, newUnknownConstraints))
-                      println(s"right return: $res")
+                      Log(s"right return: $res")
                       res
                     }
                   } else Stream.empty
@@ -551,9 +557,9 @@ object ReverseProgram {
                 })
                 val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
                 for {seq <- streamOfSeqSolutions
-                     _ = println(s"combineResults($seq, $currentValues)")
+                     _ = Log(s"combineResults($seq, $currentValues)")
                      reduced = combineResults(seq, currentValues)
-                     _ = println(s"=$reduced")
+                     _ = Log(s"=$reduced")
                      newArgs = reduced._1.reverse
                      assignments = reduced._2
                 } yield {
@@ -571,7 +577,7 @@ object ReverseProgram {
             case v: Variable => currentValues.getOrElse(v.toVal, evalWithCache(letm(currentValues) in v))
             case l => evalWithCache(letm(currentValues) in l) // Should be a lambda
           }
-          println(s"Original value: $originalValue")
+          Log(s"Original value: $originalValue")
           originalValue match {
             case l@Lambda(argNames, body) =>
               val freshArgsNames = argNames.map(vd => ValDef(FreshIdentifier(vd.id.name, true), vd.tpe, vd.flags))
@@ -583,40 +589,40 @@ object ReverseProgram {
               for {ProgramFormula(newBodyFresh, newForm@Formula(assignments, variablestoAssign, unchanged, constraint)) <-
                      repair(ProgramFormula(freshBody, Formula(argumentValues.map{ case (k,v) => oldToFresh(k) -> v}, freshArgsNames.toSet)), newOut)
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
-                   _ = println(s"recovered $newBody, $newForm from repair($body, ${currentValues ++ argumentValues}, $newOut)")
+                   _ = Log(s"recovered $newBody, $newForm from repair($body, ${currentValues ++ argumentValues}, $newOut)")
                    argumentsReversed = arguments.zip(freshArgsNames).map { case (arg, v) =>
                      val expected = newForm.getOrElse(v, argumentValues(freshToOld(v).toVal))
-                     println(s" repairing argument $arg (= $v) should equal $expected")
+                     Log(s" repairing argument $arg (= $v) should equal $expected")
                      repair(ProgramFormula(arg, program.formula), expected)
                    }.zipWithIndex.map{ case (x, i) =>
                      if(x.isEmpty) Stream(ProgramFormula(argumentValues(argNames(i)), Formula())) else x
                    }
                    newArgumentsAssignments <- inox.utils.StreamUtils.cartesianProduct(argumentsReversed)
-                   _ = println(s"newArguments: $newArgumentsAssignments")
+                   _ = Log(s"newArguments: $newArgumentsAssignments")
                    newArguments = newArgumentsAssignments.map(_.program)
                    newArgumentConstraints = and(newArgumentsAssignments.map(_.formula.unknownConstraints): _*)
-                   _ = println(s"newArgumentConstraints: $newArgumentConstraints")
+                   _ = Log(s"newArgumentConstraints: $newArgumentConstraints")
                    isSameBody = newBody == body
                    newLambda = if (isSameBody) l else Lambda(argNames, newBody)
-                   _ = println(s"isSameBody: $isSameBody")
+                   _ = Log(s"isSameBody: $isSameBody")
                    ProgramFormula(newAppliee, Formula(assignments2, vtassign, unchanged2, cs)) <- lambdaExpr match {
                      case v: Variable => Stream(ProgramFormula(v, (
                        if(isSameBody) Formula.maybeDefault(Set(v.toVal), currentValues) else
                          Formula(Map(v.toVal -> newLambda), Set(v.toVal)))))
-                     case l: Lambda => repair(ProgramFormula(lambdaExpr, program.formula), newLambda)
+                     case l => repair(ProgramFormula(l, program.formula), newLambda)
                    }
                    finalApplication = Application(newAppliee, newArguments)
                    newAssignments = Map[ValDef, Expr]() ++ assignments2 ++
                      newArgumentsAssignments.flatMap(_.formula.known.toList) // TODO: Deal with variable value merging like above.
               } yield {
-                println("finalApplication:" + finalApplication)
+                Log("finalApplication:" + finalApplication)
                 val newConstraint = constraint &<>& cs &<>& newArgumentConstraints
                 val newConstraintVars = exprOps.variablesOf(newConstraint)
                 val newUnsetVariables = (vtassign ++ freshArgsNames ++ newConstraintVars.map(_.toVal)).filter{ k => newAssignments.contains(k) || newConstraintVars(k.toVariable)}
                 val newUnchangedVariables = (unchanged ++ unchanged2 -- newUnsetVariables)
                 val res2 =
                 ProgramFormula(finalApplication: Expr, Formula(newAssignments, newUnsetVariables, newUnchangedVariables, newConstraint)) // TODO: Check order.
-                println("[return ] " + res2)
+                Log("[return ] " + res2)
                 res2
               }
             case _ => throw new Exception(s"Don't know how to handle this case : $m of type ${m.getClass.getName}")
@@ -626,7 +632,7 @@ object ReverseProgram {
           // We need to reverse the invocation arguments.
           reversions.get(f) match {
             case None =>
-              println(s"No function $f reversible for : $funInv.\nIt evaluates to:\n$functionValue.")
+              Log(s"No function $f reversible for : $funInv.\nIt evaluates to:\n$functionValue.")
               Stream.empty
             case Some(reverser) =>
               reverser(tpes)(args.map(arg => evalWithCache(letm(currentValues) in arg)), newOut).map{ case (seqArgs, formula) =>
@@ -635,10 +641,10 @@ object ReverseProgram {
           }
 
         case anyExpr =>
-          println(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")
+          Log(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")
           Stream.empty
       }
-      println(s"@return $res")
+      Log(s"@return $res")
       res
     }
   }
@@ -689,7 +695,7 @@ object ReverseProgram {
     def apply(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
       val lambda = originalArgsValues.tail.head
       val originalInput = originalArgsValues.head
-      //println(s"Reversing $originalArgs: $originalOutput => $newOutput")
+      //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
       filterRev(unwrapList(originalInput), (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true), unwrapList(newOutput)).map{ (e: List[Expr]) =>
         (Seq(wrapList(e, tpes), lambda), Formula())
       }
@@ -722,7 +728,7 @@ object ReverseProgram {
     val identifier = Utils.map
 
     def apply(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
-      println(s"map.apply($newOutput)")
+      Log(s"map.apply($newOutput)")
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
       val originalInput = originalArgsValues.head
       val uniqueString = "_"
@@ -731,33 +737,33 @@ object ReverseProgram {
         override def f = (expr: Expr) => evalWithCache(Application(lambda, Seq(expr)))
 
         override def fRev = (prevIn: Option[Expr], out: Expr) => {
-          println(s"fRev: $prevIn, $out")
+          Log(s"fRev: $prevIn, $out")
           val (Seq(in), newFormula) =
             prevIn.map(x => (Seq(x), Formula(Map[ValDef, Expr]()))).getOrElse {
               val unknown = ValDef(FreshIdentifier("unknown"),lambda.args.head.getType)
               (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> StringLiteral(uniqueString)), Set(unknown)))
             }
-          println(s"in:$in")
-          println(s"newformula:$newFormula")
+          Log(s"in:$in")
+          Log(s"newformula:$newFormula")
           val res= repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), out).flatMap {
             case ProgramFormula(Application(_, Seq(in2)), Formula(mapping, vtoAssign, _, _)) if in2 != in => Stream(Left(in))
             case ProgramFormula(Application(_, Seq(in2)), f@Formula(mapping, vtoAssign, _, _)) if in2 == in && in2.isInstanceOf[Variable] =>
-              //println("#2, in = $in")
+              //Log("#2, in = $in")
               f.evalPossible(in2).map(Left(_))
             case e@ProgramFormula(Application(lambda2: Lambda, Seq(in2)), f@Formula(mapping, vtoAssign, _, _)) if in2 == in && lambda2 != lambda =>
-              //println(s"#3: $lambda, $lambda2, $f, in = $in")
+              //Log(s"#3: $lambda, $lambda2, $f, in = $in")
               f.evalPossible(lambda2).map(lambda => Right((in, castOrFail[Expr, Lambda](lambda))))
             case e@ProgramFormula(app, f) =>
               throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
           }.filter(_ != Left(StringLiteral(uniqueString)))
-          println(s"res=${res}")
+          Log(s"res=${res}")
           res
         }
       }
 
-      //println(s"Reversing $originalArgs: $originalOutput => $newOutput")
+      //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
       mapr.mapRev(unwrapList(originalInput), unwrapList(newOutput)).flatMap{ (e: List[Either[Expr, (Expr, Lambda)]]) =>
-        //println("Final solution : " + e)
+        //Log("Final solution : " + e)
         val argumentsChanged = e.map{
           case Left(e) => e
           case Right((e, lambda)) => e
@@ -794,7 +800,7 @@ object ReverseProgram {
             (implicit symbols: Symbols, cache: Cache): (List[Expr], Formula) =
     ((List[Expr](), Formula()) /: seq) {
     case total@((ls, Formula(mm, vta1, unc1, cs1)), (ProgramFormula(l, Formula(m, vta2, unc2, cs2)), field, recompute)) =>
-      println(total)
+      Log(total)
       if ((mm.keys.toSet intersect m.keys.toSet).nonEmpty && {
         // Compare new assignment with the original value.
         val realValue = currentValues(m.keys.head)
@@ -826,7 +832,7 @@ object ReverseProgram {
         case t if t == functionValue => Some(function)
         case _ => None
       }(newOut)
-      println("@return wrapped")
+      Log("@return wrapped")
       Stream(ProgramFormula(newFunction,
         Formula(known =  Map(), program.formula.varsToAssign intersect program.freeVars,
           unknownConstraints = and(program.formula.known.toSeq.filter{ case (key, value) => program.freeVars(key) }.map{
@@ -848,7 +854,7 @@ object ReverseProgram {
   private def maybeUnwrap(program: ProgramFormula, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[ProgramFormula] = {
     val function = program.program
     if(functionValue == newOut) {
-      println("@return unwrapped")
+      Log("@return unwrapped")
       return Stream(program.copy(formula =
         Formula(known = Map(), Set(), program.freeVars)
         ))

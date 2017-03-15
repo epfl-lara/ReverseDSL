@@ -62,7 +62,7 @@ trait RepairProgramTest {
     val initialValue = pf.getBody
     val sorted = sortStreamByDistance(progfuns2, lookInManyFirstSolutions, initialValue)
     sorted.take(lookInManyFirstSolutions).toList.zipWithIndex.foreach{ case (sol, i) =>
-      println(s"Solution $i:" + sol.getBody)
+      Log(s"Solution $i:" + sol.getBody)
     }
     sorted.head
   }
@@ -74,7 +74,9 @@ trait RepairProgramTest {
   }
 
   def checkProg(expected1: Expr, prog: InoxProgram, funDefId: Identifier): (InoxProgram, Identifier) = {
-    prog.getEvaluator.eval(FunctionInvocation(funDefId, Seq(), Seq())) match {
+   // ReverseProgram.evalWithCache((prog, funDefId).getBody)(new collection.mutable.HashMap, prog.symbols)
+
+    ReverseProgram.LambdaPreservingEvaluator(prog).eval(FunctionInvocation(funDefId, Seq(), Seq())) match {
       case EvaluationResults.Successful(e) => e shouldEqual expected1
       case m => fail(s"Did not evaluate to $expected1. Error: $m")
     }
