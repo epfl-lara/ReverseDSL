@@ -103,6 +103,11 @@ object Utils {
 
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)
+
+  @inline def castOrFail[A, B <: A](a: A): B =
+    a.asInstanceOf[B]
+
+  @inline def asStr(e: Expr): String = castOrFail[Expr, StringLiteral](e).value
 }
 
 /** A type which can be converted to inox types, and whose expressions can be obtained from inox expressions */

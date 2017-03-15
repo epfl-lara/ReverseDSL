@@ -1,6 +1,21 @@
 import scala.collection.mutable.ArrayBuffer
 
-object Distances {
+object Distances extends Distances
+
+object DistanceExpr extends Distances {
+  import inox.trees._
+  override def size(a: Any): Int = a match {
+    case e: Expr => e.toString.length
+    case e => super.size(a)
+  }
+  override def distance(a: Any, b: Any): Int = (a, b) match {
+    case (StringConcat(aa, ab), b) if aa == b => size(b) + 3 // Wrapping should not cost too much.
+    case (StringConcat(aa, ab), b) if ab == b => size(b) + 3
+    case _ => super.distance(a, b)
+  }
+}
+
+trait Distances {
   def size(a: Any): Int = a match {
     case a: List[_] => (6 /: a) { case (s, x) => (if(s == 6) s else s + 2) + size(x)}
     case a@None => 4

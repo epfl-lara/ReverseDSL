@@ -16,7 +16,7 @@ import sun.swing.SwingUtilities2.RepaintListener
 
 import scala.reflect.runtime.universe.TypeTag
 
-class ReverseProgramTest extends FunSuite with RepairProgramTest {
+class ReverseProgramTest extends FunSuite with TestHelpers {
   import Constrainable._
 
   val build = Variable(FreshIdentifier("build"), FunctionType(Seq(inoxTypeOf[String]), inoxTypeOf[Element]), Set())
@@ -284,8 +284,7 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
       t shouldEqual "bigworld"
     }
     pfun4 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
-      s shouldEqual "Hello    "
-      t shouldEqual "world"
+      (s, t) shouldEqual ("Hello    ", "world")
     }
   }
 
@@ -348,16 +347,34 @@ class ReverseProgramTest extends FunSuite with RepairProgramTest {
         )
       ))(inoxTypeOf[String])
 
-    checkProg("Hi Hi",   repairProgram(pfun, "Hi Hi"))
+    /*checkProg("Hi Hi",   repairProgram(pfun, "Hi Hi"))
     checkProg("Mikael Mikael", pfun)
     checkProg("Hi Hi",   repairProgram(pfun, "Mikael Hi", 2))
-    checkProg("Hi Hi",   repairProgram(pfun, "Hi Mikael", 2))
-    checkProg("Mikael   Mikael", repairProgram(pfun, "Mikael   Mikael", 3)) matchBody {
+    checkProg("Hi Hi",   repairProgram(pfun, "Hi Mikael", 2))*/
+    checkProg("Mikael   Mikael", repairProgram(pfun, "Mikael   Mikael", 2)) matchBody {
       case Let(_, StringLiteral(s), Let(_, StringLiteral(t), _)) =>
         s shouldEqual "Mikael"
         t shouldEqual "   "
     }
   }
+
+  test("Propose the change between changing a variable and assing a new string") {
+    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+
+    val pfun = function(
+      let(ap, "Mikael")(av =>
+          StringConcat(StringConcat(av, " is nice, "), av)
+      ))(inoxTypeOf[String])
+    //checkProg("Mikael is nice, Mikael", pfun)
+    val s_pfun2 = repairProgramList(pfun, "Mikael is nice, Mikael is clever", 3)
+    //checkProg("Mikael is clever is nice, Mikael is clever", s_pfun2.head)
+    checkProg("Mikael is nice, Mikael is clever", s_pfun2.tail.head) matchBody {
+      case Let(p, StringLiteral(s), _) =>
+        s shouldEqual "Mikael"
+    }
+  }
+
+
 
   test("Reverse curried string arguments") {
     val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())

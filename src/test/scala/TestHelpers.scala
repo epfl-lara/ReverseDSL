@@ -20,7 +20,7 @@ object Make {
 }
 
 /** Mixin for tests repairing programs */
-trait RepairProgramTest {
+trait TestHelpers {
   import Constrainable._
 
   type PFun = (InoxProgram, Identifier)
@@ -53,10 +53,12 @@ trait RepairProgramTest {
   }
 
   private def sortStreamByDistance(s: Stream[PFun], num: Int, init: Expr) = {
-    s.take(num).sortBy((x: PFun) => Distances.distance(x.getBody, init)) #::: s.drop(num)
+    s.take(num).sortBy((x: PFun) => {
+      DistanceExpr.distance(x.getBody, init) /: Log.prefix(s"distance(${x.getBody}, $init)=")
+    }) #::: s.drop(num)
   }
 
-  def repairProgram(pf: PFun, expected2: Expr, lookInManyFirstSolutions: Int = 1): PFun = {
+  def repairProgramList(pf: PFun, expected2: Expr, lookInManyFirstSolutions: Int = 1): Stream[PFun] = {
     val progfuns2 = ReverseProgram.put(expected2, None, None, Some(pf)).toStream
     progfuns2.lengthCompare(0) should be > 0
     val initialValue = pf.getBody
@@ -64,7 +66,11 @@ trait RepairProgramTest {
     sorted.take(lookInManyFirstSolutions).toList.zipWithIndex.foreach{ case (sol, i) =>
       Log(s"Solution $i:" + sol.getBody)
     }
-    sorted.head
+    sorted
+  }
+
+  def repairProgram(pf: PFun, expected2: Expr, lookInManyFirstSolutions: Int = 1): PFun = {
+    repairProgramList(pf, expected2, lookInManyFirstSolutions).head
   }
 
   def generateProgram[A: Constrainable](expected2: A) = {

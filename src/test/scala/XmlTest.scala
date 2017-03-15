@@ -13,7 +13,7 @@ import inox.trees.{not => inoxNot, _}
 import inox.trees.dsl._
 
 
-class XmlTest extends FunSuite with RepairProgramTest {
+class XmlTest extends FunSuite with TestHelpers {
   import Constrainable._
 
   test("Hu 2004 conversion") {
