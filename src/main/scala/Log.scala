@@ -4,7 +4,7 @@
 
 import scala.language.dynamics
 object Log extends LogLike with Dynamic {
-  var activate = true
+  var activate = false
   def prefix(p: String): LogLike = new LogLike {
     override def apply(s: Any) = if(activate) {
       print(p)

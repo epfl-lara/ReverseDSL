@@ -70,7 +70,10 @@ trait TestHelpers {
   }
 
   def repairProgram(pf: PFun, expected2: Expr, lookInManyFirstSolutions: Int = 1): PFun = {
+    val res =
     repairProgramList(pf, expected2, lookInManyFirstSolutions).head
+    println("### repair:\n" + pf.getBody+"\n###by outputing: " + expected2 + " gives:\n" + res.getBody + "\n###")
+    res
   }
 
   def generateProgram[A: Constrainable](expected2: A) = {
