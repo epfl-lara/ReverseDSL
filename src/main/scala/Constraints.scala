@@ -586,8 +586,8 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
         val updatedStream = es.filter{ x =>  !x._2.toSet.subsetOf(maybePart.toSet)}
 
         (solver, model) #:: maxSMTMaybes(updatedStream)
-      case _ =>
-        Log("No solution. Removing maybes...")
+      case m =>
+        Log(s"No solution ($m). Removing maybes...")
         maxSMTMaybes(es.tail #::: {
           for {i <- (numForceMaybeToKeep until e._2.length).toStream
                seq = e._2.take(i) ++ e._2.drop(i + 1)

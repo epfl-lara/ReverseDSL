@@ -7,8 +7,7 @@ object Log extends LogLike with Dynamic {
   var activate = false
   def prefix(p: String): LogLike = new LogLike {
     override def apply(s: Any) = if(activate) {
-      print(p)
-      super.apply(s)
+      super.apply(p+s)
     }
   }
   def selectDynamic(name: String) = prefix(name.replaceAll("_", " ") + ": ")
@@ -16,15 +15,15 @@ object Log extends LogLike with Dynamic {
 
 trait LogLike {
   import Log._
-  def apply(s: Any) = if(activate) println(s)
+  def apply(s: Any) = if(activate) println(s.toString.replaceAll("""ValDef\((\w+), ?\S+, Set\(\)\)|\$""", "$1"))
   def =:[A](s: A): A = {
     apply(s)
     s
   }
   def /:[A](s: A): A = this.=:(s)
   def /::[A](s: Stream[A]): Stream[A] = {
-    s.map{ x =>
-      this.apply(x)
+    s.zipWithIndex.map{ case(x, i) =>
+      this.apply(s"Partial solution #${i+1}\n"+x)
       x
     }
   }

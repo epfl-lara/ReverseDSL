@@ -76,6 +76,7 @@ object ReverseProgram extends Lenses {
         case _ =>
           if(freeVariables.isEmpty) throw new Exception("Should not ask this question?!")
           val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
+          //println(s"input is of type ${input.getType}")
           val constraint = InoxConstraint(input === tupleWrap(freeVariables.map(_.toVariable)) && unknownConstraints && and(known.toSeq.map{ case (k, v) => k.toVariable === v} : _*))
           Log(s"Solving for $constraint")
           constraint.toStreamOfInoxExpr(input).map {
@@ -290,8 +291,8 @@ object ReverseProgram extends Lenses {
   def repair(program: ProgramFormula, newOut: Expr)
             (implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
     val ProgramFormula(function, Formula(currentValues, _, _, _)) = program
-
-    Log(s"\n@repair(\n  $program,\n  $newOut)")
+    val stackLevel = Thread.currentThread().getStackTrace.length
+    Log(s"\n@repair$stackLevel(\n  $program\n, $newOut)")
     if(function == newOut) return { Log("@return original");
       Stream(program.copy(formula = program.formula.copy(known = Map(), varsToAssign = Set())))
     }
@@ -549,9 +550,9 @@ object ReverseProgram extends Lenses {
         case ADT(ADTType(tp, tpArgs), argsIn) =>
           newOut match {
             case v: Variable => Stream(ProgramFormula(v, Formula(Map(), Set(), Set(v.toVal))))
-            case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs => // Same type ! Maybe the arguments will change or move.
-              if (argsIn.length == 0) { // Nil-like
-                  Stream(ProgramFormula(newOut, Formula()))
+            case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
+              if (argsIn.length == 0) { // Nil-like, already returned in unwrapped.
+                  Stream.empty //(ProgramFormula(newOut, Formula()))
               } else {
                 // Now argsIn.length > 0
                 val adt = castOrFail[ADTDefinition, ADTConstructor](symbols.adts(tp))
@@ -642,7 +643,7 @@ object ReverseProgram extends Lenses {
           Log(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")
           Stream.empty
       }
-    } /:: Log.prefix(s"@return for repair(\n  $program,\n  $newOut):\n~>")
+    } /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOut):\n~>")
   }
 
   // Given a ProgramFormula for each of the fields, returns a list of formuals
@@ -661,6 +662,19 @@ object ReverseProgram extends Lenses {
       } else (l :: ls, Formula(mm ++ m, vta1 ++ vta2, unc1 ++ unc2 -- vta1 -- vta2, cs1 &<>& cs2))
   }
 
+  /** Simple function returning true if the given expression is a value. */
+  @inline private def isValue(e: Expr) = {
+    !exprOps.exists{
+      case _: Lambda => false
+      case _: Literal[_] => false
+      case ADT(_, _) => false
+      case _: FiniteMap => false
+      case _: FiniteBag => false
+      case _: FiniteSet => false
+      case _ => true
+    }(e)
+  }
+
   /* Example:
     function = v
     functionValue = Element("b", List(), List(), List())
@@ -671,24 +685,66 @@ object ReverseProgram extends Lenses {
     val function = program.program
     if(functionValue == newOut) return Stream.empty[ProgramFormula] // Value returned in maybeUnwrap
 
-    // Checks if the old value is inside the new value, in which case we add a wrapper.
-    if (exprOps.exists {
+    val containsFunctionValue = exprOps.exists {
       case t if t == functionValue => true
       case _ => false
-    }(newOut)) {
-      // We wrap the computation of functionValue with ADT construction
+    } _
 
-      val newFunction = exprOps.postMap {
-        case t if t == functionValue => Some(function)
-        case _ => None
-      }(newOut)
-      Log("@return wrapped")
-      Stream(ProgramFormula(newFunction,
-        Formula(known =  Map(), program.formula.varsToAssign intersect program.freeVars,
-          unknownConstraints = and(program.formula.known.toSeq.filter{ case (key, value) => program.freeVars(key) }.map{
-            case (key, value) => E(Common.maybe)(key.toVariable === value)
-          }: _*)
-        )))
+    // Checks if the old value is inside the new value, in which case we add a wrapper.
+    if (containsFunctionValue(newOut)) {
+      val canWrap = newOut match {
+        case ADT(ADTType(name, tps), args) =>
+          function match {
+            case ADT(ADTType(nameFun, tpsFun), argsFun) =>
+              if(name != nameFun || tps != tpsFun) {
+                true
+              } else { // There might be a duplicate wrapping.
+                val argsWithIndex = args.zipWithIndex
+                val indexes = argsWithIndex.filter{ case (arg, i) =>
+                  containsFunctionValue(arg)
+                }
+                if(indexes.length >= 2) {
+                  true
+                } else if(indexes.isEmpty) { // That's weird, should not happen.
+                  Log("##### Error: This cannot happen #####")
+                  false
+                } else {
+                  val (arg, i) = indexes.head
+                  val shouldNotWrap = argsFun.zipWithIndex.forall{ case (arg2, i2) =>
+                    println(s"Testing if $arg2 is value: ${isValue(arg2)}")
+                    i2 == i || isValue(arg2)
+                  }
+                  /*if(shouldNotWrap) {
+                    println("~~~~~~~~~~ Did not wrap this ~~~~~~~~")
+                    println("  " + function)
+                    println(" =" + functionValue)
+                    println("->" + newOut)
+                    println(s"because we would have the same wrapping at index $i")
+                  }*/
+                  !shouldNotWrap
+                }
+              }
+            case _ => true
+          }
+        case _ => true
+      }
+      if(canWrap) {
+        // We wrap the computation of functionValue with ADT construction
+
+        val newFunction = exprOps.postMap {
+          case t if t == functionValue => Some(function)
+          case _ => None
+        }(newOut)
+        val variables = program.formula.varsToAssign ++ program.freeVars
+        val constraintExpression = program.formula.unknownConstraints
+        val constraintFreeVariables = exprOps.variablesOf(constraintExpression).map(_.toVal)
+
+        val (constraining, unconstrained) = variables.partition(constraintFreeVariables)
+
+        Stream(ProgramFormula(newFunction,
+          Formula(known = Map(), constraining, unconstrained, unknownConstraints = program.formula.unknownConstraints
+          )))
+      } else Stream.empty
     } else {
       Stream.empty
     }

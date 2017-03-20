@@ -310,6 +310,29 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     }
   }
 
+  test("Propose two possibles changes if we put a shared node in bold") {
+    val m = ValDef(FreshIdentifier("m"), inoxTypeOf[InnerWebElement], Set())
+
+    val normlOut = Element("div", List(
+      WebElement(TextNode("Mikael")), WebElement(TextNode("Mikael"))))
+    val givenOut = Element("div", List(
+      WebElement(Element("b", WebElement(TextNode("Mikael"))::Nil)), WebElement(TextNode("Mikael"))))
+    val possbOut = Element("div", List(
+      WebElement(Element("b", WebElement(TextNode("Mikael"))::Nil)),
+        WebElement(Element("b", WebElement(TextNode("Mikael"))::Nil))))
+
+    val pfun = function(
+      let(m, _TextNode("Mikael"))( mv =>
+        _Element("div", _List[WebElement](_WebElement(mv), _WebElement(mv)), _List[WebAttribute](), _List[WebStyle]())
+      )
+    )(inoxTypeOf[Element])
+
+    checkProg(normlOut, pfun)
+    val s_pfun = repairProgramList(pfun, givenOut, 5)
+
+    s_pfun.take(30).map(eval).toSet shouldEqual Set[Expr](givenOut, possbOut)
+  }
+
   test("Reverse 2 variables string concatenation") {
     val expected1 = "Hello world"
     val expected2 = "Hello buddy"

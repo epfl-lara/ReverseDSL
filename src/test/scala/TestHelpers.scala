@@ -54,7 +54,7 @@ trait TestHelpers {
 
   private def sortStreamByDistance(s: Stream[PFun], num: Int, init: Expr) = {
     s.take(num).sortBy((x: PFun) => {
-      DistanceExpr.distance(x.getBody, init) /: Log.prefix(s"distance(${x.getBody}, $init)=")
+      DistanceExpr.distance(x.getBody, init)// /: Log.prefix(s"distance(${x.getBody}, $init)=")
     }) #::: s.drop(num)
   }
 
@@ -82,13 +82,19 @@ trait TestHelpers {
     progfuns2.head
   }
 
+  def eval(prog: InoxProgram, funDefId: Identifier): Expr = {
+    ReverseProgram.LambdaPreservingEvaluator(prog).eval(FunctionInvocation(funDefId, Seq(), Seq())) match {
+      case EvaluationResults.Successful(e) => e
+      case m => fail(s"Error while evaluating ${(prog, funDefId).getBody}: $m")
+    }
+  }
+  def eval(pfun: PFun): Expr = {
+    eval(pfun._1, pfun._2)
+  }
+
   def checkProg(expected1: Expr, prog: InoxProgram, funDefId: Identifier): (InoxProgram, Identifier) = {
    // ReverseProgram.evalWithCache((prog, funDefId).getBody)(new collection.mutable.HashMap, prog.symbols)
-
-    ReverseProgram.LambdaPreservingEvaluator(prog).eval(FunctionInvocation(funDefId, Seq(), Seq())) match {
-      case EvaluationResults.Successful(e) => e shouldEqual expected1
-      case m => fail(s"Did not evaluate to $expected1. Error: $m")
-    }
+    eval(prog, funDefId) shouldEqual expected1
     (prog, funDefId)
   }
 
