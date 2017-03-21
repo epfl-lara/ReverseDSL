@@ -4,7 +4,7 @@
 
 import scala.language.dynamics
 object Log extends LogLike with Dynamic {
-  var activate = false
+  var activate = true
   def prefix(p: String): LogLike = new LogLike {
     override def apply(s: Any) = if(activate) {
       super.apply(p+s)
@@ -15,7 +15,7 @@ object Log extends LogLike with Dynamic {
 
 trait LogLike {
   import Log._
-  def apply(s: Any) = if(activate) println(s.toString.replaceAll("""ValDef\((\w+), ?\S+, Set\(\)\)|\$""", "$1"))
+  def apply(s: Any) = if(activate) println(s.toString.replaceAll("""\$""", "").replaceAll("""ValDef\((\w+), ?\S+, ?Set\(\)\)""", "$1"))
   def =:[A](s: A): A = {
     apply(s)
     s

@@ -326,6 +326,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
         _Element("div", _List[WebElement](_WebElement(mv), _WebElement(mv)), _List[WebAttribute](), _List[WebStyle]())
       )
     )(inoxTypeOf[Element])
+    println(givenOut: Expr)
 
     checkProg(normlOut, pfun)
     val s_pfun = repairProgramList(pfun, givenOut, 5)
@@ -441,6 +442,29 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     }
   }
 
+  test("Reverse filter with variable arguments") {
+    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[Int], Set())
+    val input = ValDef(FreshIdentifier("input"), inoxTypeOf[List[Int]], Set())
+    val f = ValDef(FreshIdentifier("f"), FunctionType(Seq(inoxTypeOf[Int]), BooleanType), Set())
+    val pfun = function(
+      let(input, _List[Int](0, 1, 2, 6, 5, 5, 8))(inputv =>
+      let(f, Lambda(Seq(ap), Modulo(ap.toVariable, 2) === 0))(fv =>
+        FunctionInvocation(Utils.filter,Seq(inoxTypeOf[Int]),
+          Seq(inputv, fv)
+        )
+      ))
+    )(inoxTypeOf[List[Int]])
+
+    checkProg(_List[Int](0, 2, 6, 8), pfun)
+    /*repairProgram(pfun, _List[Int](0, 2, 10, 6, 8)) matchBody {
+      case Let(input2, input2expr, Let(f2, f2expr, FunctionInvocation(_, _, Seq(arg1, arg2)))) =>
+        arg1 shouldEqual input2.toVariable
+        arg2 shouldEqual f2.toVariable
+        input2expr shouldEqual _List[Int](0, 1, 2, 10, 6, 5, 5, 8)
+    }*/
+  }
+
+
   test("Reverse map") {
     val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
     val pfun = function(
@@ -453,7 +477,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     )(inoxTypeOf[List[String]])
 
     checkProg(_List[String]("Pizza Margharita", "Pizza Salami", "Pizza Royal"), pfun)
-    repairProgram(pfun, _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal")) matchBody {
+    /*repairProgram(pfun, _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal")) matchBody {
       case FunctionInvocation(_, _, Seq(list, _)) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Sushi", "Royal")
     }
@@ -462,7 +486,41 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       case FunctionInvocation(_, _, Seq(list, Lambda(vds, StringConcat(prefix, _)))) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Royal")
         prefix shouldEqual StringLiteral("The pizza ")
+    }*/
+  }
+
+  test("Reverse list concatenation") {
+    val pfun = function(
+      FunctionInvocation(Utils.listconcat, Seq(inoxTypeOf[String]),
+      Seq(
+        _List[String]("Margharita", "Salami"),
+        _List[String]("Sudjuk")
+      ))
+    )(inoxTypeOf[List[String]])
+
+    checkProg(_List[String]("Margharita", "Salami", "Sudjuk"), pfun)
+    /*val s_pfun2 = repairProgramList(pfun, _List[String]("Margharita", "Salami", "Salmon", "Sudjuk"), 2)
+    s_pfun2.map{ pfun2 =>
+      pfun2.getBody match {
+        case FunctionInvocation(_, _, Seq(a, b)) =>
+          (a, b)
+      }
+    }.toSet shouldEqual Set[(Expr, Expr)](
+      (_List[String]("Margharita", "Salami", "Salmon"), _List[String]("Sudjuk")),
+      (_List[String]("Margharita", "Salami"), _List[String]("Salmon", "Sudjuk"))
+    )
+
+    repairProgram(pfun, _List[String]("Margharita", "Salmon", "Salami", "Sudjuk")) matchBody {
+      case FunctionInvocation(_, _, Seq(a, b)) =>
+        a shouldEqual _List[String]("Margharita", "Salmon", "Salami")
+        b shouldEqual _List[String]("Sudjuk")
     }
+
+    repairProgram(pfun, _List[String]("Margharita", "Salami", "Sudjuk", "Salmon")) matchBody {
+      case FunctionInvocation(_, _, Seq(a, b)) =>
+        a shouldEqual _List[String]("Margharita", "Salami")
+        b shouldEqual _List[String]("Sudjuk", "Salmon")
+    }*/
   }
 
   /* Add tests for:

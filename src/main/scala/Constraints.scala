@@ -19,7 +19,8 @@ object Utils {
   val attributes: Identifier = FreshIdentifier("attributes")
   val styles: Identifier = FreshIdentifier("styles")
   val name: Identifier = FreshIdentifier("name")
-
+  val xmlNode: Identifier = FreshIdentifier("Node")
+  val xmlAttribute: Identifier = FreshIdentifier("Attribute")
 
   val list: Identifier = FreshIdentifier("List")
   val cons: Identifier = FreshIdentifier("Cons")
@@ -41,9 +42,6 @@ object Utils {
   val eitherSort = mkSort(either)("A", "B")(Seq(left, right))
   val leftConstructor = mkConstructor(left)("A", "B")(Some(either))(stp => Seq(ValDef(value, stp(0))))
   val rightConstructor = mkConstructor(right)("A", "B")(Some(either))(stp => Seq(ValDef(value, stp(1))))
-
-  val xmlNode: Identifier = FreshIdentifier("Node")
-  val xmlAttribute: Identifier = FreshIdentifier("Attribute")
 
   val webTree: Identifier = FreshIdentifier("WebTree")
   val webElement: Identifier = FreshIdentifier("WebElement")
@@ -100,6 +98,9 @@ object Utils {
 
   val filter = FreshIdentifier("filter")
   val map = FreshIdentifier("map")
+  val listconcat = FreshIdentifier("append")
+  val flatten = FreshIdentifier("flatten")
+  val flatmap = FreshIdentifier("flatMap")
 
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)
