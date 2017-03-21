@@ -613,7 +613,7 @@ object ReverseProgram extends Lenses {
               for{(newArgsValues, newForm) <- lenseResult
                   (newArguments, newArgumentsFormula) <- combineArguments(program, args.zip(newArgsValues))
               } yield {
-                val formula = newForm // TODO: This is wrong
+                val formula = newForm combineWith newArgumentsFormula // TODO: This is wrong
                 ProgramFormula(FunctionInvocation(f, tpes, newArguments), formula)
               }
           }

@@ -456,12 +456,12 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     )(inoxTypeOf[List[Int]])
 
     checkProg(_List[Int](0, 2, 6, 8), pfun)
-    /*repairProgram(pfun, _List[Int](0, 2, 10, 6, 8)) matchBody {
+    repairProgram(pfun, _List[Int](0, 2, 10, 6, 8)) matchBody {
       case Let(input2, input2expr, Let(f2, f2expr, FunctionInvocation(_, _, Seq(arg1, arg2)))) =>
         arg1 shouldEqual input2.toVariable
         arg2 shouldEqual f2.toVariable
         input2expr shouldEqual _List[Int](0, 1, 2, 10, 6, 5, 5, 8)
-    }*/
+    }
   }
 
 
