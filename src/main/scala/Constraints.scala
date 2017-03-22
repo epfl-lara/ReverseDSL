@@ -399,9 +399,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
   import SolverResponses._
 
   implicit val symbols = {
-    NoSymbols
-      .withFunctions(Seq())
-      .withADTs(allTupleConstructors ++ Utils.allConstructors)
+    Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs)
   }
 
   // The program

@@ -371,7 +371,7 @@ object ReverseProgram extends Lenses {
                   ProgramFormula(newOut, Formula(Map(), constrainedVariables, unconstraintedVariables, constraint))
                 }
               case v: Variable =>
-                Stream(ProgramFormula(newOut, Formula(Map(), Set(v.toVal), Set(),  E(Common.maybe)(v === lFun))))
+                Stream(ProgramFormula(newOut, Formula(Map(), Set(v.toVal), Set())))
               case _ => ???
             }
           }  else { // Closure
@@ -380,41 +380,37 @@ object ReverseProgram extends Lenses {
             } else
             // We need to determine the values of these free variables. We assume that the lambda kept the same shape.
             newOut match {
-            case Lambda(vd2, body2) =>
-              val dummyFresh = vd.map{ v =>
+            case Lambda(vd2, expectedBody) =>
+              val oldToFresh = vd.map{ v =>
                 v -> ValDef(FreshIdentifier(v.id.name, true), v.tpe, v.flags)
               }.toMap
-              val dummyNotFresh = dummyFresh.map{ case (k, v) => v -> k}
-              val dummyInputs = vd.map{ v =>
-                dummyFresh(v) -> defaultValue(v.getType)
+              val freshToOld = oldToFresh.map{ case (k, v) => v -> k.toVariable}
+              val freshToValue = vd.map{ v =>
+                oldToFresh(v) -> defaultValue(v.getType)
               }.toMap
-              val bodyWithDummyInputs = exprOps.replaceFromSymbols(dummyFresh.mapValues(_.toVariable), body)
-              val dummyInputsOld = dummyFresh.mapValues(dummyInputs)
-              val variablesToAssign = program.formula.varsToAssign ++ dummyFresh.values
-              Log(s"variablesToAssign: $variablesToAssign, dummy = $dummyFresh")
-              //TODO: We place values which may be replaced, can we enforce that they should not move?
-              for{ProgramFormula(newBody, f@Formula(newAssignments, varsToAssign, unchanged, constraint)) <-
-                  repair(ProgramFormula(bodyWithDummyInputs,
-                    Formula(dummyInputs ++ freeVars.map(fv => fv -> currentValues(fv)).toMap,
-                      variablesToAssign
-                    )),
-                    simplify(exprOps.replaceFromSymbols(dummyInputsOld, body2)))
-                _ = Log(s"Going to test if lambda can be repaired using $newBody, $f, $dummyInputs, $newAssignments")
-                /*if dummyInputs.forall{ case (key, value) =>
-                  Log(s"$key -> $value")
-                  Log("New: " + newAssignments.get(key))
-                  newAssignments.get(key).forall(_ == value)}
-                _ = Log(s"ok for formula = $f")*/
-                newFreevarAssignments = freeVars.flatMap(fv => newAssignments.get(fv).map(res => fv -> res)).toMap }
-                yield {
-                  val newConstraint = constraint &<>& and(dummyInputs.toSeq.map{ case (k, v) => k.toVariable === v}: _*)
-                  Log(s"Returning lambda using $newBody, $f, $dummyInputs, \n$newFreevarAssignments")
-                  val fullNewBody = exprOps.replaceFromSymbols(dummyNotFresh.mapValues(_.toVariable), newBody)
+              val bodyWithFreshVariables = exprOps.replaceFromSymbols(oldToFresh.mapValues(_.toVariable), body)
+              val oldToValue = oldToFresh.mapValues(freshToValue)
+              val variablesToAssign = program.formula.varsToAssign ++ oldToFresh.values
+
+              val simplifiedExpectedBody = simplify(exprOps.replaceFromSymbols(oldToValue, expectedBody))
+              Log(s"variablesToAssign: $variablesToAssign, oldToFresh = $oldToFresh")
+              for {ProgramFormula(newBody, f) <- repair(ProgramFormula(bodyWithFreshVariables,
+                Formula(freshToValue ++ freeVars.map(fv => fv -> currentValues(fv)).toMap, variablesToAssign)), simplifiedExpectedBody)
+                   _ = Log(s"Going to test if lambda can be repaired using $newBody, $f, $freshToValue")
+              } yield {
+
+                  val newFreevarAssignments = freeVars.flatMap(fv => f.known.get(fv).map(res => fv -> res)).toMap
+                  val newConstraint = f.unknownConstraints &<>& and(freshToValue.toSeq.map{ case (k, v) => k.toVariable === v}: _*)
+                  Log(s"Returning lambda using $newBody, $f, $freshToValue, \n$newFreevarAssignments")
+                  val fullNewBody = exprOps.replaceFromSymbols(freshToOld, newBody)
+                  //val newFormula = f combineWith
+
                   ProgramFormula(Lambda(vd, fullNewBody): Expr,
-                    Formula(newFreevarAssignments, varsToAssign -- vd2,
-                      unchanged -- vd2 -- dummyInputs.keys, newConstraint)) /: Log
+                    Formula(newFreevarAssignments, f.varsToAssign -- vd2,
+                      f.unchanged -- vd2 -- freshToValue.keys, newConstraint)) /: Log
                 }
-            case v: Variable => ???
+            case v: Variable =>
+              Stream(ProgramFormula(v, Formula(Map(), Set(), Set(v.toVal))))
             case _ => ???
             }
           }
@@ -479,8 +475,7 @@ object ReverseProgram extends Lenses {
 
             val bothRepair = inox.utils.StreamUtils.cartesianProduct(leftRepair, rightRepair)
 
-            for((ProgramFormula(leftExpr, f1@Formula(mp1, varstoAssign1, unchanged1, cs1)),
-                 ProgramFormula(rightExpr, f2@Formula(mp2, varstoAssign2, unchanged2, cs2))) <- bothRepair) yield {
+            for((ProgramFormula(leftExpr, f1), ProgramFormula(rightExpr, f2)) <- bothRepair) yield {
               val f = Formula(Map(), Set(left, right), Set(), newOut === StringConcat(left.toVariable, right.toVariable))
               val newF = f1 combineWith f2 combineWith f
               ProgramFormula(StringConcat(leftExpr, rightExpr), newF)
@@ -604,10 +599,8 @@ object ReverseProgram extends Lenses {
         case funInv@FunctionInvocation(f, tpes, args) =>
           // We need to reverse the invocation arguments.
           reversions.get(f) match {
-            case None =>
-              Log(s"No function $f reversible for : $funInv.\nIt evaluates to:\n$functionValue.")
-              Stream.empty
-            case Some(reverser) => // TODO: This is wrong ! We are not repairing arguments.
+            case None => Stream.empty  /: Log.prefix(s"No function $f reversible for : $funInv.\nIt evaluates to:\n$functionValue.")
+            case Some(reverser) =>
               val argsValue = args.map(arg => evalWithCache(letm(currentValues) in arg))
               val lenseResult = reverser.put(tpes)(argsValue, newOut)
               for{(newArgsValues, newForm) <- lenseResult

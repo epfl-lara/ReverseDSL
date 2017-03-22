@@ -477,7 +477,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     )(inoxTypeOf[List[String]])
 
     checkProg(_List[String]("Pizza Margharita", "Pizza Salami", "Pizza Royal"), pfun)
-    /*repairProgram(pfun, _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal")) matchBody {
+    repairProgram(pfun, _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal")) matchBody {
       case FunctionInvocation(_, _, Seq(list, _)) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Sushi", "Royal")
     }
@@ -486,7 +486,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       case FunctionInvocation(_, _, Seq(list, Lambda(vds, StringConcat(prefix, _)))) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Royal")
         prefix shouldEqual StringLiteral("The pizza ")
-    }*/
+    }
   }
 
   test("Reverse list concatenation") {
@@ -499,7 +499,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     )(inoxTypeOf[List[String]])
 
     checkProg(_List[String]("Margharita", "Salami", "Sudjuk"), pfun)
-    /*val s_pfun2 = repairProgramList(pfun, _List[String]("Margharita", "Salami", "Salmon", "Sudjuk"), 2)
+    val s_pfun2 = repairProgramList(pfun, _List[String]("Margharita", "Salami", "Salmon", "Sudjuk"), 2).take(2)
     s_pfun2.map{ pfun2 =>
       pfun2.getBody match {
         case FunctionInvocation(_, _, Seq(a, b)) =>
@@ -520,7 +520,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       case FunctionInvocation(_, _, Seq(a, b)) =>
         a shouldEqual _List[String]("Margharita", "Salami")
         b shouldEqual _List[String]("Sudjuk", "Salmon")
-    }*/
+    }
   }
 
   /* Add tests for:
