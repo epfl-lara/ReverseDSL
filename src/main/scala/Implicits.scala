@@ -205,14 +205,14 @@ object Implicits {
     }
   }*/
   */
-  implicit class ListProducer[A : Constrainable, B : Constrainable](a: A ~~> List[B]) {
+  implicit class ListProducer[A : InoxConvertible, B : InoxConvertible](a: A ~~> List[B]) {
     def filter(f: B => Boolean): (A ~~> List[B]) = {
       a andThen FilterReverse(f)
     }
-    def map[C: Constrainable](f: B ~~> C): (A ~~> List[C]) = {
+    def map[C: InoxConvertible](f: B ~~> C): (A ~~> List[C]) = {
       a andThen MapReverse(f)
     }
-    def map[C: Constrainable](f: Id[B] => (B ~~> C)): A ~~> List[C] = {
+    def map[C: InoxConvertible](f: Id[B] => (B ~~> C)): A ~~> List[C] = {
       a andThen MapReverse(f(Id[B]()))
     }
 
@@ -272,13 +272,13 @@ object Implicits {
       s andThen RegexReplaceAllInReverse(e, f)
   }
 
-  implicit class IntProducer[A: Constrainable](f: (A ~~> Int)) {
+  implicit class IntProducer[A: InoxConvertible](f: (A ~~> Int)) {
     def +(other: (A ~~> Int)): (A ~~> Int) = {
       PairSame(f, other) andThen IntPlusReverse
     }
 }
 
-  implicit class StringProducer[A: Constrainable](f: (A ~~> String)) {
+  implicit class StringProducer[A: InoxConvertible](f: (A ~~> String)) {
     def +(other: (A ~~> String)): (A ~~> String) = {
       PairSame(f, other) andThen StringAppendReverse
     }
@@ -462,7 +462,7 @@ object Implicits {
     }
   }
   
-  /*implicit def listOfTransformToTransformOfList[A: Constrainable, B: Constrainable](a: List[A ~~> B]): (List[A] ~~> List[B]) = new (List[A] %~> List[B]) {
+  /*implicit def listOfTransformToTransformOfList[A: InoxConvertible, B: InoxConvertible](a: List[A ~~> B]): (List[A] ~~> List[B]) = new (List[A] %~> List[B]) {
     def get(in: List[A]) = a.zip(in).map{ case (ela, i) => ela.get(i) }
 
     val methodName = "listOfTransformToTransformOfList"
@@ -476,7 +476,7 @@ object Implicits {
     }
   }*/
 
-  implicit def listOfTransformToTransformOfList2[A: Constrainable, B: Constrainable](a: List[A ~~> B]): (A ~~> List[B]) = new (A %~> List[B]) {
+  implicit def listOfTransformToTransformOfList2[A: InoxConvertible, B: InoxConvertible](a: List[A ~~> B]): (A ~~> List[B]) = new (A %~> List[B]) {
     def get(i: A) = a.map{ case ela => ela.get(i) }
     val methodName = "listOfTransformToTransformOfList2"
     def putManual(out: List[B], in1: Option[A]): Iterable[A] = report(s"listOfTransformToTransformOfList.put($out, $in1) = %s"){

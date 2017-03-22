@@ -2,19 +2,19 @@ import scala.reflect.runtime.universe.TypeTag
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import Constrainable._
+import InoxConvertible._
 
 object ImplicitTuples {
   def _Tuple2(tpe1: Type, tpe2: Type)(first: Expr, second: Expr) =
     ADT(ADTType(tuple2, Seq(tpe1, tpe2)), Seq(first, second))
 
   /* Generic combination class. We wish to have everything there, but it is apparently not possible */
-  abstract class Combination[Tuple <: Product](constrainables: Constrainable[_]*) extends Constrainable[Tuple] {
+  abstract class Combination[Tuple <: Product](constrainables: InoxConvertible[_]*) extends InoxConvertible[Tuple] {
     def getType = ADTType(_tupleTypes(constrainables.length - 2), constrainables.map(_.getType))
   }
 
   /** Combination2 for Tuple2 */
-  case class Combination2[A, B](self: Constrainable[A], other: Constrainable[B]) extends Combination[(A, B)](self, other) {
+  case class Combination2[A, B](self: InoxConvertible[A], other: InoxConvertible[B]) extends Combination[(A, B)](self, other) {
     def recoverFrom(e: Expr): (A, B) = { val res = e match {
       case ADT(_, Seq(a, b)) => (self.recoverFrom(a), other.recoverFrom(b))
       case _ => throw new Exception("Could not recover tuple from " + e)
@@ -25,7 +25,7 @@ object ImplicitTuples {
   }
 
   /** Combination3 for Tuple3 */
-  case class Combination3[A, B, C](ca: Constrainable[A], cb: Constrainable[B], cc: Constrainable[C]) extends Combination[(A, B, C)](ca, cb, cc) {
+  case class Combination3[A, B, C](ca: InoxConvertible[A], cb: InoxConvertible[B], cc: InoxConvertible[C]) extends Combination[(A, B, C)](ca, cb, cc) {
     def recoverFrom(e: Expr): (A, B, C) = e match {
       case ADT(_, Seq(ea, eb, ec)) => (ca.recoverFrom(ea), cb.recoverFrom(eb), cc.recoverFrom(ec))
       case _ => throw new Exception("Could not recover tuple from " + e)
@@ -154,7 +154,7 @@ object ImplicitTuples {
     }
   }*/
   
-  class TupleProducer[A: Constrainable, Tuple <: Product : Constrainable, C: Constrainable] private[ImplicitTuples] (
+  class TupleProducer[A: InoxConvertible, Tuple <: Product : InoxConvertible, C: InoxConvertible] private[ImplicitTuples](
       val f: A ~~> Tuple, val index: Int)
     extends (A &~> C) {
     def get(in: A): C = f.get(in).productElement(index-1).asInstanceOf[C]
@@ -166,26 +166,26 @@ object ImplicitTuples {
     }
   }
 
-  implicit class Tuple2Producer[A: Constrainable, B1: Constrainable, B2: Constrainable]
+  implicit class Tuple2Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible]
                         (f: A ~~> (B1, B2)) {
     def _1 = new TupleProducer[A, (B1, B2), B1](f, 1)
     def _2 = new TupleProducer[A, (B1, B2), B2](f, 2)
   }
-  implicit class Tuple3Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable]
+  implicit class Tuple3Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible]
                         (f: A ~~> (B1, B2, B3)) {
     def _1 = new TupleProducer[A, (B1, B2, B3), B1](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3), B2](f, 2)
     def _3 = new TupleProducer[A, (B1, B2, B3), B3](f, 3)
   }
   /*
-  implicit class Tuple4Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable]
+  implicit class Tuple4Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4), B1](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4), B2](f, 2)
     def _3 = new TupleProducer[A, (B1, B2, B3, B4), B3](f, 3)
     def _4 = new TupleProducer[A, (B1, B2, B3, B4), B4](f, 4)
   }
-  implicit class Tuple5Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable]
+  implicit class Tuple5Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5), B1](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5), B2](f, 2)
@@ -193,7 +193,7 @@ object ImplicitTuples {
     def _4 = new TupleProducer[A, (B1, B2, B3, B4, B5), B4](f, 4)
     def _5 = new TupleProducer[A, (B1, B2, B3, B4, B5), B5](f, 5)
   }
-  implicit class Tuple6Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable]
+  implicit class Tuple6Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6), B1](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6), B2](f, 2)
@@ -202,7 +202,7 @@ object ImplicitTuples {
     def _5 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6), B5](f, 5)
     def _6 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6), B6](f, 6)
   }
-  implicit class Tuple7Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable]
+  implicit class Tuple7Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7), B1](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7), B2](f, 2)
@@ -212,7 +212,7 @@ object ImplicitTuples {
     def _6 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7), B6](f, 6)
     def _7 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7), B7](f, 7)
   }
-  implicit class Tuple8Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable]
+  implicit class Tuple8Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8), B1](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8), B2](f, 2)
@@ -223,7 +223,7 @@ object ImplicitTuples {
     def _7 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8), B7](f, 7)
     def _8 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8), B8](f, 8)
   }
-  implicit class Tuple9Producer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable]
+  implicit class Tuple9Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9), B1](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9), B2](f, 2)
@@ -235,7 +235,7 @@ object ImplicitTuples {
     def _8 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9), B8](f, 8)
     def _9 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9), B9](f, 9)
   }
-  implicit class Tuple10roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable]
+  implicit class Tuple10roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10), B2 ](f, 2)
@@ -248,7 +248,7 @@ object ImplicitTuples {
     def _9 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10), B9 ](f, 9)
     def _10= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10), B10](f, 10)
   }
-  implicit class Tuple11roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable]
+  implicit class Tuple11roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11), B2 ](f, 2)
@@ -262,7 +262,7 @@ object ImplicitTuples {
     def _10= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11), B10](f, 10)
     def _11= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11), B11](f, 11)
   }
-  implicit class Tuple12roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable]
+  implicit class Tuple12roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12), B2 ](f, 2)
@@ -277,7 +277,7 @@ object ImplicitTuples {
     def _11= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12), B11](f, 11)
     def _12= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12), B12](f, 12)
   }
-  implicit class Tuple13roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable]
+  implicit class Tuple13roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13), B2 ](f, 2)
@@ -293,7 +293,7 @@ object ImplicitTuples {
     def _12= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13), B12](f, 12)
     def _13= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13), B13](f, 13)
   }
-  implicit class Tuple14roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable]
+  implicit class Tuple14roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible, B14: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14), B2 ](f, 2)
@@ -310,7 +310,7 @@ object ImplicitTuples {
     def _13= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14), B13](f, 13)
     def _14= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14), B14](f, 14)
   }
-  implicit class Tuple15roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable]
+  implicit class Tuple15roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible, B14: InoxConvertible, B15: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15), B2 ](f, 2)
@@ -328,7 +328,7 @@ object ImplicitTuples {
     def _14= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15), B14](f, 14)
     def _15= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15), B15](f, 15)
   }
-  implicit class Tuple16roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable]
+  implicit class Tuple16roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible, B14: InoxConvertible, B15: InoxConvertible, B16: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16), B2 ](f, 2)
@@ -347,7 +347,7 @@ object ImplicitTuples {
     def _15= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16), B15](f, 15)
     def _16= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16), B16](f, 16)
   }
-  implicit class Tuple17roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable]
+  implicit class Tuple17roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible, B14: InoxConvertible, B15: InoxConvertible, B16: InoxConvertible, B17: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17), B2 ](f, 2)
@@ -367,7 +367,7 @@ object ImplicitTuples {
     def _16= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17), B16](f, 16)
     def _17= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17), B17](f, 17)
   }
-  implicit class Tuple18roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable]
+  implicit class Tuple18roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible, B14: InoxConvertible, B15: InoxConvertible, B16: InoxConvertible, B17: InoxConvertible, B18: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18), B2 ](f, 2)
@@ -388,7 +388,7 @@ object ImplicitTuples {
     def _17= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18), B17](f, 17)
     def _18= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18), B18](f, 18)
   }
-  implicit class Tuple19roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable, B19: Constrainable]
+  implicit class Tuple19roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible, B14: InoxConvertible, B15: InoxConvertible, B16: InoxConvertible, B17: InoxConvertible, B18: InoxConvertible, B19: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19), B2 ](f, 2)
@@ -410,7 +410,7 @@ object ImplicitTuples {
     def _18= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19), B18](f, 18)
     def _19= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19), B19](f, 19)
   }
-  implicit class Tuple20roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable, B19: Constrainable, B20: Constrainable]
+  implicit class Tuple20roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible, B14: InoxConvertible, B15: InoxConvertible, B16: InoxConvertible, B17: InoxConvertible, B18: InoxConvertible, B19: InoxConvertible, B20: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20), B2 ](f, 2)
@@ -433,7 +433,7 @@ object ImplicitTuples {
     def _19= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20), B19](f, 19)
     def _20= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20), B20](f, 20)
   }
-  implicit class Tuple21roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable, B19: Constrainable, B20: Constrainable, B21: Constrainable]
+  implicit class Tuple21roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible, B14: InoxConvertible, B15: InoxConvertible, B16: InoxConvertible, B17: InoxConvertible, B18: InoxConvertible, B19: InoxConvertible, B20: InoxConvertible, B21: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21), B2 ](f, 2)
@@ -457,7 +457,7 @@ object ImplicitTuples {
     def _20= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21), B20](f, 20)
     def _21= new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21), B21](f, 21)
   }
-  implicit class Tuple22roducer[A: Constrainable, B1: Constrainable, B2: Constrainable, B3: Constrainable, B4: Constrainable, B5: Constrainable, B6: Constrainable, B7: Constrainable, B8: Constrainable, B9: Constrainable, B10: Constrainable, B11: Constrainable, B12: Constrainable, B13: Constrainable, B14: Constrainable, B15: Constrainable, B16: Constrainable, B17: Constrainable, B18: Constrainable, B19: Constrainable, B20: Constrainable, B21: Constrainable, B22: Constrainable]
+  implicit class Tuple22roducer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible, B5: InoxConvertible, B6: InoxConvertible, B7: InoxConvertible, B8: InoxConvertible, B9: InoxConvertible, B10: InoxConvertible, B11: InoxConvertible, B12: InoxConvertible, B13: InoxConvertible, B14: InoxConvertible, B15: InoxConvertible, B16: InoxConvertible, B17: InoxConvertible, B18: InoxConvertible, B19: InoxConvertible, B20: InoxConvertible, B21: InoxConvertible, B22: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21, B22)) {
     def _1 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21, B22), B1 ](f, 1)
     def _2 = new TupleProducer[A, (B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16, B17, B18, B19, B20, B21, B22), B2 ](f, 2)

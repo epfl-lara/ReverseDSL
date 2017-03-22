@@ -19,12 +19,12 @@ object ReverseProgramDirect {
   type Formula = Map[ValDef, Expr] // The assignments and the formula containing the other expressions.
 
   import Utils._
-  import Constrainable._
+  import InoxConvertible._
   lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
   implicit val symbols = defaultSymbols
 
   /** Reverses a parameterless function, if possible.*/
-  def put[A: Constrainable](out: A, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
+  def put[A: InoxConvertible](out: A, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
     val outExpr = inoxExprOf[A](out)
     if(prevIn == None) {
       val main = FreshIdentifier("main")

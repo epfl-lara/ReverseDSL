@@ -7,7 +7,7 @@ import inox.trees.dsl._
 import scala.reflect.runtime.universe.TypeTag
 
 class StringAppendTest extends FunSuite {
-  import Constrainable._
+  import InoxConvertible._
   import ImplicitTuples._
   import Implicits._
 
@@ -87,7 +87,7 @@ class StringAppendTest extends FunSuite {
 
 
 class IntPlusReverseTest extends FunSuite  {
-  import Constrainable._
+  import InoxConvertible._
   import ImplicitTuples._
   import Implicits._
 

@@ -17,7 +17,7 @@ import sun.swing.SwingUtilities2.RepaintListener
 import scala.reflect.runtime.universe.TypeTag
 
 class ReverseProgramTest extends FunSuite with TestHelpers {
-  import Constrainable._
+  import InoxConvertible._
 
   val build = Variable(FreshIdentifier("build"), FunctionType(Seq(inoxTypeOf[String]), inoxTypeOf[Element]), Set())
   val v = variable[String]("v")
@@ -525,9 +525,9 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
   /* Add tests for:
      Integers operations
-     filter with propagating variables.
-     List mapping, flatten, flatmap, filter and custom user-defined lenses.
-     Multiple arguments changed in lambdas
+     List flatten, flatmap,
+     Map, Bag, Set
+     User-defined lenses.
      Merging programs to implement clone-and-paste.
      XML transformation as in the paper.
 

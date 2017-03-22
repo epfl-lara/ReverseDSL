@@ -16,16 +16,16 @@ import sun.swing.SwingUtilities2.RepaintListener
 import scala.reflect.runtime.universe.TypeTag
 
 object Make {
-  def apply[A: Constrainable, B](in: Id[A] => (A ~~> B)): (A ~~> B) = in(Id[A]())
+  def apply[A: InoxConvertible, B](in: Id[A] => (A ~~> B)): (A ~~> B) = in(Id[A]())
 }
 
 /** Mixin for tests repairing programs */
 trait TestHelpers {
-  import Constrainable._
+  import InoxConvertible._
 
   type PFun = (InoxProgram, Identifier)
 
-  implicit def toExpr[A : Constrainable](e: A): Expr = inoxExprOf[A](e)
+  implicit def toExpr[A : InoxConvertible](e: A): Expr = inoxExprOf[A](e)
 
   implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
     @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {
@@ -76,7 +76,7 @@ trait TestHelpers {
     res
   }
 
-  def generateProgram[A: Constrainable](expected2: A) = {
+  def generateProgram[A: InoxConvertible](expected2: A) = {
     val progfuns2 = ReverseProgram.put(expected2, None, None, None)
     progfuns2.toStream.lengthCompare(1) should be >= 0
     progfuns2.head

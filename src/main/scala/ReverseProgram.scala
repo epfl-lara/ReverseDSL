@@ -136,7 +136,7 @@ object ReverseProgram extends Lenses {
   }
 
   import Utils._
-  import Constrainable._
+  import InoxConvertible._
   lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
 
   implicit class BooleanSimplification(f: Expr) {
@@ -150,7 +150,7 @@ object ReverseProgram extends Lenses {
       }
     }
   }
-  def put[A: Constrainable](out: A, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
+  def put[A: InoxConvertible](out: A, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
     put(inoxExprOf[A](out), prevOut, modif, prevIn)
   }
 

@@ -14,7 +14,7 @@ import inox.trees.dsl._
 
 
 class XmlTest extends FunSuite with TestHelpers {
-  import Constrainable._
+  import InoxConvertible._
 
   test("Hu 2004 conversion") {
     val input: XmlTrees.Node = <addrbook>

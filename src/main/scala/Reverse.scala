@@ -6,7 +6,7 @@ import Implicits._
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import Constrainable._
+import InoxConvertible._
 import inox.evaluators.EvaluationResults
 import org.apache.commons.lang3.StringEscapeUtils
 
@@ -15,7 +15,7 @@ import scala.annotation.tailrec
 /** Lense class.
   * Should provide the method get and put.
   */
-abstract class ~~>[A: Constrainable, B: Constrainable] {
+abstract class ~~>[A: InoxConvertible, B: InoxConvertible] {
   type Input = A
   type Output = B
   def get(in: A): B
@@ -23,20 +23,20 @@ abstract class ~~>[A: Constrainable, B: Constrainable] {
   // Basic implementation provided in __=>.put
   def put(out2: Variable, inId: Variable, in1: Option[A]): Constraint[A]
 
-  lazy val constrainableInput: Constrainable[A] = implicitly[Constrainable[A]]
-  lazy val constrainableOutput: Constrainable[B] = implicitly[Constrainable[B]]
+  lazy val constrainableInput: InoxConvertible[A] = implicitly[InoxConvertible[A]]
+  lazy val constrainableOutput: InoxConvertible[B] = implicitly[InoxConvertible[B]]
 
   // Basic implementation provided in &~>.put
   def put(out2: B, in1: Option[A]): Iterable[A]
 
   final def put(out2: B, in1: A): Iterable[A] = put(out2, Some(in1))
   final def put(out2: B): Iterable[A] = put(out2, None)
-  def andThen[C: Constrainable](f: B ~~> C) = Compose(f, this)
+  def andThen[C: InoxConvertible](f: B ~~> C) = Compose(f, this)
 }
 
 /** Particular case of ~~> where the only thing left to implement is the formula mapping inputs to outputs.
   * It implements the direct inverse put method as immediate constraint solving. */
-abstract class &~>[A: Constrainable, B: Constrainable]  extends (A ~~> B) {
+abstract class &~>[A: InoxConvertible, B: InoxConvertible]  extends (A ~~> B) {
   val name: String
   def put(out: Output, st: Option[Input]): Iterable[Input] = report(s"$name.put($out, $st) = %s"){
     val outId = variable[Output]("out")
@@ -54,7 +54,7 @@ trait ManualReverse[A, B] extends (A ~~> B) {
 
 /** Particular case of ~~> where the only thing left to implement is the manual reverse.
   * It implements the constraint formula as a custom method name */
-abstract class %~>[A: Constrainable, B: Constrainable] extends ManualReverse[A, B] {
+abstract class %~>[A: InoxConvertible, B: InoxConvertible] extends ManualReverse[A, B] {
   val methodName: String
   def put(o: Variable, i: Variable, in: Option[A]): Constraint[A] = {
     val format = FreshIdentifier(methodName)
@@ -92,7 +92,7 @@ object StringAppendReverse extends ((String, String) &~> String) {
 }
 
 /** String concatenation lens */
-/*case class ListAppendReverse[A : Constrainable]() extends ((List[A], List[A]) &~> List[A]) {
+/*case class ListAppendReverse[A : InoxConvertible]() extends ((List[A], List[A]) &~> List[A]) {
   import ImplicitTuples._
 
   def get(in: (List[A], List[A])): List[A] = in._1 ++ in._2
@@ -224,7 +224,7 @@ object StringFormatReverse extends ((String, List[Either[String, Int]]) %~> Stri
   }
 }
 
-case class InoxLambda[A: Constrainable, B: Constrainable](args: Variable, body: Expr)(implicit p: Program { val trees: inox.trees.type }) extends (A => B) {
+case class InoxLambda[A: InoxConvertible, B: InoxConvertible](args: Variable, body: Expr)(implicit p: Program { val trees: inox.trees.type }) extends (A => B) {
   def apply(a: A) = {
     val exprA = inoxExprOf[A](a)
     val exprToEval = Application(Lambda(Seq(args.toVal), body), Seq(exprA))
@@ -253,7 +253,7 @@ Requested output: Element(“li”, Element(“div”, TextElement(“abc”)::N
 meta-reversing.
 
 
-case class ApplyADTReverse[A: Constrainable, B: Constrainable]() extends ((A, InoxFun[A, B]) ~~> B) {
+case class ApplyADTReverse[A: InoxConvertible, B: InoxConvertible]() extends ((A, InoxFun[A, B]) ~~> B) {
   applyReverse(out: Expr, init: Option[(Lambda, Expr)] ): Iterable[(Lambda, Expr)] = {
     val (lambda, initExpr) = init.get
     val Lambda(argName, body) = lambda
@@ -356,7 +356,7 @@ object Interleavings {
   }
 }
 
-case class ListSplit[A: Constrainable](p: A => Boolean) extends (List[A] %~> (List[A], List[A])) {
+case class ListSplit[A: InoxConvertible](p: A => Boolean) extends (List[A] %~> (List[A], List[A])) {
   import Interleavings._
 
   val methodName = "ListSplit" + Math.abs(this.hashCode()/2)
@@ -431,7 +431,7 @@ object WebTrees {
 
 
   object TextNode {
-    def apply[A: Constrainable](f: (A ~~> String)): (A ~~> TextNode) = new (A %~> TextNode) {
+    def apply[A: InoxConvertible](f: (A ~~> String)): (A ~~> TextNode) = new (A %~> TextNode) {
       val methodName = "TextNodeApply"
       def get(a: A) = TextNode(f.get(a))
       def putManual(t: TextNode, in: Option[A]): Iterable[A] = {
@@ -440,7 +440,7 @@ object WebTrees {
     }
   }
   object Element {
-    def apply[A: Constrainable](tag: String, f: A ~~> List[WebElement]): (A %~> Element) = {
+    def apply[A: InoxConvertible](tag: String, f: A ~~> List[WebElement]): (A %~> Element) = {
       new (A %~> Element) {
         val methodName = "ElementApply"
         def get(a: A) = Element(tag, f.get(a))
@@ -450,8 +450,8 @@ object WebTrees {
       }
     }
   }
-  import Constrainable._
-  case class InnerWebElementToWebTree[B <: InnerWebElement: Constrainable]() extends (B &~> WebTree) {
+  import InoxConvertible._
+  case class InnerWebElementToWebTree[B <: InnerWebElement: InoxConvertible]() extends (B &~> WebTree) {
     val name = "innerWebElementToWebTree" + Math.abs(this.hashCode()/2)
     def get(a: B) = WebElement(a)
     def put(out: Variable, in: Variable, inExpr: Option[B]) = {
@@ -477,10 +477,10 @@ object WebTrees {
 
     implicit object Dummy
     
-    def apply[A: Constrainable](f: (A ~~> List[WebTree])): (A ~~> Element) = {
+    def apply[A: InoxConvertible](f: (A ~~> List[WebTree])): (A ~~> Element) = {
       PairSame(Const[A, Element](this), f) andThen WebElementComposition
     }
-    def apply[A: Constrainable, B <: InnerWebElement : Constrainable](f: (A ~~> List[B]))(implicit e: Dummy.type = Dummy): (A ~~> Element) = {
+    def apply[A: InoxConvertible, B <: InnerWebElement : InoxConvertible](f: (A ~~> List[B]))(implicit e: Dummy.type = Dummy): (A ~~> Element) = {
       PairSame(Const[A, Element](this), f andThen MapReverse(InnerWebElementToWebTree[B]())) andThen WebElementComposition
     }
 
@@ -635,7 +635,7 @@ object WebElementComposition extends ((Element, List[WebTree])  %~> Element) {
   })
 }
 
-case class Compose[A: Constrainable, B: Constrainable, C: Constrainable](a: B ~~> C, b: A ~~> B) extends (A ~~> C) {
+case class Compose[A: InoxConvertible, B: InoxConvertible, C: InoxConvertible](a: B ~~> C, b: A ~~> B) extends (A ~~> C) {
   def get(in: Input): Output = a.get(b.get(in).asInstanceOf[a.Input])
   def put(out2: Output, in: Option[Input]) = {
    val intermediate_out = in.map(b.get)
@@ -650,7 +650,7 @@ case class Compose[A: Constrainable, B: Constrainable, C: Constrainable](a: B ~~
   }
 }
 
-case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~~> B, b: A ~~> D)
+case class PairSame[A: InoxConvertible, B: InoxConvertible, D: InoxConvertible](a: A ~~> B, b: A ~~> D)
     extends (A &~> (B, D)) {
   def get(in: Input): Output = (a.get(in), b.get(in))
   //def put(out2: Output, in: Option[Input]): Iterable[Input] = ???
@@ -667,9 +667,9 @@ case class PairSame[A: Constrainable, B: Constrainable, D: Constrainable](a: A ~
   }
 }
 
-import Constrainable.listConstrainable
+import InoxConvertible.listConstrainable
 
-case class Flatten[A: Constrainable]() extends %~>[List[List[A]], List[A]]()(listConstrainable(implicitly[Constrainable[List[A]]]), implicitly[Constrainable[List[A]]]) {
+case class Flatten[A: InoxConvertible]() extends %~>[List[List[A]], List[A]]()(listConstrainable(implicitly[InoxConvertible[List[A]]]), implicitly[InoxConvertible[List[A]]]) {
   val methodName = "flatten"+ Math.abs(this.hashCode()/2)
   def get(in: Input) = flatten(in)
   def putManual(out2: Output, in: Option[Input]) = in match {
@@ -817,7 +817,7 @@ trait MapReverseLike[A, B, F] {
   }
 }
 
-case class MapReverse[A: Constrainable, B: Constrainable](fr: A ~~> B) extends (List[A] %~> List[B]) with MapReverseLike[A, B, Nothing] {
+case class MapReverse[A: InoxConvertible, B: InoxConvertible](fr: A ~~> B) extends (List[A] %~> List[B]) with MapReverseLike[A, B, Nothing] {
   val f: A => B = fr.get _
   val fRev = (in: Option[A], b: B) => fr.put(b, in).toStream.map(Left(_))
   def get(in: Input) = map(in)
@@ -890,7 +890,7 @@ trait FilterLike[A] {
   }
 }
 
-case class FilterReverse[A: Constrainable](f: A => Boolean) extends (List[A] %~> List[A]) with FilterLike[A] {
+case class FilterReverse[A: InoxConvertible](f: A => Boolean) extends (List[A] %~> List[A]) with FilterLike[A] {
   def get(in: Input) = filter(in, f)
   val methodName = "filter"+ Math.abs(this.hashCode()/2)
   def putManual(out2: Output, in: Option[Input]) = Implicits.report(s"FilterReverse.put($out2, $in) = %s"){in match {
@@ -900,7 +900,7 @@ case class FilterReverse[A: Constrainable](f: A => Boolean) extends (List[A] %~>
   // ensuring res => res.forall(sol => filter(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, filter(sol, f))
 }
 
-case class FlatMap[A: Constrainable, B: Constrainable](fr: A ~~> List[B]) extends (List[A] %~> List[B]) {
+case class FlatMap[A: InoxConvertible, B: InoxConvertible](fr: A ~~> List[B]) extends (List[A] %~> List[B]) {
   val f = fr.get _
   val fRev = (x: List[B]) => fr.put(x, None).toList // TODO: replace None by something clever.
   def get(in: Input) = flatMap(in, f)
@@ -953,7 +953,7 @@ case class FlatMap[A: Constrainable, B: Constrainable](fr: A ~~> List[B]) extend
   }
 }
 
-case class Const[I: Constrainable, A: Constrainable](value: A) extends (I &~> A) {
+case class Const[I: InoxConvertible, A: InoxConvertible](value: A) extends (I &~> A) {
   def get(u: I) = value
 
   override val name: String = "const"+ Math.abs(this.hashCode()/2)
@@ -964,7 +964,7 @@ case class Const[I: Constrainable, A: Constrainable](value: A) extends (I &~> A)
   }
 }
 
-case class Id[A: Constrainable]() extends (A ~~> A) {
+case class Id[A: InoxConvertible]() extends (A ~~> A) {
   def get(a: A) = a
   def put(out: A, orig: Option[A]) = Stream(out)
   def put(varIn: Variable, varOut: Variable, in: Option[A]) = {
@@ -972,7 +972,7 @@ case class Id[A: Constrainable]() extends (A ~~> A) {
   }
 }
 
-case class CastUp[A: Constrainable, B: Constrainable, B2 >: B : Constrainable](f: A ~~> B) extends (A &~> B2) {
+case class CastUp[A: InoxConvertible, B: InoxConvertible, B2 >: B : InoxConvertible](f: A ~~> B) extends (A &~> B2) {
   def get(a: A) = f.get(a)
 
   override val name: String = "castup"+ Math.abs(this.hashCode()/2)
