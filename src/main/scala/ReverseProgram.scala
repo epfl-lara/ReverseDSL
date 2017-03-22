@@ -31,6 +31,29 @@ object ReverseProgram extends Lenses {
       this.canWrapInputString = true
       this
     }
+
+    def withComputedValue(e: Expr): this.type = {
+      givenValue = Some(e)
+      this
+    }
+
+    // Can be set-up externally to bypass the computation of the function value.
+    // Must be set before a call to functionValue using .withComputedValue
+    private var givenValue: Option[Expr] = None
+
+    def functionValue(implicit cache: Cache, symbols: Symbols): Expr = {
+      givenValue match {
+        case Some(e) => e
+        case None =>
+          val res = if((freeVars -- formula.known.keySet).isEmpty) {
+            evalWithCache(letm(formula.known) in program)
+          } else {
+            throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known. $this")
+          }
+          givenValue = Some(res)
+          res
+      }
+    }
   }
 
   object Formula {
@@ -194,18 +217,6 @@ object ReverseProgram extends Lenses {
       }
     }
   }
-/*
-  object StringConcats {
-    def unapply(s: Expr): Some[List[Expr]] = s match {
-      case StringConcat(a, b) => Some(this.unapply(a).get ++ this.unapply(b).get)
-      case x => Some(List(x))
-    }
-    def apply(s: List[Expr]): Expr = s match {
-      case Nil => StringLiteral("")
-      case a :: Nil => a
-      case a :: tail => StringConcat(a, apply(tail))
-    }
-  }*/
 
   def defaultValue(t: Type)(implicit symbols: Symbols): Expr = {
     import inox._
@@ -241,16 +252,16 @@ object ReverseProgram extends Lenses {
 
   /** Match lambda's bodies to recover the original assignments */
   def obtainMapping(originalInput: Expr, freeVars: Set[Variable], originalAssignments: Map[ValDef, Expr], output: Expr): Stream[Map[ValDef, Expr]] = {
-    Log.prefix(s"obtainMapping($originalInput, $freeVars, $originalAssignments, $output) =") :=
+    //Log.prefix(s"obtainMapping($originalInput, $freeVars, $originalAssignments, $output) =") :=
     (originalInput, output) match {
       case (v: Variable, l) =>
         if(freeVars(v)) {
-          Log(s"$v is a free variable")
+          //Log(s"$v is a free variable")
           if(!(originalAssignments contains v.toVal) || l == originalAssignments(v.toVal)) {
-            Log(s"Value unchanged")
+            //Log(s"Value unchanged")
             Stream(Map())
           } else {
-            Log(s"Value updated: $l")
+            //Log(s"Value updated: $l")
             Stream(Map(v.toVal -> l))
           }
         } else Stream(Map())
@@ -298,8 +309,7 @@ object ReverseProgram extends Lenses {
     *  let variables = values in function = newOut
     * by trying to change the variables values, or the function body itself.
     *
-    * @param function An expression that computed the value before newOut
-    * @param currentValues Values from which function depends, with theyr original values.
+    * @param program An expression that computed the value before newOut, and the formula contains the current mappings.
     * @param newOut Either a literal value that should be produced by function, or a variable,
     *               in which case the result will have in the formula a constraint over this variable,
     *               Or a let-expression to denote a clone-and-paste.
@@ -314,7 +324,12 @@ object ReverseProgram extends Lenses {
       Stream(program.copy(formula = program.formula.copy(known = Map(), varsToAssign = Set())))
     }
 
-    lazy val functionValue = evalWithCache(letm(currentValues) in function) // TODO: Optimize this ?
+    lazy val functionValue = program.functionValue
+
+    if(functionValue == newOut) return {
+      Log("@return original function");
+      Stream(program.copy(formula = program.formula.copy(known = Map(), varsToAssign = Set(), unchanged = program.formula.known.keySet)))
+    }
 
     //Log.prefix(s"@return ") :=
     interleave {
@@ -428,29 +443,6 @@ object ReverseProgram extends Lenses {
               }
           }
 
-        // Let expressions eval their variable, reverse their body and then their assigning expression
-        // It comes from the fact that
-        // let x = b in c[x]    is equivalent to      Application((\x. c[x]), (b))
-        // In theory with rewriting it could be dropped, but we still do inline it for now.
-        /*case Let(vd@ValDef(id, tpe, flags), expr, body) =>
-          val currentVdValue = evalWithCache(letm(currentValues) in expr)
-
-          for { (newBody, Formula(newAssignment, constraint)) <-
-                 repair(body, currentValues + (vd -> currentVdValue), newOut) // Later: Change assignments to constraints
-               // If newAssignment does not contain vd, it means that newBody is a variable present in constraint.
-               isAssigned = newAssignment.contains(vd)
-               newValValue = (if(isAssigned) newAssignment(vd) else ValDef(FreshIdentifier("t", true), tpe, Set()).toVariable)
-               (newExpr, Formula(newAssignment2, constraint2)) <- repair(expr, currentValues, newValValue)
-               newFunction = Let(vd, newExpr, newBody)
-               finalAssignments = (newAssignment ++ newAssignment2) - vd
-          } yield {
-            if(isAssigned) {
-              (newFunction, Formula(finalAssignments, constraint2 &<>& constraint))
-            } else {
-              (newFunction, Formula(finalAssignments, constraint2 &<>& constraint && newValValue === vd.toVariable))
-            }
-          }*/
-
         case Let(vd, expr, body) =>
           repair(ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), program.formula), newOut).map {
             case ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), f) =>
@@ -459,81 +451,12 @@ object ReverseProgram extends Lenses {
           }
 
         case StringConcat(expr1, expr2) =>
-          //StringConcatReverser.put(Seq(expr1, expr2))
-
-          lazy val leftValue = evalWithCache(letm(currentValues) in expr1)
-          lazy val rightValue = evalWithCache(letm(currentValues) in expr2)
-          lazy val finalValue = asStr(leftValue) + asStr(rightValue)
-
-          def defaultCase: Stream[ProgramFormula] = {
-            val left = ValDef(FreshIdentifier("l", true), StringType, Set())
-            val right = ValDef(FreshIdentifier("r", true), StringType, Set())
-            Log(s"String default case: ${left.id} + ${right.id} == $newOut")
-
-            val leftRepair = repair(ProgramFormula(expr1, Formula(currentValues, currentValues.keySet)), left.toVariable)
-            val rightRepair = repair(ProgramFormula(expr2, Formula(currentValues, currentValues.keySet)), right.toVariable)
-
-            val bothRepair = inox.utils.StreamUtils.cartesianProduct(leftRepair, rightRepair)
-
-            for((ProgramFormula(leftExpr, f1), ProgramFormula(rightExpr, f2)) <- bothRepair) yield {
-              val f = Formula(Map(), Set(left, right), Set(), newOut === StringConcat(left.toVariable, right.toVariable))
-              val newF = f1 combineWith f2 combineWith f
-              ProgramFormula(StringConcat(leftExpr, rightExpr), newF)
+          for(pf <- repair(program.copy(program = FunctionInvocation(StringConcatReverser.identifier, Nil,
+            Seq(expr1, expr2))), newOut)) yield {
+            pf match {
+              case ProgramFormula(FunctionInvocation(StringConcatReverser.identifier, Nil, Seq(x, y)), f) =>
+                ProgramFormula(StringConcat(x, y), f)
             }
-          }
-
-          // Prioritize changes that touch only one of the two expressions.
-          newOut match{
-            case StringLiteral(s) =>
-              (leftValue match {
-                case StringLiteral(lv) =>
-                if(s.startsWith(lv)) { // The left value is unchanged, let's focus on repairing the right value.
-                  for(ProgramFormula(rightExpr, f1) <-
-                      repair(ProgramFormula(expr2, Formula(currentValues, currentValues.keySet)),
-                        StringLiteral(s.substring(lv.length)))) yield {
-                    val newF = f1 combineWith Formula(Map(), Set(), exprOps.variablesOf(expr1).map(_.toVal))
-                    ProgramFormula(StringConcat(expr1, rightExpr), newF) /: Log.left_return
-                  }
-                } else Stream.empty
-                case _  => Stream.empty }) #::: (
-                rightValue match {
-                  case StringLiteral(rv) =>
-                  if(s.endsWith(rv)) {
-                    for(ProgramFormula(leftExpr, f1)  <-
-                        repair(ProgramFormula(expr1, Formula(currentValues, currentValues.keySet)),
-                          StringLiteral(s.substring(0, s.length - rv.length)))) yield {
-                      val newF = f1 combineWith Formula(Map(), Set(), exprOps.variablesOf(expr2).map(_.toVal))
-                      ProgramFormula(StringConcat(leftExpr, expr2), newF) /: Log.right_return
-                    }
-                  } else Stream.empty
-                case _  => Stream.empty
-                }
-              ) #::: defaultCase
-            case newOut: Variable => defaultCase
-
-            case l@Let(vd, value, newbody) =>
-              /* Copy and paste, insertion, replacement:
-              *  => A single let(v, newText, newbody) with a single occurrence of v in newbody
-              *  Clone and paste
-              *  => A double let(clone, oldText, let(paste, clone, newbody)) with two occurrences of clone in newbody
-              *  Cut and paste
-              *  => A double let(cut, "", let(paste, clone, newbody)) with one occurrences of paste in newbody
-              *  Delete
-              *  => A single let(delete, "", newbody) with a single occurrence of delete in newbody
-              **/
-              ???
-
-            /*case StringConcat(a, b) => // newOut could be the concatenation with some variables
-              if(b == expr2) {
-                repair(expr1, currentValues, a).map(x => (StringConcat(x._1, b), x._2))
-              } else if(a == expr1) {
-                repair(expr2, currentValues, b).map(x => (StringConcat(a, x._1), x._2))
-              } else {
-                Stream((newOut, Formula(Map(), newOut === function)))
-                //throw new Exception(s"Don't know how to handle $newOut for $function")
-              }*/
-            case _ => defaultCase
-//            case _ => throw new Exception(s"Don't know how to handle $newOut for $function")
           }
 
         case ADT(ADTType(tp, tpArgs), argsIn) =>
@@ -606,7 +529,7 @@ object ReverseProgram extends Lenses {
               for{(newArgsValues, newForm) <- lenseResult
                   (newArguments, newArgumentsFormula) <- combineArguments(program, args.zip(newArgsValues))
               } yield {
-                val formula = newForm combineWith newArgumentsFormula // TODO: This is wrong
+                val formula = newForm combineWith newArgumentsFormula
                 ProgramFormula(FunctionInvocation(f, tpes, newArguments), formula)
               }
           }

@@ -14,7 +14,8 @@ trait Lenses { self: ReverseProgram.type =>
     MapReverser,
     ListConcatReverser,
     FlattenReverser,
-    FlatMapReverser
+    FlatMapReverser,
+    StringConcatReverser
   )
 
   val reversions = reversers.map(x => x.identifier -> x).toMap
@@ -295,90 +296,67 @@ trait Lenses { self: ReverseProgram.type =>
     }
   }
 
-  /*trait ReverserLike[T <: Expr] {
-    def unapply(pf: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Option[Stream[(T, Formula)]] = {
-      this.put(pf)
-    }
-    def put(program: ProgramFormula, newOut: Expr)(implicit cache: Cache, symbols: Symbols)
-  }*/
+  /** Lense-like list concat, with the possibility of changing the mapping lambda. */
+  case object StringConcatReverser extends Reverser {
+    val identifier = FreshIdentifier("tmpstringconcat")
 
-  /*case object StringConcatReverser extends ReverserLike[StringConcat] {
-    def put(program: ProgramFormula, newOut: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(StringConcat, Formula)] = {
-      lazy val leftValue = evalWithCache(letm(currentValues) in expr1)
-      lazy val rightValue = evalWithCache(letm(currentValues) in expr2)
-      lazy val finalValue = asStr(leftValue) + asStr(rightValue)
+    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+      val leftValue = originalArgsValues.head
+      val rightValue = originalArgsValues.tail.head
 
-      def defaultCase: Stream[ProgramFormula] = {
-            val left = ValDef(FreshIdentifier("l", true), StringType, Set())
-            val right = ValDef(FreshIdentifier("r", true), StringType, Set())
-            Log(s"String default case: ${left.id} + ${right.id} == $newOut")
+      def defaultCase: Stream[(Seq[Expr], Formula)] = {
+        val left = ValDef(FreshIdentifier("l", true), StringType, Set())
+        val right = ValDef(FreshIdentifier("r", true), StringType, Set())
+        Log(s"String default case: ${left.id} + ${right.id} == $newOutput")
 
-            val leftRepair = repair(ProgramFormula(expr1, Formula(currentValues, currentValues.keySet)), left.toVariable)
-            val rightRepair = repair(ProgramFormula(expr2, Formula(currentValues, currentValues.keySet)), right.toVariable)
+        val f = Formula(Map(), Set(left, right), Set(),
+          newOutput === FunctionInvocation(identifier, tps, Seq(left.toVariable, right.toVariable))
+            //&& not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
+        )
 
-            val bothRepair = inox.utils.StreamUtils.cartesianProduct(leftRepair, rightRepair)
+        Stream((Seq(left.toVariable, right.toVariable), f))
+      }
 
-            for((ProgramFormula(leftExpr, f1), ProgramFormula(rightExpr, f2)) <- bothRepair) yield {
-              val f = Formula(Map(), Set(left, right), Set(), newOut === StringConcat(left.toVariable, right.toVariable))
-              val newF = f1 combineWith f2 combineWith f
-              ProgramFormula(StringConcat(leftExpr, rightExpr), newF)
+      // Prioritize changes that touch only one of the two expressions.
+      newOutput match {
+        case StringLiteral(s) =>
+          (Log.prefix("Testing left:") := leftValue match {
+            case StringLiteral(lv) =>
+              (if (s.startsWith(lv)) {
+                Stream((Seq(leftValue, StringLiteral(s.drop(lv.length))), Formula()))
+              } else Stream.empty) /:: Log.prefix("Left worked:")
+            case _ => Stream.empty
+          }) #::: (
+            Log.prefix("Testing right:") := rightValue match {
+              case StringLiteral(rv) =>
+                (if (s.endsWith(rv)) {
+                  Stream((Seq(StringLiteral(s.take(s.length - rv.length)), rightValue), Formula()))
+                } else Stream.empty)  /:: Log.prefix("right worked:")
+              case _ => Stream.empty
             }
-          }
-
-          // Prioritize changes that touch only one of the two expressions.
-          newOut match{
-            case StringLiteral(s) =>
-              (leftValue match {
-                case StringLiteral(lv) =>
-                if(s.startsWith(lv)) { // The left value is unchanged, let's focus on repairing the right value.
-                  for(ProgramFormula(rightExpr, f1) <-
-                      repair(ProgramFormula(expr2, Formula(currentValues, currentValues.keySet)),
-                        StringLiteral(s.substring(lv.length)))) yield {
-                    val newF = f1 combineWith Formula(Map(), Set(), exprOps.variablesOf(expr1).map(_.toVal))
-                    ProgramFormula(StringConcat(expr1, rightExpr), newF) /: Log.left_return
-                  }
-                } else Stream.empty
-                case _  => Stream.empty }) #::: (
-                rightValue match {
-                  case StringLiteral(rv) =>
-                  if(s.endsWith(rv)) {
-                    for(ProgramFormula(leftExpr, f1)  <-
-                        repair(ProgramFormula(expr1, Formula(currentValues, currentValues.keySet)),
-                          StringLiteral(s.substring(0, s.length - rv.length)))) yield {
-                      val newF = f1 combineWith Formula(Map(), Set(), exprOps.variablesOf(expr2).map(_.toVal))
-                      ProgramFormula(StringConcat(leftExpr, expr2), newF) /: Log.right_return
-                    }
-                  } else Stream.empty
-                case _  => Stream.empty
-                }
-              ) #::: defaultCase
-            case newOut: Variable => defaultCase
-
-            case l@Let(vd, value, newbody) =>
-              /* Copy and paste, insertion, replacement:
-              *  => A single let(v, newText, newbody) with a single occurrence of v in newbody
-              *  Clone and paste
-              *  => A double let(clone, oldText, let(paste, clone, newbody)) with two occurrences of clone in newbody
-              *  Cut and paste
-              *  => A double let(cut, "", let(paste, clone, newbody)) with one occurrences of paste in newbody
-              *  Delete
-              *  => A single let(delete, "", newbody) with a single occurrence of delete in newbody
-              **/
-              ???
+            ) #::: defaultCase
+        case l@Let(vd, value, newbody) =>
+          /* Copy and paste, insertion, replacement:
+        *  => A single let(v, newText, newbody) with a single occurrence of v in newbody
+        *  Clone and paste
+        *  => A double let(clone, oldText, let(paste, clone, newbody)) with two occurrences of clone in newbody
+        *  Cut and paste
+        *  => A double let(cut, "", let(paste, clone, newbody)) with one occurrences of paste in newbody
+        *  Delete
+        *  => A single let(delete, "", newbody) with a single occurrence of delete in newbody
+        **/
           ???
-
-        /*case StringConcat(a, b) => // newOut could be the concatenation with some variables
-          if(b == expr2) {
-            repair(expr1, currentValues, a).map(x => (StringConcat(x._1, b), x._2))
-          } else if(a == expr1) {
-            repair(expr2, currentValues, b).map(x => (StringConcat(a, x._1), x._2))
-          } else {
-            Stream((newOut, Formula(Map(), newOut === function)))
-            //throw new Exception(s"Don't know how to handle $newOut for $function")
-          }*/
         case _ => defaultCase
-        //            case _ => throw new Exception(s"Don't know how to handle $newOut for $function")
       }
     }
-  }*/
+
+    // Concat definition in inox
+    val funDef = mkFunDef(identifier)(){ case _ =>
+      (Seq("a" :: StringType, "b" :: StringType),
+        StringType,
+        { case Seq(left, right) =>
+          StringConcat(left, right)
+        })
+    }
+  }
 }
