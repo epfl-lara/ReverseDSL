@@ -15,14 +15,13 @@ import inox._
 import inox.evaluators.EvaluationResults
 import inox.trees.{not => inoxNot, _}
 import inox.trees.dsl._
-import sun.swing.SwingUtilities2.RepaintListener
 
 import scala.reflect.runtime.universe.TypeTag
 
 class ReverseProgramTest extends FunSuite with TestHelpers {
   import InoxConvertible._
 
-  val build = Variable(FreshIdentifier("build"), FunctionType(Seq(inoxTypeOf[String]), inoxTypeOf[Element]), Set())
+  val build = variable[String => Element]("build")
   val v = variable[String]("v")
   val vText = variable[String]("text")
 
@@ -248,7 +247,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected1 = Element("div", WebElement(TextNode("Closure parameter"))::WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(TextNode("Changed parameter"))::WebElement(TextNode("Hello world"))::Nil)
 
-    val closureParameter = ValDef(FreshIdentifier("closure"), inoxTypeOf[String], Set())
+    val closureParameter = valdef[String]("closure")
     val lambda = Lambda(Seq(v.toVal),
       _Element("div", _List[WebElement](_WebElement(_TextNode(closureParameter.toVariable)),_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]()))
 
@@ -295,7 +294,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected1 = "Hello world"
     val expected2 = "Hello buddy"
 
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+    val ap = valdef[String]("a")
 
     val pfun = function(
       let(ap, "Hello ")(av =>
@@ -314,7 +313,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   }
 
   test("Propose two possibles changes if we put a shared node in bold") {
-    val m = ValDef(FreshIdentifier("m"), inoxTypeOf[InnerWebElement], Set())
+    val m = valdef[InnerWebElement]("m")
 
     val normlOut = Element("div", List(
       WebElement(TextNode("Mikael")), WebElement(TextNode("Mikael"))))
@@ -341,8 +340,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected1 = "Hello world"
     val expected2 = "Hello buddy"
 
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
-    val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
+    val ap = valdef[String]("a")
+    val bp = valdef[String]("b")
 
     val pfun = function(
       let(ap, "Hello ")(av =>
@@ -364,8 +363,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   }
 
   test("Reverse 2 variables string concatenation, one used twice.") {
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
-    val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
+    val ap = valdef[String]("a")
+    val bp = valdef[String]("b")
 
     val pfun = function(
       let(ap, "Mikael")(av =>
@@ -386,7 +385,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   }
 
   test("Propose the change between changing a variable and assing a new string") {
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+    val ap = valdef[String]("a")
 
     val pfun = function(
       let(ap, "Mikael")(av =>
@@ -404,8 +403,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
 
   test("Reverse curried string arguments") {
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
-    val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
+    val ap = valdef[String]("a")
+    val bp = valdef[String]("b")
 
     val pfun = function(
       Application(
@@ -428,7 +427,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
 
   test("Reverse filter") {
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[Int], Set())
+    val ap = valdef[Int]("a")
     val pfun = function(
       FunctionInvocation(Utils.filter,Seq(inoxTypeOf[Int]),
         Seq(
@@ -446,9 +445,9 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   }
 
   test("Reverse filter with variable arguments") {
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[Int], Set())
-    val input = ValDef(FreshIdentifier("input"), inoxTypeOf[List[Int]], Set())
-    val f = ValDef(FreshIdentifier("f"), FunctionType(Seq(inoxTypeOf[Int]), BooleanType), Set())
+    val ap = valdef[Int]("a")
+    val input = valdef[List[Int]]("input")
+    val f = valdef[Int => Boolean]("f")
     val pfun = function(
       let(input, _List[Int](0, 1, 2, 6, 5, 5, 8))(inputv =>
       let(f, Lambda(Seq(ap), Modulo(ap.toVariable, 2) === 0))(fv =>
@@ -469,7 +468,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
 
   test("Reverse map") {
-    val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+    val ap = valdef[String]("a")
     val pfun = function(
       FunctionInvocation(Utils.map,Seq(inoxTypeOf[String], inoxTypeOf[String]),
         Seq(
@@ -539,7 +538,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
   /*
     test("Clone-and-paste simple") {
-      val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
+       val ap = valdef[String]("a")
 
       val pfun = function("Hello world,")(inoxTypeOf[String])
       val clonedBody = let(ap, "world")(av =>
@@ -551,8 +550,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
 
     test("Clone-and-paste the left part with an existing variable") {
-      val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
-      val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
+      val ap = valdef[String]("a")
+      val bp = valdef[String]("b")
 
       val initBody = let(ap, "world")(av =>
         StringConcat("Hello ", av)
@@ -574,8 +573,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     }
 
     test("Clone-and-paste overlapping another variable") {
-      val ap = ValDef(FreshIdentifier("a"), inoxTypeOf[String], Set())
-      val bp = ValDef(FreshIdentifier("b"), inoxTypeOf[String], Set())
+      val ap = valdef[String]("a")
+      val bp = valdef[String]("b")
 
       val initBody = let(ap, "big world")(av =>
         StringConcat("Hello ", av)

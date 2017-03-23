@@ -9,6 +9,7 @@ import inox.trees.dsl._
 import inox.solvers._
 import inox.InoxProgram
 
+import scala.collection.immutable.Bag
 import scala.xml.MetaData
 
 /** A type which can be converted to inox types, and whose expressions can be obtained from inox expressions */
@@ -21,35 +22,82 @@ trait InoxConvertible[A] { self =>
 
 /** Implicit helpers to build constrainable types.*/
 object InoxConvertible {
-  implicit object StringInoxConvertible extends InoxConvertible[String] {
-    def getType = StringType
-    def recoverFrom(e: Expr): String = e match {
-      case StringLiteral(s) => s
-      case _ => throw new Exception("Could not recover string from " + e)
+  abstract class LiteralConvertible[A](tpe: inox.trees.dsl.trees.Type, toExpr: A => Expr) extends InoxConvertible[A] {
+    def getType = tpe
+    def recoverFrom(e: Expr): A = e match {
+      case l: Literal[_] => l.value.asInstanceOf[A]
+      case _ => throw new Exception(s"Could not recover $tpe from $e")
     }
-    def produce(a: String): inox.trees.Expr = E(a)
+    def produce(a: A): Expr = toExpr(a)
   }
-  implicit object IntInoxConvertible extends InoxConvertible[Int] {
-    def getType = Int32Type
-    def recoverFrom(e: Expr): Int = e match {
-      case IntLiteral(s) => s
-      case _ => throw new Exception("Could not recover int from " + e)
+
+  implicit object StringInoxConvertible extends LiteralConvertible[String](StringType, E(_))
+  implicit object IntInoxConvertible extends LiteralConvertible[Int](Int32Type, E(_))
+  implicit object BooleanInoxConvertible extends LiteralConvertible[Boolean](BooleanType, E(_))
+  implicit object CharInoxConvertible extends LiteralConvertible[Char](CharType, E(_))
+  implicit object BigIntInoxConvertible extends LiteralConvertible[BigInt](IntegerType, E(_))
+
+  implicit def mapConvertible[A: InoxConvertible, B: InoxConvertible]: InoxConvertible[Map[A, B]] = new InoxConvertible[Map[A, B]] {
+    def getType: inox.trees.dsl.trees.Type = MapType(inoxTypeOf[A], inoxTypeOf[B])
+
+    def recoverFrom(e: inox.trees.Expr): Map[A, B] = e match {
+      case FiniteMap(pairs, default, keyTpe, valTpe) =>
+        pairs.map{
+          case (key, value) => exprOfInox[A](key) -> exprOfInox[B](value)
+        }.toMap.withDefaultValue(exprOfInox[B](default))
+      case _ => throw new Exception(s"Not a finite map: $e")
     }
-    def produce(a: Int): inox.trees.Expr = E(a)
+
+    def produce(a: Map[A, B]): inox.trees.Expr = {
+      FiniteMap(
+        a.toSeq.map{ case (key, value) => inoxExprOf(key) -> inoxExprOf(value)},
+        (a match {
+          case a: Map.WithDefault[A, B] => inoxExprOf[B](a.default(exprOfInox[A](Utils.defaultValue(inoxTypeOf[A])(Utils.defaultSymbols))))
+          case a => Utils.defaultValue(inoxTypeOf[B])(Utils.defaultSymbols)
+        }):Expr,
+        inoxTypeOf[A],
+        inoxTypeOf[B]
+      )
+    }
+  }
+
+  implicit def setConvertible[A: InoxConvertible]: InoxConvertible[Set[A]] = new InoxConvertible[Set[A]] {
+    def getType: inox.trees.dsl.trees.Type = SetType(inoxTypeOf[A])
+
+    def recoverFrom(e: inox.trees.Expr): Set[A] = e match {
+      case FiniteSet(elements, tpe) =>
+        elements.map(exprOfInox[A](_)).toSet
+      case _ => throw new Exception(s"Not a finite set: $e")
+    }
+
+    def produce(a: Set[A]): inox.trees.Expr = {
+      FiniteSet(a.toSeq.map(inoxExprOf[A](_)), inoxTypeOf[A])
+    }
+  }
+
+  implicit def bagConvertible[A: InoxConvertible]: InoxConvertible[Bag[A]] = new InoxConvertible[Bag[A]] {
+    implicit val m1 = Bag.configuration.compact[A] // define compact representation for A
+    def getType: inox.trees.dsl.trees.Type = BagType(inoxTypeOf[A])
+
+    def recoverFrom(e: inox.trees.Expr): Bag[A] = e match {
+      case FiniteBag(elements, tpe) =>
+        Bag.from(elements.map{ case (x, mul) => exprOfInox[A](x) -> exprOfInox[BigInt](mul).toInt }: _*)
+      case _ => throw new Exception(s"Not a finite set: $e")
+    }
+
+    def produce(a: Bag[A]): inox.trees.Expr = {
+      FiniteBag(a.toMap.toSeq.map{ case (x, mul) => inoxExprOf[A](x) -> inoxExprOf[BigInt](BigInt(mul.toString)) }.toSeq, inoxTypeOf[A])
+    }
   }
 
   private def c[A : InoxConvertible] = implicitly[InoxConvertible[A]]
 
-  implicit def tuple2Constrainable[A : InoxConvertible, B: InoxConvertible] : InoxConvertible[(A, B)] =
+  implicit def tuple2Convertible[A : InoxConvertible, B: InoxConvertible] : InoxConvertible[(A, B)] =
     ImplicitTuples.Combination2(c[A], c[B])
-  implicit def tuple3Constrainable[A : InoxConvertible, B: InoxConvertible, C: InoxConvertible] : InoxConvertible[(A, B, C)] =
+  implicit def tuple3Convertible[A : InoxConvertible, B: InoxConvertible, C: InoxConvertible] : InoxConvertible[(A, B, C)] =
     ImplicitTuples.Combination3(c[A], c[B], c[C])
-  /*implicit def tuple4Constrainable[A : InoxConvertible, B: InoxConvertible, C: InoxConvertible, D: InoxConvertible]
-  : InoxConvertible[(A, B, C, D)] =
-    ImplicitTuples.TupleConvertible[(A, B, C, D)](c[A], c[B], c[C], c[D])*/
-  //If need more tuples, add them here.
 
-  implicit def listConstrainable[A: InoxConvertible]: InoxConvertible[List[A]] = new InoxConvertible[List[A]] {
+  implicit def listConvertible[A: InoxConvertible]: InoxConvertible[List[A]] = new InoxConvertible[List[A]] {
     import Utils.{list, nil, cons}
     val underlying = implicitly[InoxConvertible[A]]
     def getType: inox.trees.dsl.trees.Type = T(list)(underlying.getType)
@@ -232,6 +280,16 @@ object InoxConvertible {
     }
   }
 
+  implicit def Function2Convertible[A: InoxConvertible, B: InoxConvertible]: InoxConvertible[A => B] = new InoxConvertible[A => B] {
+    def getType: inox.trees.dsl.trees.Type = FunctionType(Seq(inoxTypeOf[A]), inoxTypeOf[B])
+    def produce(a: A => B): Expr = {
+      ???
+    }
+    def recoverFrom(e: Expr): A => B = {
+      ???
+    }
+  }
+
   implicit def scalaNodeToXmlNode(node: scala.xml.Node): XmlTrees.Node = node match {
     case scala.xml.Text(text) =>
       XmlTrees.Node(text.trim(), List(), List())
@@ -256,6 +314,10 @@ object InoxConvertible {
   /** Creates a variable with the given name and type*/
   def variable[A:InoxConvertible](name: String, alwaysShowUniqueId: Boolean = false) =
     Variable(FreshIdentifier(name, alwaysShowUniqueId), inoxTypeOf[A], Set())
+
+  /** Creates a variable with the given name and type*/
+  def valdef[A:InoxConvertible](name: String, alwaysShowUniqueId: Boolean = false) =
+    ValDef(FreshIdentifier(name, alwaysShowUniqueId), inoxTypeOf[A], Set())
 
   /** Obtains the expression from an inox expression */
   def exprOfInox[A:InoxConvertible](e: inox.trees.Expr) = implicitly[InoxConvertible[A]].recoverFrom(e)
@@ -284,4 +346,14 @@ object InoxConvertible {
   def _XMLAttribute(key: Expr, value: Expr) = ADT(ADTType(Utils.xmlAttribute, Seq()), Seq(key, value))
   def _XMLNode(tag: Expr, attributes: Expr, children: Expr) =
     ADT(ADTType(Utils.xmlNode, Seq()), Seq(tag, attributes, children))
+
+  def _Map[A: InoxConvertible, B: InoxConvertible](elements: (Expr, Expr)*): Expr = {
+    FiniteMap(elements.toSeq, Utils.defaultValue(inoxTypeOf[B])(Utils.defaultSymbols), inoxTypeOf[A], inoxTypeOf[B])
+  }
+  def _Set[A: InoxConvertible](elements: Expr*): Expr = {
+    FiniteSet(elements.toSeq, inoxTypeOf[A])
+  }
+  def _Bag[A: InoxConvertible](elements: (Expr, Expr)*): Expr = {
+    FiniteBag(elements.toSeq, inoxTypeOf[A])
+  }
 }

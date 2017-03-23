@@ -52,6 +52,10 @@ object ReverseProgram extends lenses.Lenses {
           res
       }
     }
+
+    def wrap(f: Expr => Expr): ProgramFormula = {
+      ProgramFormula(f(program), formula)
+    }
   }
 
   object Formula {
@@ -216,38 +220,6 @@ object ReverseProgram extends lenses.Lenses {
     }
   }
 
-  def defaultValue(t: Type)(implicit symbols: Symbols): Expr = {
-    import inox._
-    import inox.trees._
-    import inox.trees.dsl._
-    import inox.solvers._
-    t match {
-      case StringType => StringLiteral("#")
-      case Int32Type => IntLiteral(42)
-      case IntegerType => IntegerLiteral(BigInt(86))
-      case BooleanType => BooleanLiteral(true)
-      case FunctionType(inputs, output) =>
-        val parameters = inputs.map{ i => ValDef(FreshIdentifier("x", true), i, Set()) }
-        Lambda(parameters, defaultValue(output))
-      case t: ADTType =>
-        val tid = t.id
-        val tps = t.tps
-        symbols.adts(tid) match {
-          case e: ADTConstructor =>
-            ADT(t, e.typed(tps).fields.map(x => defaultValue(x.getType)))
-          case e: ADTSort => // Choose the smallest non-recursive value if possible. This is an heuristic but works in our cases.
-            val mainConstructor = e.constructors.sortBy { constructor =>
-              constructor.typed(tps).fields.map {
-                case s => if (s.getType == t) 10 else
-                  if (ADTType(t.getADT.definition.root.id, tps) == s.getType) 5
-                else 0
-              }.sum
-            }.head
-            defaultValue(ADTType(mainConstructor.id, tps))
-        }
-    }
-  }
-
   /** Match lambda's bodies to recover the original assignments */
   def obtainMapping(originalInput: Expr, freeVars: Set[Variable], originalAssignments: Map[ValDef, Expr], output: Expr): Stream[Map[ValDef, Expr]] = {
     //Log.prefix(s"obtainMapping($originalInput, $freeVars, $originalAssignments, $output) =") :=
@@ -356,13 +328,27 @@ object ReverseProgram extends lenses.Lenses {
         // Values (including lambdas) should be immediately replaced by the new value
         case l: Literal[_] =>
           newOut match {
-            case l: Literal[_] => // Raw replacement
-              Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set())))
             case v: Variable => // Replacement with the variable newOut, with a maybe clause.
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(v.toVal))))
-            case l@Let(cloned: ValDef, _, _) =>
-              Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))
+            case l: Literal[_] => // Raw replacement
+              Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set())))
+            /*case l@Let(cloned: ValDef, _, _) =>
+              Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
             case _ => throw new Exception("Don't know what to do, not a Literal, a Variable, or a let: "+newOut)
+          }
+        case l: FiniteMap =>
+          if(isValue(l)) {
+            newOut match {
+              case v: Variable => // Replacement with the variable newOut, with a maybe clause.
+                Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(v.toVal))))
+              case l: FiniteMap => // Raw replacement
+                Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set())))
+              /*case l@Let(cloned: ValDef, _, _) =>
+              Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
+              case _ => throw new Exception("Don't know what to do, not a Literal, a Variable, or a let: " + newOut)
+            }
+          } else {
+            ???
           }
         case lFun@Lambda(vd, body) =>  // Check for closures, i.e. free variables.
           val freeVars = exprOps.variablesOf(body).map(_.toVal) -- vd
@@ -530,6 +516,23 @@ object ReverseProgram extends lenses.Lenses {
                 val formula = newForm combineWith newArgumentsFormula
                 ProgramFormula(FunctionInvocation(f, tpes, newArguments), formula)
               }
+          }
+
+        case MapApply(map, key) =>
+          val map_v = evalWithCache(letm(currentValues) in map)
+          val key_v = evalWithCache(letm(currentValues) in key)
+          val newMap = map_v match {
+            case FiniteMap(pairs, default, keyType, valueType) =>
+              FiniteMap(
+                pairs.map{
+                  case (k, v) => if(k == key_v) k -> newOut else k -> v
+                },
+                default, keyType, valueType
+              )
+            case _ => throw new Exception(s"Did not evaluate to a map: $map_v")
+          }
+          for(pf <- repair(ProgramFormula(map, program.formula), newMap)) yield {
+            pf.wrap(MapApply(_, key))
           }
 
         case anyExpr =>

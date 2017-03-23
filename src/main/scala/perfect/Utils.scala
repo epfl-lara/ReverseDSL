@@ -111,4 +111,36 @@ object Utils {
     a.asInstanceOf[B]
 
   @inline def asStr(e: Expr): String = castOrFail[Expr, StringLiteral](e).value
+
+  def defaultValue(t: Type)(implicit symbols: Symbols): Expr = {
+    import inox._
+    import inox.trees._
+    import inox.trees.dsl._
+    import inox.solvers._
+    t match {
+      case StringType => StringLiteral("#")
+      case Int32Type => IntLiteral(42)
+      case IntegerType => IntegerLiteral(BigInt(86))
+      case BooleanType => BooleanLiteral(true)
+      case FunctionType(inputs, output) =>
+        val parameters = inputs.map{ i => ValDef(FreshIdentifier("x", true), i, Set()) }
+        Lambda(parameters, defaultValue(output))
+      case t: ADTType =>
+        val tid = t.id
+        val tps = t.tps
+        symbols.adts(tid) match {
+          case e: ADTConstructor =>
+            ADT(t, e.typed(tps).fields.map(x => defaultValue(x.getType)))
+          case e: ADTSort => // Choose the smallest non-recursive value if possible. This is an heuristic but works in our cases.
+            val mainConstructor = e.constructors.sortBy { constructor =>
+              constructor.typed(tps).fields.map {
+                case s => if (s.getType == t) 10 else
+                if (ADTType(t.getADT.definition.root.id, tps) == s.getType) 5
+                else 0
+              }.sum
+            }.head
+            defaultValue(ADTType(mainConstructor.id, tps))
+        }
+    }
+  }
 }

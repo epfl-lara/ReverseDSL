@@ -577,9 +577,9 @@ case class PairSame[A: InoxConvertible, B: InoxConvertible, D: InoxConvertible](
   }
 }
 
-import InoxConvertible.listConstrainable
+import InoxConvertible.listConvertible
 
-case class Flatten[A: InoxConvertible]() extends %~>[List[List[A]], List[A]]()(listConstrainable(implicitly[InoxConvertible[List[A]]]), implicitly[InoxConvertible[List[A]]]) {
+case class Flatten[A: InoxConvertible]() extends %~>[List[List[A]], List[A]]()(listConvertible(implicitly[InoxConvertible[List[A]]]), implicitly[InoxConvertible[List[A]]]) {
   val methodName = "flatten"+ Math.abs(this.hashCode()/2)
   def get(in: Input) = flatten(in)
   def putManual(out2: Output, in: Option[Input]) = in match {
