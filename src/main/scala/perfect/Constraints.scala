@@ -1,3 +1,4 @@
+package perfect
 import ImplicitTuples._
 import inox._
 import inox.trees._
@@ -9,13 +10,16 @@ import scala.xml.MetaData
 
 import InoxConvertible._
 
-abstract class Tree[LeafValue, NodeValue]
-case class Node[LeafValue, NodeValue](left: Tree[LeafValue, NodeValue], value: NodeValue, right: Tree[LeafValue, NodeValue]) extends Tree[LeafValue, NodeValue]
-case class Leaf[LeafValue, NodeValue](value: LeafValue) extends Tree[LeafValue, NodeValue]
+object GeneralConstraint {
+  abstract class Tree[LeafValue, NodeValue]
+  case class Node[LeafValue, NodeValue](left: Tree[LeafValue, NodeValue], value: NodeValue, right: Tree[LeafValue, NodeValue]) extends Tree[LeafValue, NodeValue]
+  case class Leaf[LeafValue, NodeValue](value: LeafValue) extends Tree[LeafValue, NodeValue]
+}
 
 abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formula: Expr,
                                  functions: Map[Identifier, ManualReverse[_, _]])
 {
+  import GeneralConstraint._
   import inox.solvers._
   import SolverResponses._
 
@@ -166,7 +170,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
   def splitMaybe(e: Seq[Expr], notMaybes: Seq[Expr], maybes: Seq[Equals]): (List[Expr], List[Equals]) = {
     e match {
       case Seq() => (notMaybes.reverse.toList, maybes.reverse.toList)
-      case FunctionInvocation(Common.maybe, _, Seq(equality@Equals(a, b))) +: tail =>
+      case FunctionInvocation(Utils.maybe, _, Seq(equality@Equals(a, b))) +: tail =>
         splitMaybe(tail, notMaybes, equality +: maybes)
       case a +: tail =>
         splitMaybe(tail, a +: notMaybes, maybes)
@@ -232,17 +236,10 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
           case _ => throw new Exception("Cannot reverse this equality: " + value)
         }
 
-        def getInValues[A, B](function: ManualReverse[A, B], outValue: Expr, inDefault: Expr): Iterable[Expr] = {
-          val realOutValue = function.constrainableOutput.recoverFrom(outValue)
-          val realDefaultValue = optionInoxConvertible(function.constrainableInput).recoverFrom(inDefault)
-          val inValues = function.putManual(realOutValue, realDefaultValue)
-          inValues.map(function.constrainableInput.produce)
-        }
-
         for { solvermodel <- solveTrees(right)
               model <- getStreamOfSolutions(outVar, solvermodel)
               outValue = model.vars(outVar.toVal  : inox.trees.ValDef)
-              inValue <- getInValues(function, outValue, inDefault)
+              inValue <- function.putExpr(outValue, inDefault)
               newSeqExpr = (seqExpr :+ Equals(inVar, inValue)) ++ model.vars.map{ case (v, e) => Equals(v.toVariable, e) }
               //_ = Log("Solving this :" + newSeqExpr)
               (eqs, maybes)  = splitMaybe(newSeqExpr, Nil, Nil)
@@ -310,36 +307,18 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
   }
 }
 
-/** A wrapper around an inox Expr which can enumerate solutions*/
-case class Constraint[A: InoxConvertible](protected val _formula: Expr,
-                                          functions: Map[Identifier, ManualReverse[_, _]] = Map())
-  extends GeneralConstraint[Constraint[A]](_formula, functions) {
-  /** Adds a new assignment to this constraint */
-  def apply[A: InoxConvertible](tuple: (inox.trees.Variable, A)) = this && tuple._1 === inoxExprOf[A](tuple._2)
-
-  /** Adds a new conjunct to this constraint */
-  def &&(b: Expr) = Constraint[A](formula && b, functions)
-
-  /** Adds a new conjunct to this constraint */
-  def &&[B: InoxConvertible](b: Constraint[B]): Constraint[A] = Constraint[A](formula && b.formula, functions ++ b.functions)
-  def <&&[B: InoxConvertible](b: Constraint[B]): Constraint[B] = Constraint[B](formula && b.formula, functions ++ b.functions)
-
-  import inox.solvers._
-  import SolverResponses._
-
-  def copyWithNewFormula(newFormula: Expr): Constraint[A] = {
-    Constraint[A](newFormula, functions)
-  }
-
-  /** Returns a stream of solutions satisfying the constraint */
-  def toStream(solutionVar: inox.trees.Variable): Stream[A] = {
-    toStreamOfInoxExpr(solutionVar).map(exprOfInox[A] _)
-  }
-}
 
 case class InoxConstraint(protected val _formula: Expr, functions: Map[Identifier, ManualReverse[_, _]] = Map())
 extends GeneralConstraint[InoxConstraint](_formula, functions)
 {
   def copyWithNewFormula(newFormula: Expr) = this.copy(_formula = newFormula)
 
+}
+
+/**  A way to provide a manual reverse of the transformation.
+  *  We should ensure that the method putManual always runs a finite algorithm. */
+trait ManualReverse[A, B] {
+  def putManual(out2: B, in1: Option[A]): Iterable[A]
+
+  def putExpr(out2: Expr, in1: Expr): Iterable[Expr]
 }

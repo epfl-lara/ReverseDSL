@@ -1,13 +1,17 @@
-import ImplicitTuples.tuple2
+package legacy
+
+import perfect._
+import perfect.ImplicitTuples._
+import legacy.ImplicitTuples._
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import shapeless.HList
-import Implicits._
 import inox._
 import inox.trees._
 import inox.trees.dsl._
 import InoxConvertible._
 import inox.evaluators.EvaluationResults
+import legacy.Implicits._
 import org.apache.commons.lang3.StringEscapeUtils
 
 import scala.annotation.tailrec
@@ -45,16 +49,11 @@ abstract class &~>[A: InoxConvertible, B: InoxConvertible]  extends (A ~~> B) {
     constraint(outId -> out).toStream(inId)
   }
 }
-
-/**  A way to provide a manual reverse of the transformation.
-  *  We should ensure that the method putManual always runs a finite algorithm. */
-trait ManualReverse[A, B] extends (A ~~> B) {
-  def putManual(out2: B, in1: Option[A]): Iterable[A]
-}
+import perfect.ManualReverse
 
 /** Particular case of ~~> where the only thing left to implement is the manual reverse.
   * It implements the constraint formula as a custom method name */
-abstract class %~>[A: InoxConvertible, B: InoxConvertible] extends ManualReverse[A, B] {
+abstract class %~>[A: InoxConvertible, B: InoxConvertible] extends (A ~~> B) with ManualReverse[A, B] {
   val methodName: String
   def put(o: Variable, i: Variable, in: Option[A]): Constraint[A] = {
     val format = FreshIdentifier(methodName)
@@ -62,10 +61,13 @@ abstract class %~>[A: InoxConvertible, B: InoxConvertible] extends ManualReverse
     Constraint[A](expr, Map(format -> this))
   }
   def put(out2: B, in1: Option[A]): Iterable[A] = putManual(out2, in1)
-}
 
-object Common {
-  val maybe : Identifier = FreshIdentifier("maybe")
+  def putExpr(outValue: Expr, inDefault: Expr): Iterable[Expr] = {
+    val realOutValue = constrainableOutput.recoverFrom(outValue)
+    val realDefaultValue = optionInoxConvertible(constrainableInput).recoverFrom(inDefault)
+    val inValues = putManual(realOutValue, realDefaultValue)
+    inValues.map(constrainableInput.produce)
+  }
 }
 
 // Definition of multiple lenses
@@ -83,8 +85,8 @@ object StringAppendReverse extends ((String, String) &~> String) {
       case None =>
         StringConcat(i.getField(_1), i.getField(_2)) === o
       case Some((a, b)) =>
-          StringConcat(i.getField(_1), E(b)) === o && E(Common.maybe)(i.getField(_2) === E(b)) ||
-          StringConcat(E(a), i.getField(_2)) === o && E(Common.maybe)(i.getField(_1) === E(a)) ||
+          StringConcat(i.getField(_1), E(b)) === o && E(Utils.maybe)(i.getField(_2) === E(b)) ||
+          StringConcat(E(a), i.getField(_2)) === o && E(Utils.maybe)(i.getField(_1) === E(a)) ||
           StringConcat(i.getField(_1), i.getField(_2)) === o
     }
     Constraint[(String, String)](expr)
@@ -104,8 +106,8 @@ object StringAppendReverse extends ((String, String) &~> String) {
       case None =>
         StringConcat(i.getField(_1), i.getField(_2)) === o
       case Some((a, b)) =>
-        StringConcat(i.getField(_1), E(b)) === o && E(Common.maybe)(i.getField(_2) === E(b)) ||
-          StringConcat(E(a), i.getField(_2)) === o && E(Common.maybe)(i.getField(_1) === E(a)) ||
+        StringConcat(i.getField(_1), E(b)) === o && E(Utils.maybe)(i.getField(_2) === E(b)) ||
+          StringConcat(E(a), i.getField(_2)) === o && E(Utils.maybe)(i.getField(_1) === E(a)) ||
           StringConcat(i.getField(_1), i.getField(_2)) === o
     }
     Constraint[(String, String)](expr)
@@ -124,7 +126,7 @@ object IntPlusReverse extends ((Int, Int) &~> Int) {
       case None =>
         i.getField(_1) + i.getField(_2) === o
       case Some((a, b)) =>
-        (i.getField(_1) + i.getField(_2) === o) && E(Common.maybe)(i.getField(_1) === E(a)) && E(Common.maybe)(i.getField(_2) === E(b))
+        (i.getField(_1) + i.getField(_2) === o) && E(Utils.maybe)(i.getField(_1) === E(a)) && E(Utils.maybe)(i.getField(_2) === E(b))
     }
     Constraint[(Int, Int)](expr)
   }
@@ -401,99 +403,7 @@ case class ListSplit[A: InoxConvertible](p: A => Boolean) extends (List[A] %~> (
   }
 }
 
-object XmlTrees {
-  private var displayNiceDSL = true
-
-  case class Node(tag: String, attributes: List[XMLAttribute], children: List[Node]) {
-    override def toString = if(displayNiceDSL) {
-      "<"+tag+attributes.map(_.toString).mkString+">"+children.map(x => "\n" + x.toString).mkString+"\n</"+tag+">"
-    } else s"Node($tag, $attributes, $children)"
-  }
-  case class XMLAttribute(name: String, value: String) {
-    override def toString = if(displayNiceDSL) {
-      " " + name + "=\"" + StringEscapeUtils.escapeJava(value) + "\""
-    } else s"XMLAttribute($name, $value)"
-  }
-}
-
-object WebTrees {
-  private var displayNiceDSL = true
-
-  implicit def toWebTree(i: InnerWebElement) = WebElement(i)
-  implicit def toWebTree2(i: List[InnerWebElement]): List[WebTree] = i.map(WebElement.apply _)
-
-  abstract class WebTree extends Product with Serializable
-  case class WebElement(inner: InnerWebElement) extends WebTree
-  abstract class InnerWebElement
-  case class TextNode(text: String) extends InnerWebElement {
-    override def toString = if(displayNiceDSL) "\"" + "\"".r.replaceAllIn("\\\\".r.replaceAllIn(text, "\\\\\\\\"), "\\\"") + "\"" else s"TextNode($text)"
-  }
-
-
-  object TextNode {
-    def apply[A: InoxConvertible](f: (A ~~> String)): (A ~~> TextNode) = new (A %~> TextNode) {
-      val methodName = "TextNodeApply"
-      def get(a: A) = TextNode(f.get(a))
-      def putManual(t: TextNode, in: Option[A]): Iterable[A] = {
-        f.put(t.text, in)
-      }
-    }
-  }
-  object Element {
-    def apply[A: InoxConvertible](tag: String, f: A ~~> List[WebElement]): (A %~> Element) = {
-      new (A %~> Element) {
-        val methodName = "ElementApply"
-        def get(a: A) = Element(tag, f.get(a))
-        def putManual(e: Element, in: Option[A]): Iterable[A] = Implicits.report(s"Element.put($e, $in) = %s") {
-          f.put(e.children, in)
-        }
-      }
-    }
-  }
-  import InoxConvertible._
-  case class InnerWebElementToWebTree[B <: InnerWebElement: InoxConvertible]() extends (B &~> WebTree) {
-    val name = "innerWebElementToWebTree" + Math.abs(this.hashCode()/2)
-    def get(a: B) = WebElement(a)
-    def put(out: Variable, in: Variable, inExpr: Option[B]) = {
-      Constraint[B](ADT(ADTType(Utils.webElement, Seq()), Seq(in)) === out)
-    }
-  }
-
-  case class Element(tag: String, children: List[WebElement] = Nil, attributes: List[WebAttribute] = Nil, styles: List[WebStyle] = Nil) extends InnerWebElement {
-    override def toString = if(displayNiceDSL) "<." + tag + (if(children.nonEmpty || attributes.nonEmpty || styles.nonEmpty) (children ++ attributes ++ styles).mkString("(", ", ", ")") else "") else {
-      if(styles.isEmpty) {
-        if(attributes.isEmpty) {
-          if(children.isEmpty) {
-            s"Element($tag)"
-          } else {
-            s"Element($tag,$children)"
-          }
-        } else {
-          s"Element($tag,$children,$attributes)"
-        }
-      } else
-      s"Element($tag,$children,$attributes,$styles)"
-    }
-
-    implicit object Dummy
-    
-    def apply[A: InoxConvertible](f: (A ~~> List[WebTree])): (A ~~> Element) = {
-      PairSame(Const[A, Element](this), f) andThen WebElementComposition
-    }
-    def apply[A: InoxConvertible, B <: InnerWebElement : InoxConvertible](f: (A ~~> List[B]))(implicit e: Dummy.type = Dummy): (A ~~> Element) = {
-      PairSame(Const[A, Element](this), f andThen MapReverse(InnerWebElementToWebTree[B]())) andThen WebElementComposition
-    }
-
-    def apply(l: List[WebTree]): Element = WebElementComposition.get((this, l))
-  }
-  case class WebAttribute(name: String, value: String) extends WebTree {
-    override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
-  }
-  case class WebStyle(name: String, value: String) extends WebTree {
-    override def toString = if(displayNiceDSL) "^." + name + " := " + value else super.toString
-  }
-}
-import WebTrees._
+import perfect.WebTrees._
 
 object TypeSplit extends (List[WebTree] %~> (List[WebElement], List[WebAttribute], List[WebStyle])) {
   import Interleavings._
@@ -758,64 +668,7 @@ case class Flatten[A: InoxConvertible]() extends %~>[List[List[A]], List[A]]()(l
   } // ensuring res => res.forall(sol => sol.flatten == out && lehvenstein(l, sol) == lehvenstein(out, sol.flatten))
 }
 
-// The F parameter allows to modify the mapping function itself.
-trait MapReverseLike[A, B, F] {
-  def map(l: List[A]): List[B] = l map f
-
-  def f: A => B
-  def fRev: (Option[A], B) => Stream[Either[A, F]]
-
-  def combinatorialMap(l: List[B]): Stream[List[Either[A, F]]] = report(s"combinatorialMap($l)=%s"){
-    l match {
-      case Nil => Stream(Nil)
-      case a::b =>
-        //println("#1")
-        fRev(None, a).flatMap(fb => combinatorialMap(b).map(fb::_))
-    }
-  }
-
-  private def mapRevAux(l: List[A], lOut: List[B], out: List[B]): Stream[List[Either[A, F]]] = {
-    //println(s"mapRevAux1:$l\nmapRevAux2:$lOut\nmapRevAux3:$out")
-    l match {
-    case Nil =>
-      out match {
-        case Nil => Stream(Nil)
-        case outhd::outtail =>
-          val revOutHd = fRev(None, outhd)
-          for{ sol <- mapRevAux(l, lOut, outtail)
-               other_a <- revOutHd } yield {
-            other_a :: sol
-          }
-      }
-    case hd::tl =>
-      out match {
-      case Nil => Stream(Nil)
-      case outhd::outtail =>
-        if(lOut.head == outhd) { // The out element is the right one, we don't touch it.
-          mapRevAux(l.tail, lOut.tail, out.tail).map(Left(hd)::_)
-        } else {
-          val k = lOut.indexOfSlice(out)
-          if (k > 0) { // There has been a deletion, but we are able to find the remaining elements.
-            mapRevAux(l.drop(k), lOut.drop(k), out)
-          } else {
-            val k2 = out.indexOfSlice(lOut)
-            if (k2 > 0) { // Some elements were added at some point.
-              val tailSolutions = mapRevAux(l, lOut, out.drop(k2))
-              // Now for each of out.take(k2), we take all possible inverses.
-              combinatorialMap(out.take(k2)).flatMap(l => tailSolutions.map(l ++ _))
-            } else { // No deletion, no insertion, hence modifications.
-              fRev(Some(hd), outhd).flatMap(s => mapRevAux(tl, lOut.tail, outtail).map(s :: _))
-            }
-          }
-        }
-      }
-    }
-  }
-
-  def mapRev(l: List[A], out: List[B]): Stream[List[Either[A, F]]] = {
-    mapRevAux(l, l.map(f), out)
-  }
-}
+import perfect.lenses.MapReverseLike
 
 case class MapReverse[A: InoxConvertible, B: InoxConvertible](fr: A ~~> B) extends (List[A] %~> List[B]) with MapReverseLike[A, B, Nothing] {
   val f: A => B = fr.get _
@@ -836,59 +689,7 @@ case class MapReverse[A: InoxConvertible, B: InoxConvertible](fr: A ~~> B) exten
   }
 }
 
-trait FilterLike[A] {
-  def filter(l: List[A], f: A => Boolean): List[A] = l filter f
-
-  @tailrec private def equalFilter(l: List[A], b: List[Boolean], out: List[A]): Boolean = {
-    l match {
-      case head :: tail => if(b.head) (
-        if(!out.isEmpty && out.head == head) equalFilter(tail, b.tail, out.tail)
-        else false) else equalFilter(tail, b.tail, out)
-      case Nil => true
-    }
-  }
-
-  @tailrec private def keepIfFalse(l: List[A], b: List[Boolean], result: List[A] = Nil): List[A] = l match {
-    case head::tail =>
-      if(!b.head) keepIfFalse(tail, b.tail, head::result)
-      else keepIfFalse(tail, b.tail, result)
-    case Nil => result.reverse
-  }
-
-  @tailrec private def filterRevAux(l: List[A], lPass: List[Boolean], out: List[A], outPass: List[Boolean], prepend: ListBuffer[A]): Stream[List[A]] = {
-    if (equalFilter(l, lPass, out)) Stream(prepend.toList ++ l) else
-      l match {
-        case Nil => Stream(prepend.toList ++ out)
-        case hd::tl =>
-          if(!lPass.head) {
-            filterRevAux(tl, lPass.tail, out, outPass, prepend += hd)
-          } else { // hd has to be kept
-            out match {
-              case Nil => // Everything was deleted ! We keep only the elements that could not have appeared in out
-                Stream(keepIfFalse(tl, lPass.tail))
-              case outhd::outtl =>
-                if(outhd == hd) { // The element is the same.
-                  filterRevAux(tl, lPass.tail, outtl, outPass.tail, prepend += outhd)
-                } else { // Find if elements have been deleted.
-                // hd != outhd, either we can find it later or it has been deleted.
-                  val expectedFiltered_l = l.zip(lPass).filter(_._2).map(_._1)
-                  val k = out.indexOfSlice(expectedFiltered_l)
-                  if(k > 0) { // There has been some additions in out, we add them directly.
-                    filterRevAux(l, lPass, out.drop(k), outPass.drop(k), prepend ++= out.take(k))
-                  } else {
-                    // Maybe some elements have been deleted.
-                    filterRevAux(tl, lPass.tail, out, outPass, prepend)
-                  }
-                }
-            }
-          }
-      }
-  }
-
-  def filterRev(l: List[A], f: A => Boolean, out: List[A]): Stream[List[A]] = {
-    filterRevAux(l, l.map(f), out, out.map(f), ListBuffer())
-  }
-}
+import perfect.lenses.FilterLike
 
 case class FilterReverse[A: InoxConvertible](f: A => Boolean) extends (List[A] %~> List[A]) with FilterLike[A] {
   def get(in: Input) = filter(in, f)

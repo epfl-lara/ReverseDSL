@@ -1,3 +1,4 @@
+package perfect
 /**
   * Created by Mikael on 22/03/2017.
   */
@@ -45,7 +46,7 @@ object InoxConvertible {
     ImplicitTuples.Combination3(c[A], c[B], c[C])
   /*implicit def tuple4Constrainable[A : InoxConvertible, B: InoxConvertible, C: InoxConvertible, D: InoxConvertible]
   : InoxConvertible[(A, B, C, D)] =
-    ImplicitTuples.Combination[(A, B, C, D)](c[A], c[B], c[C], c[D])*/
+    ImplicitTuples.TupleConvertible[(A, B, C, D)](c[A], c[B], c[C], c[D])*/
   //If need more tuples, add them here.
 
   implicit def listConstrainable[A: InoxConvertible]: InoxConvertible[List[A]] = new InoxConvertible[List[A]] {
@@ -100,7 +101,7 @@ object InoxConvertible {
       }
     }
 
-  import WebTrees._
+  import perfect.WebTrees._
 
   implicit val WebTreeInoxConvertible: InoxConvertible[WebTree] = new  InoxConvertible[WebTree] {
     import Utils._

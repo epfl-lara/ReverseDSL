@@ -1,20 +1,21 @@
-import scala.reflect.runtime.universe.TypeTag
+package perfect
+import inox.Identifier
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import InoxConvertible._
+import inox.solvers._
 
 object ImplicitTuples {
   def _Tuple2(tpe1: Type, tpe2: Type)(first: Expr, second: Expr) =
     ADT(ADTType(tuple2, Seq(tpe1, tpe2)), Seq(first, second))
 
   /* Generic combination class. We wish to have everything there, but it is apparently not possible */
-  abstract class Combination[Tuple <: Product](constrainables: InoxConvertible[_]*) extends InoxConvertible[Tuple] {
-    def getType = ADTType(_tupleTypes(constrainables.length - 2), constrainables.map(_.getType))
+  abstract class TupleConvertible[Tuple <: Product](convertibles: InoxConvertible[_]*) extends InoxConvertible[Tuple] {
+    def getType = ADTType(_tupleTypes(convertibles.length - 2), convertibles.map(_.getType))
   }
 
   /** Combination2 for Tuple2 */
-  case class Combination2[A, B](self: InoxConvertible[A], other: InoxConvertible[B]) extends Combination[(A, B)](self, other) {
+  case class Combination2[A, B](self: InoxConvertible[A], other: InoxConvertible[B]) extends TupleConvertible[(A, B)](self, other) {
     def recoverFrom(e: Expr): (A, B) = { val res = e match {
       case ADT(_, Seq(a, b)) => (self.recoverFrom(a), other.recoverFrom(b))
       case _ => throw new Exception("Could not recover tuple from " + e)
@@ -25,7 +26,7 @@ object ImplicitTuples {
   }
 
   /** Combination3 for Tuple3 */
-  case class Combination3[A, B, C](ca: InoxConvertible[A], cb: InoxConvertible[B], cc: InoxConvertible[C]) extends Combination[(A, B, C)](ca, cb, cc) {
+  case class Combination3[A, B, C](ca: InoxConvertible[A], cb: InoxConvertible[B], cc: InoxConvertible[C]) extends TupleConvertible[(A, B, C)](ca, cb, cc) {
     def recoverFrom(e: Expr): (A, B, C) = e match {
       case ADT(_, Seq(ea, eb, ec)) => (ca.recoverFrom(ea), cb.recoverFrom(eb), cc.recoverFrom(ec))
       case _ => throw new Exception("Could not recover tuple from " + e)
@@ -153,30 +154,7 @@ object ImplicitTuples {
       }
     }
   }*/
-  
-  class TupleProducer[A: InoxConvertible, Tuple <: Product : InoxConvertible, C: InoxConvertible] private[ImplicitTuples](
-      val f: A ~~> Tuple, val index: Int)
-    extends (A &~> C) {
-    def get(in: A): C = f.get(in).productElement(index-1).asInstanceOf[C]
-    val name = "Tuple"+index
-    override def put(varC: Variable, varA: Variable, in1: Option[A]): Constraint[A] = {
-      val selector = _tupleIdentifiers(index-1)
-      var varTuple = variable[Tuple]("t", true)
-      f.put(varTuple, varA, in1) &&  varTuple.getField(selector) === varC
-    }
-  }
 
-  implicit class Tuple2Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible]
-                        (f: A ~~> (B1, B2)) {
-    def _1 = new TupleProducer[A, (B1, B2), B1](f, 1)
-    def _2 = new TupleProducer[A, (B1, B2), B2](f, 2)
-  }
-  implicit class Tuple3Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible]
-                        (f: A ~~> (B1, B2, B3)) {
-    def _1 = new TupleProducer[A, (B1, B2, B3), B1](f, 1)
-    def _2 = new TupleProducer[A, (B1, B2, B3), B2](f, 2)
-    def _3 = new TupleProducer[A, (B1, B2, B3), B3](f, 3)
-  }
   /*
   implicit class Tuple4Producer[A: InoxConvertible, B1: InoxConvertible, B2: InoxConvertible, B3: InoxConvertible, B4: InoxConvertible]
                         (f: A ~~> (B1, B2, B3, B4)) {

@@ -1,10 +1,11 @@
+package legacy
+
+import shapeless.{:: => #:}
+
 import scala.language.dynamics
-import shapeless.{:: => #:, HList, HNil}
+import perfect.WebTrees._
 
 object WebBuilder {
-  import WebTrees._
-  
-  import Implicits._
   
   
   object < extends Dynamic {

@@ -1,4 +1,5 @@
-import inox.evaluators.{HasDefaultGlobalContext, HasDefaultRecContext}
+package perfect
+
 import inox._
 
 /**

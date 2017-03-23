@@ -1,3 +1,6 @@
+package perfect
+import legacy._
+
 import org.scalatest._
 import Matchers.{ === => _, _}
 import inox._
@@ -8,8 +11,9 @@ import scala.reflect.runtime.universe.TypeTag
 
 class StringAppendTest extends FunSuite {
   import InoxConvertible._
-  import ImplicitTuples._
-  import Implicits._
+  import legacy.ImplicitTuples._
+  import perfect.ImplicitTuples._
+  import legacy.Implicits._
 
   def doubleAppend(in: Id[(String, String)]) = {
     in._1 + in._2
@@ -88,8 +92,8 @@ class StringAppendTest extends FunSuite {
 
 class IntPlusReverseTest extends FunSuite  {
   import InoxConvertible._
-  import ImplicitTuples._
-  import Implicits._
+  import legacy.ImplicitTuples._
+  import legacy.Implicits._
 
 
   def add2and3(in: Id[(Int, Int)]) = {
@@ -189,8 +193,8 @@ class ListAppendTest extends FunSuite {
 */
 
 class StringFormatReverseTest extends FunSuite  {
-  import Implicits._
-  import ImplicitTuples._
+  import legacy.Implicits._
+  import legacy.ImplicitTuples._
 
   def format(in: Id[(String, List[Either[String, Int]])]) = {
     in._1.format(in._2)
@@ -223,7 +227,7 @@ class StringFormatReverseTest extends FunSuite  {
 
 
 class RegexReplaceAllInReverseTest extends FunSuite  {
-  import Implicits._
+  import legacy.Implicits._
   
   val f1 = new (List[String] %~> String) {
     val methodName = "fst"
@@ -586,8 +590,8 @@ class FlatMapTest extends FunSuite  {
 }
 
 class PizzaTest extends FunSuite {
-   import WebBuilder._
-   import Implicits.{/* RemoveUnit => _ ,*/ _}
+   import legacy.WebBuilder._
+   import legacy.Implicits.{/* RemoveUnit => _ ,*/ _}
    /*object TN extends (String ~~> List[WebTree]) {
      def get(s: String) = List(TextNode(s))
      def put(out: List[WebTree], s: Option[String]): Iterable[String] = report(s"TN.put($s, $out) = %s"){

@@ -1,12 +1,12 @@
+package perfect
+
+import inox.Identifier
 import inox._
 import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
-import inox.InoxProgram
-import inox.evaluators.EvaluationResults
-
 import scala.collection.mutable
-import scala.reflect.ClassTag
+import inox.evaluators._
 
 /**
   * Created by Mikael on 03/03/2017.
@@ -62,7 +62,7 @@ object ReverseProgramDirect {
 
   @inline def castOrFail[A, B <: A](a: A): B =
     a.asInstanceOf[B]
-  
+
   def defaultValue(t: Type)(implicit symbols: Symbols): Expr = {
     import inox._
     import inox.trees._

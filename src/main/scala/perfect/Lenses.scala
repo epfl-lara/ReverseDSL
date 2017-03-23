@@ -1,10 +1,11 @@
-/**
-  * Created by Mikael on 15/03/2017.
-  */
+package perfect
+package lenses
+
+import inox.Identifier
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-
+import inox.solvers._
 
 trait Lenses { self: ReverseProgram.type =>
   import Utils._

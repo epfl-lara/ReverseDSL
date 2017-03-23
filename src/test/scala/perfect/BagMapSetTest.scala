@@ -1,3 +1,6 @@
+package perfect
+import legacy._
+
 import org.scalatest.FunSuite
 
 /**

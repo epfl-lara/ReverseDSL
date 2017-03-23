@@ -1,6 +1,4 @@
-/**
-  * Created by Mikael on 22/03/2017.
-  */
+package perfect
 import ImplicitTuples._
 import inox._
 import inox.trees._
@@ -22,6 +20,9 @@ object Utils {
   val name: Identifier = FreshIdentifier("name")
   val xmlNode: Identifier = FreshIdentifier("Node")
   val xmlAttribute: Identifier = FreshIdentifier("Attribute")
+
+  val maybe : Identifier = FreshIdentifier("maybe")
+
 
   val list: Identifier = FreshIdentifier("List")
   val cons: Identifier = FreshIdentifier("Cons")

@@ -1,3 +1,6 @@
+package perfect
+import legacy._
+
 /**
   * Created by Mikael on 03/03/2017.
   */

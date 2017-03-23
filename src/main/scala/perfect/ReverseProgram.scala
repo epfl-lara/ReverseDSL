@@ -1,22 +1,20 @@
+package perfect
+
+import inox.Identifier
 import inox._
 import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
-import inox.InoxProgram
-import inox.evaluators.EvaluationResults
-
-import scala.collection.mutable
-import scala.reflect.ClassTag
-import mutable.ListBuffer
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 /**
   * Created by Mikael on 03/03/2017.
   */
-object ReverseProgram extends Lenses {
+object ReverseProgram extends lenses.Lenses {
   type FunctionEntry = Identifier
   type ModificationSteps = Unit
   type OutExpr = Expr
-  type Cache = mutable.HashMap[Expr, Expr]
+  type Cache = HashMap[Expr, Expr]
 
   case class ProgramFormula(program: Expr, formula: Formula = Formula()) {
     assert((freeVars.filter(vd => !formula.varsToAssign(vd) && !formula.unchanged(vd))).isEmpty,
@@ -58,7 +56,7 @@ object ReverseProgram extends Lenses {
 
   object Formula {
     def maybeDefault(e: Set[ValDef], values: Map[ValDef, Expr]): Formula = {
-      Formula(Map(), Set(), e) //and(e.toSeq.map{ v => E(Common.maybe)(v.toVariable === values(v))}: _*))
+      Formula(Map(), Set(), e) //and(e.toSeq.map{ v => E(Utils.maybe)(v.toVariable === values(v))}: _*))
     }
   }
 
@@ -167,7 +165,7 @@ object ReverseProgram extends Lenses {
     val prevFunction = prevProgram.symbols.functions.getOrElse(prevFunctionEntry, return Nil)
     val prevBody = prevFunction.fullBody
     val newMain = FreshIdentifier("main")
-    implicit val cache = new mutable.HashMap[Expr, Expr]
+    implicit val cache = new HashMap[Expr, Expr]
     for {ProgramFormula(newOutExpr, f) <- repair(ProgramFormula(prevBody), outExpr)
          _ = Log("Remaining formula: " + f)
          _ = Log("Remaining expression: " + newOutExpr)
@@ -377,7 +375,7 @@ object ReverseProgram extends Lenses {
                   Stream(ProgramFormula(newOut, Formula()))
                 } else
                 for {maybeMapping <- obtainMapping(l, freeVarsOfOut, Map(), lFun)
-                     constraint = and(maybeMapping.toSeq.map { case (k, v) => E(Common.maybe)(k.toVariable === v) }: _*) /: Log.constraint
+                     constraint = and(maybeMapping.toSeq.map { case (k, v) => E(Utils.maybe)(k.toVariable === v) }: _*) /: Log.constraint
                 } yield {
                   val isConstraintVariable = exprOps.variablesOf(constraint).map(_.toVal)
                   val variables = freeVarsOfOut.map(_.toVal)
@@ -434,7 +432,7 @@ object ReverseProgram extends Lenses {
         case v@Variable(id, tpe, flags) =>
           newOut match {
             case v2: Variable =>
-              Stream(ProgramFormula(v, Formula(Map(), Set(v.toVal, v2.toVal), Set(), v2 === v)))/* && E(Common.maybe)(v2 === currentValues(v.toVal))))*/
+              Stream(ProgramFormula(v, Formula(Map(), Set(v.toVal, v2.toVal), Set(), v2 === v)))/* && E(Utils.maybe)(v2 === currentValues(v.toVal))))*/
             case _ =>
               if(currentValues(v.toVal) == newOut) { // TODO: Evaluate newOut
                 Stream(ProgramFormula(v, Formula.maybeDefault(Set(v.toVal), Map(v.toVal -> newOut))))
@@ -497,7 +495,7 @@ object ReverseProgram extends Lenses {
                        Log.prefix(s"From repair($body, ${currentValues ++ argumentValues}, $newOut), recovered")
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
                    isSameBody = (newBody == body)              /: Log.isSameBody
-                   (newArguments, newArgumentsFormula) <- 
+                   (newArguments, newArgumentsFormula) <-
                      combineArguments(program, arguments.zip(freshArgsNames).map { case (arg, v) =>
                       val expected = newBodyFreshFormula.getOrElse(v, argumentValues(freshToOld(v).toVal))
                       (arg, expected)
@@ -540,7 +538,7 @@ object ReverseProgram extends Lenses {
       }
     } /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOut):\n~>")
   }
-  
+
   /** Given a sequence of (arguments expression, expectedValue),
       returns the cartesian product of all argument programs and solutions. */
   private def combineArguments(pf: ProgramFormula,

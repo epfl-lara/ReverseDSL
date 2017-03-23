@@ -1,13 +1,14 @@
-import scala.language.dynamics
-import shapeless.{HList, HNil, :: => #:}
+package legacy
+import inox._
+import inox.trees._
+import inox.trees.dsl._
+import perfect.{InoxConvertible, Utils}
+import perfect.WebTrees._
 
-import scala.language.implicitConversions
-
+/**
+  * Created by Mikael on 22/03/2017.
+  */
 object Implicits {
-  import ImplicitTuples._
-  import inox._
-  import inox.trees._
-  import inox.trees.dsl._
 
   var debug = false
   var indentation = 0
@@ -57,7 +58,7 @@ object Implicits {
       }
     }
   }
-  
+
   implicit class AugmentedReverseHNil[A, B](r: ((A #: HNil) ~~> B)) {
     def apply[BA](arg1: BA ~~> A): ((BA #: HNil) ~~> B) = {
       new ((BA #: HNil) ~~> B) {
@@ -73,7 +74,7 @@ object Implicits {
       }
     }
   }
-  
+
   implicit class AugmentedReverseHCons[A, B, R <: #:[_, _]](r: ((A #: R) ~~> B)) {
     def apply[BA, BR <: #:[_, _]](arg1: BA ~~> A, arg2: BR ~~> R): ((BA #: BR) ~~> B) = {
       new ((BA #: BR) ~~> B) {
@@ -91,10 +92,10 @@ object Implicits {
       }
     }
     /*def apply[BA, BR <: #:[_, _]](args: BA ~~> A, arg2: BR ~~> R): ((BA #: BR) ~~> B) = {
-    
+
     }*/
   }
-  
+
   implicit def RemoveUnit[A, B](r: ((Unit, A)~~>B)) = new (A ~~> B) {
     def get(a: A) = r.get(((), a))
     def put(out: B, a: Option[A]) = report(s"RemoveUnit.put($out, $a) = %s") { r.put(out, a.map(((), _))).map(_._2)}
@@ -102,7 +103,7 @@ object Implicits {
   import WebTrees._
   implicit class AugmentedConst[A](r: (A ~~> Element)) {
     def apply[B](args: B ~~> List[Tree]): ((A, B)  ~~> Element) = new  ((A, B)  ~~> Element) {
-      def get(ab: (A, B)) = 
+      def get(ab: (A, B)) =
         WebElementComposition.get((r.get(ab._1), args.get(ab._2)))
       def put(out: Element, ab: Option[(A, B)]): Iterable[(A, B)] = report(s"AugmentedConst.put($out, $ab) = %s"){
         val a = ab.map(_._1)
@@ -124,7 +125,7 @@ object Implicits {
       try { r.put(out.asInstanceOf[B], a) } catch { case _: Exception => Nil }
     }
   }
-  
+
   implicit def removeDuplicateArgument[A, C](f: (A, A) ~~> C): (A ~~> C) = new (A ~~> C) {
     def get(a: A) = f.get((a, a))
     def put(c: C, init: Option[A]) = report(s"removeDuplicateArguments.put($c, $init) = %s") {
@@ -133,16 +134,16 @@ object Implicits {
         case (a, b) => RecomposeTuples.unapply((a, b))
       }.distinct
       if(debug) println((" "*indentation) + " result:"+result/*.take(2)*/.toList)
-      
+
       val result2 = init match {
-        case Some(i) => 
+        case Some(i) =>
           if (result.exists(_ != i)) result.filter(_ != i) else result
         case None =>
           result
       }
-      
+
       if(debug) println((" "*indentation) +  " result2:"+result2.toList/*.take(2)*/)
-      
+
       def reorderStreamWorkingFirst(s: Stream[A]): Stream[A] = {
         val head = s.take(3)
         val tail = s.drop(3)
@@ -152,12 +153,12 @@ object Implicits {
       // If one of the suggested a is not the one in init, init is filtered out.
       val realresult =
       reorderStreamWorkingFirst(result2).distinct.toList
-      
+
       if(debug) println((" "*indentation) +  " realResult:"+realresult/*.take(2)*/)
       realresult
     }
   }
-  
+
   implicit def removeDuplicateArgument3[A, C](f: (A, A, A) ~~> C): (A ~~> C) = new (A ~~> C) {
     def get(a: A) = f.get((a, a, a))
     def put(c: C, init: Option[A]) = report(s"removeDuplicateArguments3.put($c, $init) = %s") {
@@ -166,16 +167,16 @@ object Implicits {
         case (a, b, c) => RecomposeTuples.unapply3((a, b, c))
       }.distinct
       if(debug) println((" "*indentation) + " result:"+result/*.take(2)*/.toList)
-      
+
       val result2 = init match {
-        case Some(i) => 
+        case Some(i) =>
           if (result.exists(_ != i)) result.filter(_ != i) else result
         case None =>
           result
       }
-      
+
       if(debug) println((" "*indentation) +  " result2:"+result2.toList/*.take(2)*/)
-      
+
       def reorderStreamWorkingFirst(s: Stream[A]): Stream[A] = {
         /*val head = s.take(3)
         val tail = s.drop(3)
@@ -185,7 +186,7 @@ object Implicits {
       // If one of the suggested a is not the one in init, init is filtered out.
       val realresult =
       reorderStreamWorkingFirst(result2).distinct.toList
-      
+
       if(debug) println((" "*indentation) +  " realResult:"+realresult/*.take(2)*/)
       realresult
     }
@@ -197,7 +198,7 @@ object Implicits {
       val result = p.toStream.flatMap{ case ((a, b), c) => List(a, b, c) }.distinct
       // If one of the suggested a is not the one in init, init is filtered out.
       (init match {
-        case Some(i) => 
+        case Some(i) =>
           if (result.exists(_ != i)) result.filter(_ != i) else result
         case None =>
           result
@@ -268,7 +269,7 @@ object Implicits {
     }*/
   }
   implicit class RegexEnhancer(e: scala.util.matching.Regex) {
-    def replaceAllIn[I](s: I ~~> String, f: List[String] ~~> String): (I ~~> String) = 
+    def replaceAllIn[I](s: I ~~> String, f: List[String] ~~> String): (I ~~> String) =
       s andThen RegexReplaceAllInReverse(e, f)
   }
 
@@ -302,7 +303,7 @@ object Implicits {
         }
       }
     }
-    
+
     def substring(start: Int, end: Int) = new (A ~~> String) {
       def get(in: A) = f.get(in).substring(start, end)
       def put(out: String, in1: Option[A]) = {
@@ -336,7 +337,7 @@ object Implicits {
         }
       }
     }
-    
+
     def indexOfSlice(substring: String) = new (A ~~> Int) {
       def get(a: A) = f.get(a).indexOfSlice(substring)
       def put(out: Int, in1: Option[A]) = in1 match {
@@ -351,7 +352,7 @@ object Implicits {
                 c = k1+substring+k2
                 sol <- f.put(c, in1)
             } yield sol
-            
+
           } else {
             if (out == -1) { // The substring should disappear.
               f.put(s.take(i) + s.drop(i+substring.length), in1)
@@ -359,7 +360,7 @@ object Implicits {
               // Caution: May not be ok if appears multiple times.
               val previousS = s.take(i) + s.drop(i+substring.length)
               val (k1, k2) = previousS.splitAt(out)
-              
+
               f.put(k1 + substring + k2, in1)
             } else {
               Nil
@@ -367,7 +368,7 @@ object Implicits {
           }
       }
     }
-    
+
     def indexOfSlice(substring: A ~~> String): (A ~~> Int) = new ((A, A) ~~> Int) {
       def get(a: (A, A)) = f.get(a._1).indexOfSlice(substring.get(a._2))
       def put(out: Int, in1: Option[(A, A)]) = in1 match {
@@ -423,11 +424,11 @@ object Implicits {
   def reverselistiterable[A](l: List[Iterable[A]]): Iterable[List[A]] = report(s"reverselistiterable($l)=%s"){
     l match {
       case Nil => Stream(Nil)
-      case a::b => 
+      case a::b =>
         a.flatMap(fb => reverselistiterable(b).map(fb::_))
     }
   }
-  
+
   def intersect[A](l: List[Iterable[A]]): Stream[A] = report(s"intersect(${l.map(_.toList)}) = %s"){
     l match {
       case Nil => Stream.empty
@@ -444,14 +445,14 @@ object Implicits {
       }
     }
   }
-  
+
   /** All elements not equal to origin which do not appear everywhere.*/
   def intersectLight[A](l: List[Iterable[A]], orig: A, first: Boolean = true): Stream[A] = report(s"intersectLight(${l.map(_.toList)}, $orig) = %s"){
     l match {
       case Nil => Stream.empty
       case Nil::tail => intersectLight(tail, orig, false)
       case head::tail =>
-        val headhead = head.head      
+        val headhead = head.head
         if (headhead == orig)
         intersectLight(head.tail::tail, orig, first)
         else if(!first || tail.exists(i => i.forall(e => e != headhead))) {
@@ -461,7 +462,7 @@ object Implicits {
         }
     }
   }
-  
+
   /*implicit def listOfTransformToTransformOfList[A: InoxConvertible, B: InoxConvertible](a: List[A ~~> B]): (List[A] ~~> List[B]) = new (List[A] %~> List[B]) {
     def get(in: List[A]) = a.zip(in).map{ case (ela, i) => ela.get(i) }
 
@@ -509,12 +510,54 @@ object Implicits {
       }
     }
   }
-  
+
   /*implicit def generalize[A, B, C <: A, D >: B](r: A ~~> B): (C ~~> D) = new (C ~~> D) {
     def get(a: C) = r.get(a): D
 
-    def put(a: Option[C], out: D): Iterable[C] = 
+    def put(a: Option[C], out: D): Iterable[C] =
       try { r.put(a.asInstanceOf[A], out).asInstanceOf[Iterable[C]] } catch { case _: Exception => Nil }
   }*/
   */
+
+  implicit class TextNodeAugmented(t: TextNode.type) {
+    def apply[A: InoxConvertible](f: (A ~~> String)): (A ~~> TextNode) = new (A %~> TextNode) {
+      val methodName = "TextNodeApply"
+      def get(a: A) = TextNode(f.get(a))
+      def putManual(t: TextNode, in: Option[A]): Iterable[A] = {
+        f.put(t.text, in)
+      }
+    }
+  }
+  implicit class ElementAugmented(t: Element.type) {
+    def apply[A: InoxConvertible](tag: String, f: A ~~> List[WebElement]): (A %~> Element) = {
+      new (A %~> Element) {
+        val methodName = "ElementApply"
+        def get(a: A) = Element(tag, f.get(a))
+        def putManual(e: Element, in: Option[A]): Iterable[A] = Implicits.report(s"Element.put($e, $in) = %s") {
+          f.put(e.children, in)
+        }
+      }
+    }
+  }
+
+  implicit object Dummy
+  implicit class ElementClassAugmented(t: Element) {
+    def apply[A: InoxConvertible](f: (A ~~> List[WebTree])): (A ~~> Element) = {
+      PairSame(Const[A, Element](t), f) andThen WebElementComposition
+    }
+    def apply[A: InoxConvertible, B <: InnerWebElement : InoxConvertible](f: (A ~~> List[B]))(implicit e: Dummy.type = Dummy): (A ~~> Element) = {
+      PairSame(Const[A, Element](t), f andThen MapReverse(InnerWebElementToWebTree[B]())) andThen WebElementComposition
+    }
+    def apply(l: List[WebTree]): Element = WebElementComposition.get((t, l))
+  }
+
+
+  case class InnerWebElementToWebTree[B <: InnerWebElement: InoxConvertible]() extends (B &~> WebTree) {
+    val name = "innerWebElementToWebTree" + Math.abs(this.hashCode()/2)
+    def get(a: B) = WebElement(a)
+    def put(out: Variable, in: Variable, inExpr: Option[B]) = {
+      Constraint[B](ADT(ADTType(Utils.webElement, Seq()), Seq(in)) === out)
+    }
+  }
+
 }

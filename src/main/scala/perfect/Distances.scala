@@ -1,3 +1,5 @@
+package perfect
+
 import scala.collection.mutable.ArrayBuffer
 
 object Distances extends Distances
