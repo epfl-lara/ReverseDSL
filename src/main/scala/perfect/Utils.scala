@@ -106,7 +106,7 @@ object Utils {
 
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)
-9
+
   @inline def castOrFail[A, B <: A](a: A): B =
     a.asInstanceOf[B]
 
@@ -118,7 +118,7 @@ object Utils {
     import inox.trees.dsl._
     import inox.solvers._
     t match {
-      case StringType => StringLiteral("#")
+      case StringType => StringLiteral("...")
       case Int32Type => IntLiteral(42)
       case IntegerType => IntegerLiteral(BigInt(86))
       case BooleanType => BooleanLiteral(true)

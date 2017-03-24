@@ -582,6 +582,35 @@ object ReverseProgram extends lenses.Lenses {
               unknownConstraints = and(constraints : _*))
           }
 
+        case MapApply(map, key) => // Variant of ADT selection.
+          val map_v = evalWithCache(letm(currentValues) in map).asInstanceOf[FiniteMap] //originalAdtValue
+          val key_v = evalWithCache(letm(currentValues) in key)
+
+          val defaultValue = map_v.default
+
+          val vds = map_v.pairs.map{ case (k, v) => (k, ValDef(FreshIdentifier("x", true), map_v.valueType, Set()))}
+          var found = false
+          val constraints = (vds map {
+            case (k, vd) => if(k == key_v) {
+              found = true
+              vd.toVariable === newOut
+            } else {
+              E(Utils.maybe)(vd.toVariable === evalWithCache(MapApply(map_v, k)))
+            }
+          })
+          val finiteMapRepair = if (!found) { // We should not change the default, rather add a new entry.
+            FiniteMap(vds.map{x => (x._1, x._2.toVariable)} :+ (key_v -> newOut)
+              , map_v.default, map_v.keyType, map_v.valueType)
+          } else {
+            FiniteMap(vds.map{x => (x._1, x._2.toVariable)}, map_v.default, map_v.keyType, map_v.valueType)
+          }
+
+          for{ pf <- repair(program.subExpr(map), finiteMapRepair) } yield {
+            pf.wrap(x => MapApply(x, key)) combineWith Formula(
+              varsToAssign = vds.map(_._2).toSet,
+              unknownConstraints = and(constraints : _*))
+          }
+
         case m@Application(lambdaExpr, arguments) =>
           val originalValue = (lambdaExpr match {
             case v: Variable => currentValues.getOrElse(v.toVal, evalWithCache(letm(currentValues) in v))
@@ -640,35 +669,6 @@ object ReverseProgram extends lenses.Lenses {
                 val formula = newForm combineWith newArgumentsFormula
                 ProgramFormula(FunctionInvocation(f, tpes, newArguments), formula)
               }
-          }
-
-        case MapApply(map, key) =>
-          val map_v = evalWithCache(letm(currentValues) in map).asInstanceOf[FiniteMap] //originalAdtValue
-          val key_v = evalWithCache(letm(currentValues) in key)
-
-          val defaultValue = map_v.default
-
-          val vds = map_v.pairs.map{ case (k, v) => (k, ValDef(FreshIdentifier("x", true), map_v.valueType, Set()))}
-          var found = false
-          val constraints = (vds map {
-            case (k, vd) => if(k == key_v) {
-              found = true
-              vd.toVariable === newOut
-            } else {
-              E(Utils.maybe)(vd.toVariable === evalWithCache(MapApply(map_v, k)))
-            }
-          })
-          val finiteMapRepair = if (!found) { // We should not change the default, rather add a new entry.
-            FiniteMap(vds.map{x => (x._1, x._2.toVariable)} :+ (key_v -> newOut)
-              , map_v.default, map_v.keyType, map_v.valueType)
-          } else {
-            FiniteMap(vds.map{x => (x._1, x._2.toVariable)}, map_v.default, map_v.keyType, map_v.valueType)
-          }
-
-          for{ pf <- repair(program.subExpr(map), finiteMapRepair) } yield {
-            pf.wrap(x => MapApply(x, key)) combineWith Formula(
-              varsToAssign = vds.map(_._2).toSet,
-              unknownConstraints = and(constraints : _*))
           }
         case anyExpr =>
           Log(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")

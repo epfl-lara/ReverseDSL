@@ -67,6 +67,28 @@ class BagMapSetTest extends FunSuite with TestHelpers {
       repairProgram(pfun, "Bonjour Ravi, comment tu vas, Mikael"))
   }
 
+  test("Repair non-existent values") {
+    val pfun = function(
+      let("tr" :: inoxTypeOf[Map[String, String]],
+        _Map[String, String](
+          "hello" -> StringConcat("Hello ", "World"),
+          "howareu" -> StringConcat(", comment tu vas", "???")
+        )
+      ){ trv =>
+        MapApply(trv, "newkey")
+      }
+    )(inoxTypeOf[String])
+
+    checkProg(Utils.defaultValue(inoxTypeOf[String])(Utils.defaultSymbols), pfun)
+    checkProg("New world",
+      repairProgram(pfun, "New world")) matchBody {
+      case Let(tr, FiniteMap(pairs, _, _, _), MapApply(_, StringLiteral("newkey"))) =>
+        pairs should contain((StringLiteral("newkey"), StringLiteral("New world")))
+        pairs should contain((StringLiteral("hello"), StringConcat("Hello ", "World")))
+        pairs should contain((StringLiteral("howareu"), StringConcat(", comment tu vas", "???")))
+    }
+  }
+
   test("Revert the use of a bag") {
 
   }

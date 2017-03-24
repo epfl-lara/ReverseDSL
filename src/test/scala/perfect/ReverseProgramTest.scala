@@ -541,6 +541,24 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     }
   }
 
+  test("Tuple select repair preserving input programs") {
+    import ImplicitTuples._
+    val pfun = function(
+      ADTSelector(
+        ADT(T(tuple2)(StringType, StringType),
+          Seq(StringConcat("Hello", ", "), inoxExprOf[String]("world"))), _1)
+    )(inoxTypeOf[String])
+
+    checkProg("Hello, ", pfun)
+    checkProg("Hello! ", repairProgram(pfun, "Hello! ")) matchBody {
+      case ADTSelector(ADT(_,
+        Seq(StringConcat(StringLiteral(s), StringLiteral(t)), StringLiteral(w))), `_1`) =>
+        s shouldEqual "Hello"
+        t shouldEqual "! "
+        w shouldEqual "world"
+    }
+  }
+
   test("Tuple select repair when used twice.") {
     import ImplicitTuples._
     val tp = T(tuple2)(StringType, StringType)

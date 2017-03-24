@@ -325,14 +325,18 @@ trait Lenses { self: ReverseProgram.type =>
         })
       }
 
-      def defaultCase: Stream[(Seq[Expr], Formula)] = {
+      def defaultCase(addMaybes: Boolean = false): Stream[(Seq[Expr], Formula)] = {
         val left = ValDef(FreshIdentifier("l", true), StringType, Set())
         val right = ValDef(FreshIdentifier("r", true), StringType, Set())
         Log(s"String default case: ${left.id} + ${right.id} == $newOutput:")
 
         val f = Formula(Map(), Set(left, right), Set(),
           newOutput === FunctionInvocation(identifier, tps, Seq(left.toVariable, right.toVariable))
-            //&& not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
+            &<>& (if(addMaybes)
+              E(Utils.maybe)(left.toVariable === leftValue) && E(Utils.maybe)(right.toVariable === rightValue)
+          else BooleanLiteral(true)
+            ) // Maybe use what is below for faster convergence?
+//            (if(addMaybes) not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
         )
 
         Stream((Seq(left.toVariable, right.toVariable), f))
@@ -342,8 +346,7 @@ trait Lenses { self: ReverseProgram.type =>
       newOutput match {
         case StringLiteral(s) =>
           rightCase(s) append leftCase(s) append {
-            println("Evaluate default case #1")
-            defaultCase
+            defaultCase(false)
           }
         case l@Let(vd, value, newbody) =>
           /* Copy and paste, insertion, replacement:
@@ -356,7 +359,8 @@ trait Lenses { self: ReverseProgram.type =>
         *  => A single let(delete, "", newbody) with a single occurrence of delete in newbody
         **/
           ???
-        case _ => { println(s"Evaluate default case #2 because $newOutput"); defaultCase}
+        case _ =>
+          defaultCase(true)
       }
     }
 
