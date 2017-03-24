@@ -377,8 +377,34 @@ object ReverseProgram extends lenses.Lenses {
             }
             newOut match {
               case v: Variable =>
+                val insertedPairs = program.formula.unknownConstraints match {
+                  case TopLevelAnds(ands) =>
+                    ands.collectFirst[Seq[(Expr, Expr)]]{
+                      case Equals(mapVar, FiniteMap(possiblyNewPairs, _, _, _))
+                        if mapVar == v => possiblyNewPairs
+                    } match {
+                      case None => Nil
+                      case Some(np) => np.filter{
+                        case (k, v) => !partEvaledPairs.exists(x => x._1 == k)
+                      }
+                    }
+                }
                 // We output the constraints with the given FiniteMap description.
-
+                // We repair symbolically on every map's value.
+                val repairs = partEvaledPairs.map{
+                  case (key_v, (key, value, value_v)) =>
+                    repair(program.subExpr(value), MapApply(v, key))
+                }
+                for{pf_seq <- inox.utils.StreamUtils.cartesianProduct(repairs)} yield {
+                  val (list_m, formula) = combineResults(pf_seq, currentValues)
+                  val newPairs = (list_m.zip(partEvaledPairs) map {
+                    case (e, (_, (key, value, _))) => key -> e
+                  }) ++ insertedPairs
+                  ProgramFormula(
+                    FiniteMap(newPairs, l.default, l.keyType, l.valueType),
+                    formula)
+                }
+                /*
                 if(currentValues contains v.toVal) {
                   //val FiniteMap(original_pairs, _, _, _) = currentValues(v.toVal)
                   val repairedValues = partEvaledPairs.map{
@@ -396,7 +422,7 @@ object ReverseProgram extends lenses.Lenses {
                     case (key_v, (key, value, value_v)) => E(Utils.maybe)(MapApply(newOut, key) === value)
                   }: _*)
                   Stream(ProgramFormula(newOut, Formula(Map(), Set(v.toVal), Set(), maybes)))
-                }
+                }*/
               case fm: FiniteMap => // Raw replacement
                 val (newFiniteMapKV) = (ListBuffer[Stream[(Expr, ProgramFormula)]]() /: partEvaledPairs) {
                   case (lb, (key_v, (key, value, value_v))) =>
@@ -632,7 +658,7 @@ object ReverseProgram extends lenses.Lenses {
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
                    isSameBody = (newBody == body)              /: Log.isSameBody
                    args <-
-                     combineArguments(program,
+                     combineArguments(program combineWith newBodyFreshFormula,
                        arguments.zip(freshArgsNames).map { case (arg, v) =>
                       val expected = newBodyFreshFormula.getOrElse(v, argumentValues(freshToOld(v).toVal))
                       (arg, expected)
