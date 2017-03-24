@@ -53,8 +53,19 @@ object ReverseProgram extends lenses.Lenses {
       }
     }
 
+    /** Uses the result of a programFormula by wrapping the expression */
     def wrap(f: Expr => Expr): ProgramFormula = {
       ProgramFormula(f(program), formula)
+    }
+
+    /** Replaces the expression with another, for defining sub-problems mostly. */
+    def subExpr(f: Expr): ProgramFormula = {
+      ProgramFormula(f, formula)
+    }
+
+    /** Augment this program with the given formula */
+    def combineWith(f: Formula): ProgramFormula = {
+      ProgramFormula(program, formula combineWith f)
     }
   }
 
@@ -96,6 +107,10 @@ object ReverseProgram extends lenses.Lenses {
     /** Returns an expression equal to the value of vd*/
     def getOrElse(vd: ValDef, e: =>Expr): Expr = {
       known.getOrElse(vd, {
+        /*val TopLevelAnds(ands) = unknownConstraints
+        ands.collectFirst{
+          case Equals(x, y) => x ==
+        }*/
         if(varsToAssign(vd)) {
           vd.toVariable
         } else e // The expression is unchanged, we return the original expression
@@ -103,17 +118,15 @@ object ReverseProgram extends lenses.Lenses {
     }
 
     // The assignments and the formula containing the other expressions.
-    def determinizeAll(/*freeVariablesOriginal: Seq[ValDef]*/)(implicit symbols: Symbols): Stream[Map[ValDef, Expr]] = {
+    def determinizeAll(freeVariables: Seq[ValDef] = varsToAssign.toSeq)(implicit symbols: Symbols): Stream[Map[ValDef, Expr]] = {
 
       Log(s"Trying to get all solutions for $varsToAssign of \n" + this)
-      val freeVariables = varsToAssign.toSeq
+      //val freeVariables = varsToAssign.toSeq
 
-      //if(freeVariables.isEmpty) return Stream(known)
       unknownConstraints match {
         case BooleanLiteral(true) => Stream(freeVariables.map(fv => fv -> known(fv)).toMap)
         case BooleanLiteral(false) => Stream.empty
         case _ =>
-          if(freeVariables.isEmpty) throw new Exception("Should not ask this question?!")
           val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
           //println(s"input is of type ${input.getType}")
           val constraint = InoxConstraint(input === tupleWrap(freeVariables.map(_.toVariable)) && unknownConstraints && and(known.toSeq.map{ case (k, v) => k.toVariable === v} : _*))
@@ -152,6 +165,11 @@ object ReverseProgram extends lenses.Lenses {
       }
     }
   }
+
+  def ifEmpty[A](a: Stream[A])(b: =>Stream[A]): Stream[A] = {
+    if(a.isEmpty) b else a
+  }
+
   def put[A: InoxConvertible](out: A, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
     put(inoxExprOf[A](out), prevOut, modif, prevIn)
   }
@@ -170,10 +188,11 @@ object ReverseProgram extends lenses.Lenses {
     val prevBody = prevFunction.fullBody
     val newMain = FreshIdentifier("main")
     implicit val cache = new HashMap[Expr, Expr]
-    for {ProgramFormula(newOutExpr, f) <- repair(ProgramFormula(prevBody), outExpr)
+    for { r <- repair(ProgramFormula(prevBody), outExpr)
+         ProgramFormula(newOutExpr, f) = r
          _ = Log("Remaining formula: " + f)
          _ = Log("Remaining expression: " + newOutExpr)
-         assignments <- f.determinizeAll(/*exprOps.variablesOf(newOutExpr)*/)
+         assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toSeq.map(_.toVal))
          _ = Log("Found assignments: " + assignments)
          finalNewOutExpr = exprOps.replaceFromSymbols(assignments, newOutExpr)
          _ = Log("Final  expression: " + finalNewOutExpr)
@@ -340,15 +359,66 @@ object ReverseProgram extends lenses.Lenses {
           if(isValue(l)) {
             newOut match {
               case v: Variable => // Replacement with the variable newOut, with a maybe clause.
-                Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(v.toVal))))
-              case l: FiniteMap => // Raw replacement
+                val maybes = and(l.pairs.map {
+                  case (key_v, value_v) => E(Utils.maybe)(MapApply(newOut, key_v) === value_v)
+                }: _*)
+
+                Stream(ProgramFormula(newOut, Formula(Map(), Set(v.toVal), Set(), maybes)))
+              case fm: FiniteMap => // Raw replacement
                 Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set())))
               /*case l@Let(cloned: ValDef, _, _) =>
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
-              case _ => throw new Exception("Don't know what to do, not a Literal, a Variable, or a let: " + newOut)
+              case _ => throw new Exception("Don't know what to do, not a Literal or a Variable " + newOut)
             }
           } else {
-            ???
+            // Check for changed keys, removals and additions.
+            lazy val partEvaledPairs = l.pairs.map{ case (key, value) =>
+              (evalWithCache(letm(currentValues) in key), (key, value, evalWithCache(letm(currentValues) in value)))
+            }
+            newOut match {
+              case v: Variable =>
+                // We output the constraints with the given FiniteMap description.
+
+                if(currentValues contains v.toVal) {
+                  //val FiniteMap(original_pairs, _, _, _) = currentValues(v.toVal)
+                  val repairedValues = partEvaledPairs.map{
+                    case (key_v, (key, value, value_v)) =>
+                      repair(program.subExpr(value), MapApply(v, key_v))
+                  }
+                  val linRepairedValues = inox.utils.StreamUtils.cartesianProduct(repairedValues)
+                  for{pfs <- linRepairedValues} yield {
+                    val (lExpr, formula) = combineResults(pfs, currentValues)
+                    val expr = l.copy(pairs=l.pairs.zip(lExpr).map{ x => x._1._1 -> x._2})
+                    ProgramFormula(expr, formula)
+                  }
+                } else {
+                  val maybes = and(partEvaledPairs.map {
+                    case (key_v, (key, value, value_v)) => E(Utils.maybe)(MapApply(newOut, key) === value)
+                  }: _*)
+                  Stream(ProgramFormula(newOut, Formula(Map(), Set(v.toVal), Set(), maybes)))
+                }
+              case fm: FiniteMap => // Raw replacement
+                val (newFiniteMapKV) = (ListBuffer[Stream[(Expr, ProgramFormula)]]() /: partEvaledPairs) {
+                  case (lb, (key_v, (key, value, value_v))) =>
+                    if(!fm.pairs.exists(_._1 == key_v)) {
+                      lb
+                    } else {
+                      val i = fm.pairs.lastIndexWhere(_._1 == key_v)
+                      val newValue = fm.pairs(i)._2
+                      lb += repair(program.subExpr(value), newValue).map(pf => (key, pf))
+                    }
+                }.toList
+                for {solution <- inox.utils.StreamUtils.cartesianProduct(newFiniteMapKV)
+                     (mapKeys, mapValuesFormula) = solution.unzip
+                     mapValues = mapValuesFormula.map(_.program)
+                     mapFormula = mapValuesFormula.map(_.formula)
+                     formula = (Formula() /: mapFormula){ case (f, ff) => f combineWith ff }
+                } yield {
+                  ProgramFormula(FiniteMap(mapKeys.zip(mapValues), l.default, l.keyType, l.valueType), formula)
+                }
+              case _ => throw new Exception("Don't know what to do, not a Literal or a Variable: " + newOut)
+            }
+
           }
         case lFun@Lambda(vd, body) =>  // Check for closures, i.e. free variables.
           val freeVars = exprOps.variablesOf(body).map(_.toVal) -- vd
@@ -393,11 +463,11 @@ object ReverseProgram extends lenses.Lenses {
 
               val simplifiedExpectedBody = simplify(exprOps.replaceFromSymbols(oldToValue, expectedBody))
               Log(s"variablesToAssign: $variablesToAssign, oldToFresh = $oldToFresh")
-              for {ProgramFormula(newBody, f) <- repair(ProgramFormula(bodyWithFreshVariables,
+              for {pf <- repair(ProgramFormula(bodyWithFreshVariables,
                 Formula(freshToValue ++ freeVars.map(fv => fv -> currentValues(fv)).toMap, variablesToAssign)), simplifiedExpectedBody)
-                   _ = Log(s"Going to test if lambda can be repaired using $newBody, $f, $freshToValue")
               } yield {
-
+                  val ProgramFormula(newBody, f) = pf
+                  Log(s"Going to test if lambda can be repaired using $newBody, $f, $freshToValue")
                   val newFreevarAssignments = freeVars.flatMap(fv => f.known.get(fv).map(res => fv -> res)).toMap
                   val newConstraint = f.unknownConstraints &<>& and(freshToValue.toSeq.map{ case (k, v) => k.toVariable === v}: _*)
                   Log(s"Returning lambda using $newBody, $f, $freshToValue, \n$newFreevarAssignments")
@@ -419,12 +489,36 @@ object ReverseProgram extends lenses.Lenses {
           newOut match {
             case v2: Variable =>
               Stream(ProgramFormula(v, Formula(Map(), Set(v.toVal, v2.toVal), Set(), v2 === v)))/* && E(Utils.maybe)(v2 === currentValues(v.toVal))))*/
+            /*case f: FiniteMap => // Special case because we should only propagate changes in the map itself.
+              functionValue match {
+                case fm@FiniteMap(pairs, default, kt, vt) =>
+                  val newFormula = (Formula() /: f.pairs) { case (formula, (key, value)) =>
+                    val i = fm.pairs.lastIndexWhere(_._1 == key)
+                    if(i == -1) { // It has been inserted
+                      println(s"$key did not appear in $fm, adding a constraint")
+                      formula combineWith Formula(Map(), exprOps.variablesOf(value).map(_.toVal) + v.toVal, Set(),
+                        MapApply(v, key) === value
+                      )
+                    } else {
+                      val previousValue = fm.pairs(i)._2
+                      if(previousValue != value) { // A variable has been put there.
+                        println(s"$previousValue != $value so we add it to the formula, for key $key")
+                        formula combineWith Formula(Map(), exprOps.variablesOf(value).map(_.toVal) + v.toVal, Set(),
+                          MapApply(v, key) === value
+                        )
+                      } else formula
+                    }
+                  }
+                  Stream(ProgramFormula(v, newFormula))
+                case _ => throw new Exception(s"Value not a Map: $functionValue")
+              }*/
             case _ =>
-              if(currentValues(v.toVal) == newOut) { // TODO: Evaluate newOut
+              /*if(currentValues(v.toVal) == newOut) { // TODO: Evaluate newOut
                 Stream(ProgramFormula(v, Formula.maybeDefault(Set(v.toVal), Map(v.toVal -> newOut))))
-              } else {
-                Stream(ProgramFormula(v, Formula(Map(), Set(v.toVal), Set(), v === newOut)))
-              }
+              } else {*/
+                val varsOfNewOut = exprOps.variablesOf(newOut).map(_.toVal)
+                Stream(ProgramFormula(v, Formula(Map(), Set(v.toVal) ++ varsOfNewOut, Set(), v === newOut)))
+              //}
           }
 
         case Let(vd, expr, body) =>
@@ -435,12 +529,16 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case StringConcat(expr1, expr2) =>
-          for(pf <- repair(program.copy(program = FunctionInvocation(StringConcatReverser.identifier, Nil,
+          ifEmpty(for(pf <- repair(program.copy(program = FunctionInvocation(StringConcatReverser.identifier, Nil,
             Seq(expr1, expr2))), newOut)) yield {
             pf match {
               case ProgramFormula(FunctionInvocation(StringConcatReverser.identifier, Nil, Seq(x, y)), f) =>
                 ProgramFormula(StringConcat(x, y), f)
             }
+          }){
+            val constraint = newOut === function
+            Stream(ProgramFormula(function,
+              Formula(Map(), exprOps.variablesOf(constraint).map(_.toVal), Set(), constraint)))
           }
 
         case ADT(ADTType(tp, tpArgs), argsIn) =>
@@ -463,6 +561,27 @@ object ReverseProgram extends lenses.Lenses {
               throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
           }
 
+        case as@ADTSelector(adt, selector) =>
+          val originalAdtValue = evalWithCache(letm(currentValues) in adt).asInstanceOf[ADT]
+          val constructor = as.constructor.get
+          val fields = constructor.fields
+          val index = as.selectorIndex
+          val vds = fields.map{ fd => ValDef(FreshIdentifier("x", true), fd.getType, Set())}
+          val constraints = vds.zipWithIndex map {
+            case (vd, i) => if(i == index) {
+              vd.toVariable === newOut
+            } else {
+              E(Utils.maybe)(vd.toVariable === originalAdtValue.args(i))
+            }
+          }
+
+          for{ pf <- repair(program.subExpr(adt),
+            ADT(ADTType(constructor.id, constructor.tps), vds.map(_.toVariable))) } yield {
+            pf.wrap(x => ADTSelector(x, selector)) combineWith Formula(
+              varsToAssign = vds.toSet,
+              unknownConstraints = and(constraints : _*))
+          }
+
         case m@Application(lambdaExpr, arguments) =>
           val originalValue = (lambdaExpr match {
             case v: Variable => currentValues.getOrElse(v.toVal, evalWithCache(letm(currentValues) in v))
@@ -475,25 +594,29 @@ object ReverseProgram extends lenses.Lenses {
               val oldToFresh = argNames.zip(freshArgsNames).toMap
               val freshToOld = freshArgsNames.zip(argNames.map(_.toVariable)).toMap
               val argumentValues = argNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
-
-              for {ProgramFormula(newBodyFresh, newBodyFreshFormula) <-
-                     repair(ProgramFormula(freshBody, Formula(argumentValues.map{ case (k,v) => oldToFresh(k) -> v}, freshArgsNames.toSet)).wrappingEnabled, newOut)  /::
-                       Log.prefix(s"From repair($body, ${currentValues ++ argumentValues}, $newOut), recovered")
+              val freshArgumentValues = argumentValues.map{ case (k,v) => oldToFresh(k) -> v}
+              val freshFormula = Formula(freshArgumentValues, freshArgsNames.toSet)
+              for {pf <-
+                     repair(ProgramFormula(freshBody, freshFormula).wrappingEnabled, newOut)  /::
+                       Log.prefix(s"From repair$stackLevel'(\n  $freshBody,\n  $freshFormula,\n  $newOut), recovered:\n")
+                   ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
                    isSameBody = (newBody == body)              /: Log.isSameBody
-                   (newArguments, newArgumentsFormula) <-
-                     combineArguments(program, arguments.zip(freshArgsNames).map { case (arg, v) =>
+                   args <-
+                     combineArguments(program,
+                       arguments.zip(freshArgsNames).map { case (arg, v) =>
                       val expected = newBodyFreshFormula.getOrElse(v, argumentValues(freshToOld(v).toVal))
                       (arg, expected)
                      })
-
+                   (newArguments, newArgumentsFormula) = args
                    newLambda = if (isSameBody) l else Lambda(argNames, newBody)
-                   ProgramFormula(newAppliee, lambdaRepairFormula) <- lambdaExpr match {
+                   pfLambda <- lambdaExpr match {
                      case v: Variable => Stream(ProgramFormula(v, (
                        if(isSameBody) Formula.maybeDefault(Set(v.toVal), currentValues) else
                          Formula(Map(v.toVal -> newLambda), Set(v.toVal)))))
                      case l => repair(ProgramFormula(l, program.formula), newLambda)
                    }
+                   ProgramFormula(newAppliee, lambdaRepairFormula) = pfLambda
                    finalApplication = Application(newAppliee, newArguments)           /: Log.prefix("finalApplication")
               } yield {
                 val combinedFormula = newBodyFreshFormula combineWith lambdaRepairFormula combineWith newArgumentsFormula
@@ -510,8 +633,9 @@ object ReverseProgram extends lenses.Lenses {
             case Some(reverser) =>
               val argsValue = args.map(arg => evalWithCache(letm(currentValues) in arg))
               val lenseResult = reverser.put(tpes)(argsValue, newOut)
-              for{(newArgsValues, newForm) <- lenseResult
-                  (newArguments, newArgumentsFormula) <- combineArguments(program, args.zip(newArgsValues))
+              for{l <- lenseResult; (newArgsValues, newForm) = l
+                  a <- combineArguments(program, args.zip(newArgsValues))
+                  (newArguments, newArgumentsFormula) = a
               } yield {
                 val formula = newForm combineWith newArgumentsFormula
                 ProgramFormula(FunctionInvocation(f, tpes, newArguments), formula)
@@ -519,33 +643,45 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case MapApply(map, key) =>
-          val map_v = evalWithCache(letm(currentValues) in map)
+          val map_v = evalWithCache(letm(currentValues) in map).asInstanceOf[FiniteMap] //originalAdtValue
           val key_v = evalWithCache(letm(currentValues) in key)
-          val newMap = map_v match {
-            case FiniteMap(pairs, default, keyType, valueType) =>
-              FiniteMap(
-                pairs.map{
-                  case (k, v) => if(k == key_v) k -> newOut else k -> v
-                },
-                default, keyType, valueType
-              )
-            case _ => throw new Exception(s"Did not evaluate to a map: $map_v")
-          }
-          for(pf <- repair(ProgramFormula(map, program.formula), newMap)) yield {
-            pf.wrap(MapApply(_, key))
+
+          val defaultValue = map_v.default
+
+          val vds = map_v.pairs.map{ case (k, v) => (k, ValDef(FreshIdentifier("x", true), map_v.valueType, Set()))}
+          var found = false
+          val constraints = (vds map {
+            case (k, vd) => if(k == key_v) {
+              found = true
+              vd.toVariable === newOut
+            } else {
+              E(Utils.maybe)(vd.toVariable === evalWithCache(MapApply(map_v, k)))
+            }
+          })
+          val finiteMapRepair = if (!found) { // We should not change the default, rather add a new entry.
+            FiniteMap(vds.map{x => (x._1, x._2.toVariable)} :+ (key_v -> newOut)
+              , map_v.default, map_v.keyType, map_v.valueType)
+          } else {
+            FiniteMap(vds.map{x => (x._1, x._2.toVariable)}, map_v.default, map_v.keyType, map_v.valueType)
           }
 
+          for{ pf <- repair(program.subExpr(map), finiteMapRepair) } yield {
+            pf.wrap(x => MapApply(x, key)) combineWith Formula(
+              varsToAssign = vds.map(_._2).toSet,
+              unknownConstraints = and(constraints : _*))
+          }
         case anyExpr =>
           Log(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")
           Stream.empty
       }
-    } /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOut):\n~>")
+    } #::: {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOut):\n~>")
   }
 
   /** Given a sequence of (arguments expression, expectedValue),
       returns the cartesian product of all argument programs and solutions. */
   private def combineArguments(pf: ProgramFormula,
       arguments: Seq[(Expr, Expr)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
+    Log(s"combining arguments for $pf")
     val argumentsReversed = arguments.map { case (arg, expected) =>
       Log(s" repairing argument $arg should equal $expected")
       repair(ProgramFormula(arg, pf.formula), expected)

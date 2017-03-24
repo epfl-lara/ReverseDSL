@@ -18,10 +18,6 @@ import sun.swing.SwingUtilities2.RepaintListener
 
 import scala.reflect.runtime.universe.TypeTag
 
-object Make {
-  def apply[A: InoxConvertible, B](in: Id[A] => (A ~~> B)): (A ~~> B) = in(Id[A]())
-}
-
 /** Mixin for tests repairing programs */
 trait TestHelpers {
   import InoxConvertible._

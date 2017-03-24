@@ -305,10 +305,30 @@ trait Lenses { self: ReverseProgram.type =>
       val leftValue = originalArgsValues.head
       val rightValue = originalArgsValues.tail.head
 
+      def leftCase(s: String):  Stream[(Seq[Expr], Formula)] = {
+        Log.prefix("Testing left:") := (leftValue match {
+          case StringLiteral(lv) =>
+            (if (s.startsWith(lv)) {
+              Stream((Seq(leftValue, StringLiteral(s.drop(lv.length))), Formula()))
+            } else Stream.empty) /:: Log.prefix("Left worked:")
+          case _ => Stream.empty
+        })
+      }
+
+      def rightCase(s: String): Stream[(Seq[Expr], Formula)] = {
+        Log.prefix("Testing right:") := (rightValue match {
+          case StringLiteral(rv) =>
+            (if (s.endsWith(rv)) {
+              Stream((Seq(StringLiteral(s.take(s.length - rv.length)), rightValue), Formula()))
+            } else Stream.empty)  /:: Log.prefix("right worked:")
+          case _ => Stream.empty
+        })
+      }
+
       def defaultCase: Stream[(Seq[Expr], Formula)] = {
         val left = ValDef(FreshIdentifier("l", true), StringType, Set())
         val right = ValDef(FreshIdentifier("r", true), StringType, Set())
-        Log(s"String default case: ${left.id} + ${right.id} == $newOutput")
+        Log(s"String default case: ${left.id} + ${right.id} == $newOutput:")
 
         val f = Formula(Map(), Set(left, right), Set(),
           newOutput === FunctionInvocation(identifier, tps, Seq(left.toVariable, right.toVariable))
@@ -321,21 +341,10 @@ trait Lenses { self: ReverseProgram.type =>
       // Prioritize changes that touch only one of the two expressions.
       newOutput match {
         case StringLiteral(s) =>
-          (Log.prefix("Testing left:") := leftValue match {
-            case StringLiteral(lv) =>
-              (if (s.startsWith(lv)) {
-                Stream((Seq(leftValue, StringLiteral(s.drop(lv.length))), Formula()))
-              } else Stream.empty) /:: Log.prefix("Left worked:")
-            case _ => Stream.empty
-          }) #::: (
-            Log.prefix("Testing right:") := rightValue match {
-              case StringLiteral(rv) =>
-                (if (s.endsWith(rv)) {
-                  Stream((Seq(StringLiteral(s.take(s.length - rv.length)), rightValue), Formula()))
-                } else Stream.empty)  /:: Log.prefix("right worked:")
-              case _ => Stream.empty
-            }
-            ) #::: defaultCase
+          rightCase(s) append leftCase(s) append {
+            println("Evaluate default case #1")
+            defaultCase
+          }
         case l@Let(vd, value, newbody) =>
           /* Copy and paste, insertion, replacement:
         *  => A single let(v, newText, newbody) with a single occurrence of v in newbody
@@ -347,7 +356,7 @@ trait Lenses { self: ReverseProgram.type =>
         *  => A single let(delete, "", newbody) with a single occurrence of delete in newbody
         **/
           ???
-        case _ => defaultCase
+        case _ => { println(s"Evaluate default case #2 because $newOutput"); defaultCase}
       }
     }
 

@@ -96,7 +96,7 @@ object Utils {
     webStyleConstructor,
     xmlNodeConstructor,
     xmlAttributeConstructor
-  )
+  ) ++ allTupleConstructors
 
   val filter = FreshIdentifier("filter")
   val map = FreshIdentifier("map")
@@ -106,7 +106,7 @@ object Utils {
 
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)
-
+9
   @inline def castOrFail[A, B <: A](a: A): B =
     a.asInstanceOf[B]
 

@@ -24,18 +24,18 @@ class BagMapSetTest extends FunSuite with TestHelpers {
   implicit def tupleToTupleExpr[A: InoxConvertible, B: InoxConvertible](in: (A, B)): (Expr, Expr) = {
     (in._1: Expr, in._2: Expr)
   }
+  implicit def tupleToTupleExpr[A: InoxConvertible](in: (A, Expr)): (Expr, Expr) = {
+    (in._1: Expr, in._2: Expr)
+  }
 
   test("Revert the use of a map") {
-    /*val build = Variable(FreshIdentifier("m"), FunctionType(Seq(inoxTypeOf[String]), inoxTypeOf[Element]), Set())
-    val v = variable[String]("v")
-    val vText = variable[String]("text")*/
-    val tr = valdef[Map[String, String]]("tr")
-    val translations = _Map[String, String](
-      "hello" -> "Bonjour",
-      "howareu" -> "comment tu vas?"
-    )
     val pfun = function(
-      let(tr, translations){ trv =>
+      let("tr" :: inoxTypeOf[Map[String, String]],
+        _Map[String, String](
+          "hello" -> "Bonjour",
+          "howareu" -> "comment tu vas?"
+        )
+      ){ trv =>
         StringConcat(StringConcat(MapApply(trv, "hello"), ", "), MapApply(trv, "howareu"))
       }
     )(inoxTypeOf[String])
@@ -49,10 +49,22 @@ class BagMapSetTest extends FunSuite with TestHelpers {
   }
 
   test("Revert the use of a double map") {
-    /*val build = Variable(FreshIdentifier("m"), FunctionType(Seq(inoxTypeOf[String]), inoxTypeOf[Element]), Set())
-    val v = variable[String]("v")
-    val vText = variable[String]("text")*/
-    //val translations =
+    val pfun = function(
+      let("firstname" :: inoxTypeOf[String], "Mikael"){ firstname =>
+      let("tr" :: inoxTypeOf[Map[String, String]],
+        _Map[String, String](
+          "hello" -> StringConcat("Bonjour ", firstname),
+          "howareu" -> StringConcat(", comment tu vas, ", firstname)
+        )
+      ){ trv =>
+        StringConcat(MapApply(trv, "hello"), MapApply(trv, "howareu"))
+      }
+      }
+    )(inoxTypeOf[String])
+
+    checkProg("Bonjour Mikael, comment tu vas, Mikael", pfun)
+    checkProg("Bonjour Ravi, comment tu vas, Ravi",
+      repairProgram(pfun, "Bonjour Ravi, comment tu vas, Mikael"))
   }
 
   test("Revert the use of a bag") {

@@ -9,6 +9,11 @@ import inox.trees.dsl._
 
 import scala.reflect.runtime.universe.TypeTag
 
+object Make {
+  def apply[A: InoxConvertible, B](in: Id[A] => (A ~~> B)): (A ~~> B) = in(Id[A]())
+}
+
+
 class StringAppendTest extends FunSuite {
   import InoxConvertible._
   import legacy.ImplicitTuples._

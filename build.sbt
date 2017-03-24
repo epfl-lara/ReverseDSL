@@ -1,5 +1,5 @@
 
-scalaVersion := "2.11.4"
+scalaVersion := "2.11.8"
 
 libraryDependencies += "org.scalactic" %% "scalactic" % "3.0.1"
 

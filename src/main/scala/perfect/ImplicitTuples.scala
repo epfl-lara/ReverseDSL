@@ -89,29 +89,30 @@ object ImplicitTuples {
     mkConstructor(_tupleTypes(i-2))((1 to i).map("B" + _) : _*)(None) { case s => _tupleIdentifiers.zip(s).map{ case (id, tp) => ValDef(id, tp) } }
   }
 
-  val allTupleConstructors = (2::2::(2 to 22).toList) map createTupleConstructor
+  private val _allTupleConstructors = (2::2::(2 to 22).toList) map createTupleConstructor
+  val allTupleConstructors = _allTupleConstructors.drop(2)
 
-  val tuple2Constructor: ADTConstructor  = allTupleConstructors(2)
-  val tuple3Constructor: ADTConstructor  = allTupleConstructors(3)
-  val tuple4Constructor: ADTConstructor  = allTupleConstructors(4)
-  val tuple5Constructor: ADTConstructor  = allTupleConstructors(5)
-  val tuple6Constructor: ADTConstructor  = allTupleConstructors(6)
-  val tuple7Constructor: ADTConstructor  = allTupleConstructors(7)
-  val tuple8Constructor: ADTConstructor  = allTupleConstructors(8)
-  val tuple9Constructor: ADTConstructor  = allTupleConstructors(9)
-  val tuple10Constructor: ADTConstructor = allTupleConstructors(10)
-  val tuple11Constructor: ADTConstructor = allTupleConstructors(11)
-  val tuple12Constructor: ADTConstructor = allTupleConstructors(12)
-  val tuple13Constructor: ADTConstructor = allTupleConstructors(13)
-  val tuple14Constructor: ADTConstructor = allTupleConstructors(14)
-  val tuple15Constructor: ADTConstructor = allTupleConstructors(15)
-  val tuple16Constructor: ADTConstructor = allTupleConstructors(16)
-  val tuple17Constructor: ADTConstructor = allTupleConstructors(17)
-  val tuple18Constructor: ADTConstructor = allTupleConstructors(18)
-  val tuple19Constructor: ADTConstructor = allTupleConstructors(19)
-  val tuple20Constructor: ADTConstructor = allTupleConstructors(20)
-  val tuple21Constructor: ADTConstructor = allTupleConstructors(21)
-  val tuple22Constructor: ADTConstructor = allTupleConstructors(22)
+  val tuple2Constructor: ADTConstructor  = _allTupleConstructors(2 )
+  val tuple3Constructor: ADTConstructor  = _allTupleConstructors(3 )
+  val tuple4Constructor: ADTConstructor  = _allTupleConstructors(4 )
+  val tuple5Constructor: ADTConstructor  = _allTupleConstructors(5 )
+  val tuple6Constructor: ADTConstructor  = _allTupleConstructors(6 )
+  val tuple7Constructor: ADTConstructor  = _allTupleConstructors(7 )
+  val tuple8Constructor: ADTConstructor  = _allTupleConstructors(8 )
+  val tuple9Constructor: ADTConstructor  = _allTupleConstructors(9 )
+  val tuple10Constructor: ADTConstructor = _allTupleConstructors(10)
+  val tuple11Constructor: ADTConstructor = _allTupleConstructors(11)
+  val tuple12Constructor: ADTConstructor = _allTupleConstructors(12)
+  val tuple13Constructor: ADTConstructor = _allTupleConstructors(13)
+  val tuple14Constructor: ADTConstructor = _allTupleConstructors(14)
+  val tuple15Constructor: ADTConstructor = _allTupleConstructors(15)
+  val tuple16Constructor: ADTConstructor = _allTupleConstructors(16)
+  val tuple17Constructor: ADTConstructor = _allTupleConstructors(17)
+  val tuple18Constructor: ADTConstructor = _allTupleConstructors(18)
+  val tuple19Constructor: ADTConstructor = _allTupleConstructors(19)
+  val tuple20Constructor: ADTConstructor = _allTupleConstructors(20)
+  val tuple21Constructor: ADTConstructor = _allTupleConstructors(21)
+  val tuple22Constructor: ADTConstructor = _allTupleConstructors(22)
 /*
   object RecomposeTuples {
     def unapply[A](t: (A, A)): List[A] = {
