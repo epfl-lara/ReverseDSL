@@ -48,7 +48,7 @@ class BagMapSetTest extends FunSuite with TestHelpers {
     }
   }
 
-  test("Revert the use of a double map") {
+  test("Revert the use of a double variable and a map") {
     val pfun = function(
       let("firstname" :: inoxTypeOf[String], "Mikael"){ firstname =>
       let("tr" :: inoxTypeOf[Map[String, String]],
@@ -86,6 +86,35 @@ class BagMapSetTest extends FunSuite with TestHelpers {
         pairs should contain((StringLiteral("newkey"), StringLiteral("New world")))
         pairs should contain((StringLiteral("hello"), StringConcat("Hello ", "World")))
         pairs should contain((StringLiteral("howareu"), StringConcat(", comment tu vas", "???")))
+    }
+  }
+
+  test("Repair double map indirection") {
+    val pfun = function(
+      let("tr" :: inoxTypeOf[Map[String, Map[String, String]]],
+        _Map[String, Map[String, String]](
+          "fr" -> _Map[String, String]("hello" -> "Bonjour"),
+          "en" -> _Map[String, String]("hello" -> "Hello")
+        )
+      ){ trv =>
+        MapApply(MapApply(trv, "fr"), "hello")
+      }
+    )(inoxTypeOf[String])
+
+    checkProg("Bonjour", pfun)
+    checkProg("Salut",
+      repairProgram(pfun, "Salut")) matchBody {
+      case Let(tr, FiniteMap(
+        Seq(
+        (StringLiteral("fr"), FiniteMap(
+          Seq((StringLiteral("hello"), StringLiteral(hellofr))),
+          _, _, _
+        )), (StringLiteral("en"), FiniteMap(
+        Seq((StringLiteral("hello"), StringLiteral(helloen))),
+        _, _, _
+        ))), _, _, _), MapApply(MapApply(_, StringLiteral("fr")), StringLiteral("hello"))) =>
+        hellofr shouldEqual "Salut"
+        helloen shouldEqual "Hello"
     }
   }
 

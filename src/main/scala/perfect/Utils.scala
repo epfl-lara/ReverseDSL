@@ -122,6 +122,8 @@ object Utils {
       case Int32Type => IntLiteral(42)
       case IntegerType => IntegerLiteral(BigInt(86))
       case BooleanType => BooleanLiteral(true)
+      case MapType(from, to) =>
+        FiniteMap(Seq(), defaultValue(to), from, to)
       case FunctionType(inputs, output) =>
         val parameters = inputs.map{ i => ValDef(FreshIdentifier("x", true), i, Set()) }
         Lambda(parameters, defaultValue(output))
