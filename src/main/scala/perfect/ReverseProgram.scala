@@ -17,8 +17,8 @@ object ReverseProgram extends lenses.Lenses {
   type Cache = HashMap[Expr, Expr]
 
   case class ProgramFormula(program: Expr, formula: Formula = Formula()) {
-    //assert((freeVars.filter(vd => !formula.varsToAssign(vd) && !formula.unchanged(vd))).isEmpty,
-    //  s"This program is not well contrained by its formula $formula:\n$program")
+    assert((freeVars.filter(vd => !formula.varsToAssign(vd) && !formula.unchanged(vd))).isEmpty,
+      s"This program is not well contrained by its formula $formula:\n$program")
 
     lazy val freeVars: Set[ValDef] = exprOps.variablesOf(program).map(_.toVal)
 
@@ -78,10 +78,6 @@ object ReverseProgram extends lenses.Lenses {
   case class Formula(known: Map[ValDef, Expr] = Map(),
                      unchanged: Set[ValDef] = Set(),
                      unknownConstraints: Expr = BooleanLiteral(true)) { // Can contain middle free variables.
-    //assert((known.keySet -- varsToAssign).isEmpty, s"Formula with wrong set of vars to assign: ${known} should have its variables in ${varsToAssign}")
-    //assert((unchanged intersect varsToAssign).isEmpty, s"Formula with incoherent set of variables to assign and unchanged: $this")
-    //assert(((varsToAssign -- exprOps.variablesOf(unknownConstraints).map(_.toVal)) -- known.keys).toList.isEmpty, s"Underconstrained formula: $this")
-    //assert(((exprOps.variablesOf(unknownConstraints).map(_.toVal)) -- varsToAssign).isEmpty, s"Vars in formula not in varToAssign : $this")
     assert(unchanged.forall(x => !unknownConstraintsVars(x)), s"A value is said unchanged but appears in constraints: $this")
     lazy val varsToAssign = known.keySet ++ (exprOps.variablesOf(unknownConstraints).map(_.toVal))
 
@@ -102,8 +98,7 @@ object ReverseProgram extends lenses.Lenses {
     }
 
     override def toString = "["+known.toSeq.map{ case (k, v) => k.id + "->" + v}.mkString("(",",",")")+", " +
-      "vs:" + varsToAssign.toSeq.map(_.id).mkString("{", ",", "}") + ", " +
-      "vl:" + unchanged.toSeq.map(_.id).mkString("{", ",", "}") + ", " +
+      "free:" + unchanged.toSeq.map(_.id).mkString("{", ",", "}") + ", " +
     unknownConstraints.toString() + "]"
     private lazy val unknownConstraintsVars: Set[ValDef] = exprOps.variablesOf(unknownConstraints).map(_.toVal)
 
@@ -560,7 +555,7 @@ object ReverseProgram extends lenses.Lenses {
 
         case ADT(ADTType(tp, tpArgs), argsIn) =>
           newOut match {
-            case v: Variable => Stream(ProgramFormula(v, Formula()))
+            case v: Variable => Stream(ProgramFormula(v, Formula(unchanged=Set(v.toVal))))
             case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
               val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
                 repair(ProgramFormula(aFun, program.formula), aVal)
