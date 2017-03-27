@@ -63,7 +63,7 @@ object ReverseProgram extends lenses.Lenses {
     }
 
     def withoutConstraints(): ProgramFormula = {
-      ProgramFormula(expr, Formula())
+      ProgramFormula(expr)
     }
 
     /** Augment this expr with the given formula */
@@ -391,7 +391,7 @@ object ReverseProgram extends lenses.Lenses {
         case l: FiniteSet =>
           if(isValue(l) && newOut.isInstanceOf[FiniteSet]) {
             val fs = newOut.asInstanceOf[FiniteSet]
-            Stream(ProgramFormula(newOut, Formula()))
+            Stream(ProgramFormula(newOut))
           } else {
             lazy val evaledElements = l.elements.map{ e =>
               (evalWithCache(letm(currentValues) in e), e)}
@@ -404,7 +404,7 @@ object ReverseProgram extends lenses.Lenses {
                   case (v, e) => expectedElements contains v
                 }.map(_._2) ++ expectedElements.filter(x =>
                   !evaledElements.exists(_._1 == x))
-                Stream(ProgramFormula(FiniteSet(newElements, fs.base), Formula()))
+                Stream(ProgramFormula(FiniteSet(newElements, fs.base)))
               case newOut => // Maybe it has a formula ?
                 val insertedElements = newOut match {
                   case v: Variable => program.formula.findConstraintValue(v) match {
@@ -417,8 +417,7 @@ object ReverseProgram extends lenses.Lenses {
                   case _ => Nil
                 }
                 Stream(ProgramFormula(
-                  FiniteSet(l.elements ++ insertedElements, l.base),
-                  Formula()))
+                  FiniteSet(l.elements ++ insertedElements, l.base)))
             }
           }
         case l: FiniteMap =>
@@ -432,7 +431,7 @@ object ReverseProgram extends lenses.Lenses {
 
                 Stream(ProgramFormula(newOut, Formula(unknownConstraints=maybes)))
               */case fm: FiniteMap => // Raw replacement
-                Stream(ProgramFormula(newOut, Formula()))
+                Stream(ProgramFormula(newOut))
               /*case l@Let(cloned: ValDef, _, _) =>
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
               case _ => throw new Exception("Don't know what to do, not a Literal or a Variable " + newOut)
@@ -502,7 +501,7 @@ object ReverseProgram extends lenses.Lenses {
                 val freeVarsOfOut = exprOps.variablesOf(l)
 
                 if(freeVarsOfOut.isEmpty) {
-                  Stream(ProgramFormula(newOut, Formula()))
+                  Stream(ProgramFormula(newOut))
                 } else
                 for {maybeMapping <- obtainMapping(l, freeVarsOfOut, Map(), lFun)
                      constraint = and(maybeMapping.toSeq.map { case (k, v) => E(Utils.maybe)(k.toVariable === v) }: _*) /: Log.constraint
@@ -511,7 +510,7 @@ object ReverseProgram extends lenses.Lenses {
                   ProgramFormula(newOut, Formula(unknownConstraints=constraint))
                 }
               case v: Variable =>
-                Stream(ProgramFormula(newOut, Formula()))
+                Stream(ProgramFormula(newOut))
               case _ => ???
             }
           }  else { // Closure
@@ -538,14 +537,12 @@ object ReverseProgram extends lenses.Lenses {
                   val ProgramFormula(newBody, f) = pf
                   Log(s"Going to test if lambda can be repaired using $newBody, $f, $freshToValue")
                   val newFreevarAssignments = freeVars.flatMap(fv => f.known.get(fv).map(res => fv -> res)).toMap
-                  val newConstraint = f.unknownConstraints &<>& and(freshToValue.toSeq.map{ case (k, v) => k.toVariable === v}: _*)
+                  val newConstraint = f combineWith Formula(freshToValue)
                   Log(s"Returning lambda using $newBody, $f, $freshToValue, \n$newFreevarAssignments")
                   val fullNewBody = exprOps.replaceFromSymbols(freshToOld, newBody)
 
-                  val newVarsInConstraint = exprOps.variablesOf(newConstraint).map(_.toVal)
-                  ProgramFormula(Lambda(vd, fullNewBody): Expr,
-                    Formula(newFreevarAssignments) combineWith Formula(
-                      unknownConstraints=newConstraint)) /: Log
+                  ProgramFormula(Lambda(vd, fullNewBody),
+                    Formula(newFreevarAssignments) combineWith newConstraint) /: Log
                 }
             case v: Variable =>
               Stream(ProgramFormula(v))
