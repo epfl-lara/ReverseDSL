@@ -5,7 +5,7 @@ package perfect
 
 import scala.language.dynamics
 object Log extends Log with Dynamic {
-  var activate = true
+  var activate = false
   def prefix(p: String): Log = new Log {
     override def apply(s: Any) = if(activate) {
       super.apply(p+s)

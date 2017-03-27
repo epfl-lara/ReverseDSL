@@ -16,11 +16,11 @@ object ReverseProgram extends lenses.Lenses {
   type OutExpr = Expr
   type Cache = HashMap[Expr, Expr]
 
-  case class ProgramFormula(program: Expr, formula: Formula = Formula()) {
-    lazy val freeVars: Set[ValDef] = exprOps.variablesOf(program).map(_.toVal)
+  case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
+    lazy val freeVars: Set[ValDef] = exprOps.variablesOf(expr).map(_.toVal)
     lazy val unchanged: Set[ValDef] = freeVars -- formula.varsToAssign
 
-    override def toString = program.toString + s" [$formula]" + (if(canWrapInputString) " (wrapping enabled)" else "")
+    override def toString = expr.toString + s" [$formula]" + (if(canWrapInputString) " (wrapping enabled)" else "")
     var canWrapInputString = false
 
     def wrappingEnabled: this.type = {
@@ -42,7 +42,7 @@ object ReverseProgram extends lenses.Lenses {
         case Some(e) => e
         case None =>
           val res = if((freeVars -- formula.known.keySet).isEmpty) {
-            evalWithCache(letm(formula.known) in program)
+            evalWithCache(letm(formula.known) in expr)
           } else {
             throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known (only ${formula.known.keySet} are).\n$this")
           }
@@ -53,7 +53,7 @@ object ReverseProgram extends lenses.Lenses {
 
     /** Uses the result of a programFormula by wrapping the expression */
     def wrap(f: Expr => Expr): ProgramFormula = {
-      val newProgram = f(program)
+      val newProgram = f(expr)
       ProgramFormula(newProgram, formula)
     }
 
@@ -63,24 +63,30 @@ object ReverseProgram extends lenses.Lenses {
     }
 
     def withoutConstraints(): ProgramFormula = {
-      ProgramFormula(program, Formula())
+      ProgramFormula(expr, Formula())
     }
 
-    /** Augment this program with the given formula */
+    /** Augment this expr with the given formula */
     def combineWith(f: Formula): ProgramFormula = {
-      ProgramFormula(program, formula combineWith f)
+      ProgramFormula(expr, formula combineWith f)
     }
   }
 
   object Formula {
-    def apply(known: Map[ValDef, Expr]): Formula =
-      Formula(and(known.toSeq.map(x => x._1.toVariable === x._2): _*))
+    /** A deterministic constructor for Formula */
+    def apply(known: Map[ValDef, Expr]): Formula = {
+      val f = Formula(and(known.toSeq.map(x => x._1.toVariable === x._2): _*))
+      f.givenKnown = Some(known)
+      f
+    }
   }
 
   case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) { // Can contain middle free variables.
     lazy val varsToAssign = known.keySet ++ (exprOps.variablesOf(unknownConstraints).map(_.toVal))
 
-    lazy val known: Map[ValDef, Expr] = {
+    private var givenKnown: Option[Map[ValDef, Expr]] = None
+
+    lazy val known: Map[ValDef, Expr] = givenKnown.getOrElse{
       val TopLevelAnds(ands) = unknownConstraints
       ands.flatMap {
         case Equals(v: Variable, e: Expr) if(isValue(e)) => // TODO: Try to remove "isValue"
@@ -93,8 +99,7 @@ object ReverseProgram extends lenses.Lenses {
       Formula(unknownConstraints &<>& other.unknownConstraints)
     }
 
-    override def toString = "["+known.toSeq.map{ case (k, v) => k.id + "->" + v}.mkString("(",",",")")+", " +
-    unknownConstraints.toString() + "]"
+    override def toString = "[" + unknownConstraints.toString() + "]"
     private lazy val unknownConstraintsVars: Set[ValDef] = exprOps.variablesOf(unknownConstraints).map(_.toVal)
 
     /** Returns an expression equal to the value of vd*/
@@ -451,7 +456,7 @@ object ReverseProgram extends lenses.Lenses {
                 }.toList
                 for {solution <- inox.utils.StreamUtils.cartesianProduct(newFiniteMapKV)
                      (mapKeys, mapValuesFormula) = solution.unzip
-                     mapValues = mapValuesFormula.map(_.program)
+                     mapValues = mapValuesFormula.map(_.expr)
                      mapFormula = mapValuesFormula.map(_.formula)
                      formula = (Formula() /: mapFormula){ case (f, ff) => f combineWith ff }
                 } yield {
@@ -775,7 +780,7 @@ object ReverseProgram extends lenses.Lenses {
       repair(ProgramFormula(arg, pf.formula), expected)
     }
     for ( r <- inox.utils.StreamUtils.cartesianProduct(argumentsReversed)) yield {
-     (r.map(_.program),
+     (r.map(_.expr),
        (Formula() /: r) { case (f, pfr) => f combineWith pfr.formula })//r.map(_.formula))
     }
   }
@@ -809,7 +814,7 @@ object ReverseProgram extends lenses.Lenses {
     result: Element("div", List(v), List(), List())
   * */
   private def maybeWrap(program: ProgramFormula, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[ProgramFormula] = {
-    val function = program.program
+    val function = program.expr
     if(functionValue == newOut) return Stream.empty[ProgramFormula] // Value returned in maybeUnwrap
 
     val containsFunctionValue = exprOps.exists {
@@ -885,7 +890,7 @@ object ReverseProgram extends lenses.Lenses {
   *  result:        v  #::   Element("span", List(), List(), List()) #:: Stream.empty
   * */
   private def maybeUnwrap(program: ProgramFormula, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[ProgramFormula] = {
-    val function = program.program
+    val function = program.expr
     if(functionValue == newOut) {
       Log("@return unwrapped")
       return Stream(program.withoutConstraints())
@@ -914,7 +919,7 @@ object ReverseProgram extends lenses.Lenses {
     result: "Therefore, " + (f(a) + v + "boss")
   * */
   private def maybeWrapString(program: ProgramFormula, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[ProgramFormula] = {
-    val function = program.program
+    val function = program.expr
     if(functionValue == newOut) {
       Log("@return unwrapped")
       return Stream(program.withoutConstraints())
