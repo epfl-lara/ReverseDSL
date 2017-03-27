@@ -343,8 +343,8 @@ object InoxConvertible {
   def _None[A: InoxConvertible] = ADT(ADTType(Utils.none, Seq(inoxTypeOf[A])), Seq())
   def _Left[A: InoxConvertible, B: InoxConvertible](e: Expr) = ADT(ADTType(Utils.left, Seq(inoxTypeOf[A], inoxTypeOf[B])), Seq(e))
   def _Right[A: InoxConvertible, B: InoxConvertible](e: Expr) = ADT(ADTType(Utils.right, Seq(inoxTypeOf[A], inoxTypeOf[B])), Seq(e))
-  def _XMLAttribute(key: Expr, value: Expr) = ADT(ADTType(Utils.xmlAttribute, Seq()), Seq(key, value))
-  def _XMLNode(tag: Expr, attributes: Expr, children: Expr) =
+  def _Attribute(key: Expr, value: Expr) = ADT(ADTType(Utils.xmlAttribute, Seq()), Seq(key, value))
+  def _Node(tag: Expr, attributes: Expr = _List[XmlTrees.XMLAttribute](), children: Expr = _List[XmlTrees.Node]()) =
     ADT(ADTType(Utils.xmlNode, Seq()), Seq(tag, attributes, children))
 
   def _Map[A: InoxConvertible, B: InoxConvertible](elements: (Expr, Expr)*): Expr = {

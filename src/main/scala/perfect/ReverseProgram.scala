@@ -17,9 +17,6 @@ object ReverseProgram extends lenses.Lenses {
   type Cache = HashMap[Expr, Expr]
 
   case class ProgramFormula(program: Expr, formula: Formula = Formula()) {
-    //assert((freeVars.filter(vd => !formula.varsToAssign(vd) && !formula.unchanged(vd))).isEmpty,
-    //  s"This program is not well contrained by its formula $formula:\n$program")
-
     lazy val freeVars: Set[ValDef] = exprOps.variablesOf(program).map(_.toVal)
     lazy val unchanged: Set[ValDef] = freeVars -- formula.varsToAssign
 
@@ -47,7 +44,7 @@ object ReverseProgram extends lenses.Lenses {
           val res = if((freeVars -- formula.known.keySet).isEmpty) {
             evalWithCache(letm(formula.known) in program)
           } else {
-            throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known. $this")
+            throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known (only ${formula.known.keySet} are).\n$this")
           }
           givenValue = Some(res)
           res
@@ -65,26 +62,35 @@ object ReverseProgram extends lenses.Lenses {
       ProgramFormula(f, formula)
     }
 
+    def withoutConstraints(): ProgramFormula = {
+      ProgramFormula(program, Formula())
+    }
+
     /** Augment this program with the given formula */
     def combineWith(f: Formula): ProgramFormula = {
       ProgramFormula(program, formula combineWith f)
     }
   }
 
-  case class Formula(known: Map[ValDef, Expr] = Map(),
-                     unknownConstraints: Expr = BooleanLiteral(true)) { // Can contain middle free variables.
+  object Formula {
+    def apply(known: Map[ValDef, Expr]): Formula =
+      Formula(and(known.toSeq.map(x => x._1.toVariable === x._2): _*))
+  }
+
+  case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) { // Can contain middle free variables.
     lazy val varsToAssign = known.keySet ++ (exprOps.variablesOf(unknownConstraints).map(_.toVal))
 
+    lazy val known: Map[ValDef, Expr] = {
+      val TopLevelAnds(ands) = unknownConstraints
+      ands.flatMap {
+        case Equals(v: Variable, e: Expr) if(isValue(e)) => // TODO: Try to remove "isValue"
+          List(v.toVal -> e)
+        case _ => Nil
+      }.toMap
+    }
+
     def combineWith(other: Formula): Formula = {
-      val newCs = unknownConstraints &<>& other.unknownConstraints
-      val conflict = (known.keySet intersect other.known.keySet).filter{ k => known(k) != other.known(k) }
-      val assignmentsForSure = known ++ other.known -- conflict
-      if(conflict.nonEmpty) {
-        val maybeAssignments = and(conflict.toSeq.map{ k => k.toVariable === known(k) || k.toVariable === other.known(k)}: _*)
-        Formula(assignmentsForSure, newCs &<>& maybeAssignments)
-      } else {
-        Formula(assignmentsForSure, newCs)
-      }
+      Formula(unknownConstraints &<>& other.unknownConstraints)
     }
 
     override def toString = "["+known.toSeq.map{ case (k, v) => k.id + "->" + v}.mkString("(",",",")")+", " +
@@ -170,6 +176,7 @@ object ReverseProgram extends lenses.Lenses {
   import InoxConvertible._
   lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
 
+  /** Automatic simplification of EXPR1 && EXPR2 if one is true.*/
   implicit class BooleanSimplification(f: Expr) {
     @inline def &<>&(other: Expr): Expr = other match {
       case BooleanLiteral(true) => f
@@ -182,6 +189,7 @@ object ReverseProgram extends lenses.Lenses {
     }
   }
 
+  /** Returns the stream b if a is empty, else only a. */
   def ifEmpty[A](a: Stream[A])(b: =>Stream[A]): Stream[A] = {
     if(a.isEmpty) b else a
   }
@@ -322,18 +330,19 @@ object ReverseProgram extends lenses.Lenses {
     **/
   def repair(program: ProgramFormula, newOut: Expr)
             (implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
-    val ProgramFormula(function, Formula(currentValues, _)) = program
+    val ProgramFormula(function, functionformula) = program
+    val currentValues = functionformula.known
     val stackLevel = Thread.currentThread().getStackTrace.length
     Log(s"\n@repair$stackLevel(\n  $program\n, $newOut)")
     if(function == newOut) return { Log("@return original");
-      Stream(program.copy(formula = Formula()))
+      Stream(program.withoutConstraints())
     }
 
     lazy val functionValue = program.functionValue
 
     if(functionValue == newOut) return {
       Log("@return original function");
-      Stream(program.copy(formula = program.formula.copy(known = Map())))
+      Stream(program.withoutConstraints())
     }
 
     //Log.prefix(s"@return ") :=
@@ -530,7 +539,7 @@ object ReverseProgram extends lenses.Lenses {
 
                   val newVarsInConstraint = exprOps.variablesOf(newConstraint).map(_.toVal)
                   ProgramFormula(Lambda(vd, fullNewBody): Expr,
-                    Formula(known=newFreevarAssignments,
+                    Formula(newFreevarAssignments) combineWith Formula(
                       unknownConstraints=newConstraint)) /: Log
                 }
             case v: Variable =>
@@ -557,7 +566,7 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case StringConcat(expr1, expr2) =>
-          ifEmpty(for(pf <- repair(program.copy(program = FunctionInvocation(StringConcatReverser.identifier, Nil,
+          ifEmpty(for(pf <- repair(program.subExpr(FunctionInvocation(StringConcatReverser.identifier, Nil,
             Seq(expr1, expr2))), newOut)) yield {
             pf match {
               case ProgramFormula(FunctionInvocation(StringConcatReverser.identifier, Nil, Seq(x, y)), f) =>
@@ -783,16 +792,14 @@ object ReverseProgram extends lenses.Lenses {
 
 
   /** Simple function returning true if the given expression is a value. */
-  @inline private def isValue(e: Expr) = {
-    !exprOps.exists{
-      case _: Lambda => false
-      case _: Literal[_] => false
-      case ADT(_, _) => false
-      case _: FiniteMap => false
-      case _: FiniteBag => false
-      case _: FiniteSet => false
-      case _ => true
-    }(e)
+  @inline private def isValue(e: Expr): Boolean = e match {
+    case l: Lambda => (exprOps.variablesOf(l.body).map(_.toVal) -- l.args).isEmpty
+    case _: Literal[_] => true
+    case ADT(_, a) => a.forall(isValue _)
+    case FiniteMap(pairs, default, _, _) => pairs.forall(x => isValue(x._1) && isValue(x._2)) && isValue(default)
+    case FiniteBag(elements, _) => elements.forall(x => isValue(x._1) && isValue(x._2))
+    case FiniteSet(elements, _) => elements.forall(isValue _)
+    case _ => false
   }
 
   /* Example:
@@ -881,9 +888,7 @@ object ReverseProgram extends lenses.Lenses {
     val function = program.program
     if(functionValue == newOut) {
       Log("@return unwrapped")
-      return Stream(program.copy(formula =
-        Formula()
-        ))
+      return Stream(program.withoutConstraints())
     }
 
     (function, functionValue) match {
@@ -912,7 +917,7 @@ object ReverseProgram extends lenses.Lenses {
     val function = program.program
     if(functionValue == newOut) {
       Log("@return unwrapped")
-      return Stream(program.copy(formula = Formula()))
+      return Stream(program.withoutConstraints())
     }
     newOut match {
       case StringLiteral(s) =>

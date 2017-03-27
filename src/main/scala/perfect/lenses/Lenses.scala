@@ -102,15 +102,15 @@ trait Lenses { self: ReverseProgram.type =>
           Log(s"in:$in\nnewformula:$newFormula")
           Log.prefix("res=") :=
           repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), out).flatMap {
-            case ProgramFormula(Application(_, Seq(in2)), Formula(mapping, _))
+            case ProgramFormula(Application(_, Seq(in2)), _)
               if in2 != in => //The argument's values have changed
               Stream(Left(in))
-            case ProgramFormula(Application(_, Seq(in2)), f@Formula(mapping, _))
+            case ProgramFormula(Application(_, Seq(in2)), f:Formula)
               if in2 == in && in2.isInstanceOf[Variable] =>
               // The repair introduced a variable. We evaluate all possible values.
               // TODO: Alternatively, propagate the constraint on the variable
               f.evalPossible(in2).map(Left(_))
-            case e@ProgramFormula(Application(lambda2: Lambda, Seq(in2)), f@Formula(mapping, _))
+            case e@ProgramFormula(Application(lambda2: Lambda, Seq(in2)), f:Formula)
               if in2 == in && lambda2 != lambda => // The lambda has changed.
               f.evalPossible(lambda2).map(lambda => Right((in, castOrFail[Expr, Lambda](lambda))))
             case e@ProgramFormula(app, f) =>
@@ -238,7 +238,7 @@ trait Lenses { self: ReverseProgram.type =>
         val right = ValDef(FreshIdentifier("r", true), T(Utils.list)(tps.head), Set())
         Log(s"List default case: ${left.id} + ${right.id} == $newOutput")
 
-        val f = Formula(Map(),
+        val f = Formula(
           newOutput === FunctionInvocation(Utils.listconcat, tps, Seq(left.toVariable, right.toVariable)) &&
           not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
         )

@@ -575,6 +575,24 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     checkProg("Mar Mar", repairProgram(pfun, "Mar Mar"))
   }
 
+  test("Tuple conflict") {
+    import ImplicitTuples._
+    val tp = T(tuple2)(StringType, StringType)
+    val a = ValDef(FreshIdentifier("a"), tp)
+    val pfun = function(
+      let("a":: StringType, "Hello")(av =>
+        ADT(tp, Seq(av, av))
+      )
+    )(inoxTypeOf[(String, String)])
+
+    checkProg(("Hello", "Hello"), pfun)
+    checkProg(("World", "World"), repairProgram(pfun, ("Hello", "World")))
+    checkProg(("World", "World"), repairProgram(pfun, ("World", "Hello")))
+    /*repairProgramList(pfun, ("Hey", "Jude"), 2).take(2).map(eval).toSet shouldEqual
+    Set[Expr](("Hey", "Hey"), ("Jude", "Jude"))*/
+    // Double repair !
+  }
+
   /* Add tests for:
      Integers operations
      List flatten, flatmap,
