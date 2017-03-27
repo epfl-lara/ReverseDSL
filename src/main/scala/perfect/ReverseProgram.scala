@@ -55,7 +55,9 @@ object ReverseProgram extends lenses.Lenses {
 
     /** Uses the result of a programFormula by wrapping the expression */
     def wrap(f: Expr => Expr): ProgramFormula = {
-      ProgramFormula(f(program), formula)
+      val newProgram = f(program)
+      ProgramFormula(newProgram,
+        formula.copy(unchanged = formula.unchanged ++ exprOps.variablesOf(newProgram).map(_.toVal) -- formula.varsToAssign))
     }
 
     /** Replaces the expression with another, for defining sub-problems mostly. */
@@ -113,6 +115,17 @@ object ReverseProgram extends lenses.Lenses {
           vd.toVariable
         } else e // The expression is unchanged, we return the original expression
       })
+    }
+
+    def findConstraintValue(v: Variable): Option[Expr] = {
+      unknownConstraints match {
+        case TopLevelAnds(ands) =>
+          ands.collectFirst[Expr] {
+            case Equals(mapVar, value)
+              if mapVar == v => value
+          }
+        case _ => None
+      }
     }
 
     def findConstraintVariableOrLiteral(m: MapApply): Expr = m match {
@@ -378,17 +391,50 @@ object ReverseProgram extends lenses.Lenses {
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
             case _ => throw new Exception("Don't know what to do, not a Literal, a Variable, or a let: "+newOut)
           }
+        case l: FiniteSet =>
+          if(isValue(l) && newOut.isInstanceOf[FiniteSet]) {
+            val fs = newOut.asInstanceOf[FiniteSet]
+            Stream(ProgramFormula(newOut, Formula()))
+          } else {
+            lazy val evaledElements = l.elements.map{ e =>
+              (evalWithCache(letm(currentValues) in e), e)}
+            newOut match {
+              case fs: FiniteSet =>
+                // Since there is no order, there is no point repairing expressions,
+                // only adding new ones and deleting old ones.
+                val expectedElements = fs.elements.toSet
+                val newElements = evaledElements.filter{
+                  case (v, e) => expectedElements contains v
+                }.map(_._2) ++ expectedElements.filter(x =>
+                  !evaledElements.exists(_._1 == x))
+                Stream(ProgramFormula(FiniteSet(newElements, fs.base), Formula()))
+              case newOut => // Maybe it has a formula ?
+                val insertedElements = newOut match {
+                  case v: Variable => program.formula.findConstraintValue(v) match {
+                    case Some(fs: FiniteSet) =>
+                      fs.elements.filter{ e =>
+                        !evaledElements.exists(_._1 == e)
+                      }
+                    case _ => Nil
+                  }
+                  case _ => Nil
+                }
+                Stream(ProgramFormula(
+                  FiniteSet(l.elements ++ insertedElements, l.base),
+                  Formula()))
+            }
+          }
         case l: FiniteMap =>
           if(isValue(l) && newOut.isInstanceOf[FiniteMap]) {
             newOut match {
-              case v: Variable => // Replacement with the variable newOut, with a maybe clause.
+              /*case v: Variable => // Replacement with the variable newOut, with a maybe clause.
                 // We loose the variable order !
                 val maybes = and(l.pairs.map {
                   case (key_v, value_v) => E(Utils.maybe)(MapApply(newOut, key_v) === value_v)
                 }: _*)
 
                 Stream(ProgramFormula(newOut, Formula(unknownConstraints=maybes)))
-              case fm: FiniteMap => // Raw replacement
+              */case fm: FiniteMap => // Raw replacement
                 Stream(ProgramFormula(newOut, Formula()))
               /*case l@Let(cloned: ValDef, _, _) =>
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
@@ -421,17 +467,11 @@ object ReverseProgram extends lenses.Lenses {
                 }
               case newOut =>
                 val insertedPairs = newOut match {
-                  case v: Variable => program.formula.unknownConstraints match {
-                    case TopLevelAnds(ands) =>
-                      ands.collectFirst[Seq[(Expr, Expr)]] {
-                        case Equals(mapVar, FiniteMap(possiblyNewPairs, _, _, _))
-                          if mapVar == v => possiblyNewPairs
-                      } match {
-                        case None => Nil
-                        case Some(np) => np.filter {
-                          case (k, v) => !partEvaledPairs.exists(x => x._1 == k)
-                        }
-                      }
+                  case v: Variable => program.formula.findConstraintValue(v) match {
+                    case Some(np: FiniteMap) => np.pairs.filter {
+                      case (k, v) => !partEvaledPairs.exists(x => x._1 == k)
+                    }
+                    case _ => Nil
                   }
                   case _ => Nil
                 }
@@ -683,6 +723,54 @@ object ReverseProgram extends lenses.Lenses {
               } yield {
                 val formula = newForm combineWith newArgumentsFormula
                 ProgramFormula(FunctionInvocation(f, tpes, newArguments), formula)
+              }
+          }
+        case SetAdd(sExpr, elem) =>
+          val sExpr_v = evalWithCache(letm(currentValues) in sExpr)
+          val elem_v = evalWithCache(letm(currentValues) in elem)
+          val FiniteSet(vs, tpe) = sExpr_v
+          val FiniteSet(vsNew, _) = newOut
+          val vsSet = vs.toSet
+          val vsNewSet = vsNew.toSet
+          val maybeAddedElements = vsNewSet -- vsSet
+          val maybeRemovedElements = vsSet -- vsNewSet
+          val (changedElements, added, removed) = if(maybeAddedElements.size == 1 && maybeRemovedElements.size == 1) {
+            (maybeRemovedElements.headOption.zip(maybeAddedElements.headOption).headOption: Option[(Expr, Expr)], Set[Expr](), Set[Expr]())
+          } else
+            (None: Option[(Expr, Expr)], maybeAddedElements: Set[Expr], maybeRemovedElements: Set[Expr])
+          Log(s"Added $added, Removed $removed, changed: $changedElements")
+          changedElements match {
+            case Some((old, fresh)) =>
+              (if(vsSet contains old) {
+                Log.prefix("#1") :=
+                  (for(pf <- repair(program.subExpr(sExpr),
+                  FiniteSet((vsSet - old + fresh).toSeq, tpe))) yield {
+                  pf.wrap(x => SetAdd(x, elem))
+                })
+              } else Stream.empty) #::: (
+                Log.prefix("#2") :=
+                  (if(elem_v == old) {
+                  for(pf <- repair(program.subExpr(elem), fresh)) yield {
+                    pf.wrap(x => SetAdd(sExpr, x))
+                  }
+                } else Stream.empty)
+              )
+            case None => // Just added and removed elements.
+              if(removed.isEmpty) { // Just added elements.
+                for(pf <- repair(program.subExpr(sExpr),
+                  FiniteSet((vsSet ++ (added - elem_v)).toSeq, tpe))) yield {
+                  pf.wrap(x => SetAdd(x, elem))
+                }
+              } else {
+                if(removed contains elem_v) { // We replace SetAdd(f, v) by f
+                  for(pf <- repair(program.subExpr(sExpr),
+                    FiniteSet(vsSet.toSeq, tpe)
+                  )) yield pf
+                } else { // All changes happened in the single set.
+                  for(pf <- repair(program.subExpr(sExpr),
+                    FiniteSet((vsSet ++ (added-elem_v) -- removed).toSeq, tpe)
+                  )) yield pf.wrap(x => SetAdd(x, elem))
+                }
               }
           }
         case anyExpr =>

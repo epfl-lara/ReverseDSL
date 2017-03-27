@@ -576,10 +576,9 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   }
 
   /* Add tests for:
-     CaseSelect (tupleSelect...)
      Integers operations
      List flatten, flatmap,
-     Map, Bag, Set
+     Bag, Set
      User-defined lenses.
      Merging programs to implement clone-and-paste.
      XML transformation as in the paper.

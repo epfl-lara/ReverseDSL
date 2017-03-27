@@ -117,12 +117,29 @@ class BagMapSetTest extends FunSuite with TestHelpers {
         helloen shouldEqual "Hello"
     }
   }
+  // TODO: Revert MapUpdated.
 
   test("Revert the use of a bag") {
 
   }
 
-  test("Revert the use of a set") {
+  test("Revert SetAdd") {
+    val pfun = function(
+      let("flags" :: inoxTypeOf[Set[String]],
+        _Set[String](
+          "cvc4", "z3"
+        )
+      ){ flags =>
+        let("oflags" :: inoxTypeOf[String],
+          "debug"
+        ){ oflags =>
+          SetAdd(flags, oflags)
+        }
+      }
+    )(inoxTypeOf[Set[String]])
 
+    checkProg(_Set[String]("cvc4", "debug",  "z3"), pfun)
+    checkProg(_Set[String]("cvc4", "debug",  "vampire", "z3"),
+      repairProgram(pfun, _Set[String]("cvc4", "debug", "z3", "vampire")))
   }
 }
