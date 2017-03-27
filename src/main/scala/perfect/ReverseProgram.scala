@@ -107,43 +107,39 @@ object ReverseProgram extends lenses.Lenses {
     /** Returns an expression equal to the value of vd*/
     def getOrElse(vd: ValDef, e: =>Expr): Expr = {
       known.getOrElse(vd, {
-        /*val TopLevelAnds(ands) = unknownConstraints
-        ands.collectFirst{
-          case Equals(x, y) => x ==
-        }*/
         if(varsToAssign(vd)) {
           vd.toVariable
         } else e // The expression is unchanged, we return the original expression
       })
     }
 
+    /** Finds the 'value' of a variable in the lhs of a constraint*/
     def findConstraintValue(v: Variable): Option[Expr] = {
       unknownConstraints match {
         case TopLevelAnds(ands) =>
           ands.collectFirst[Expr] {
             case Equals(mapVar, value)
               if mapVar == v => value
+          }.orElse{
+            ands.collectFirst[Expr] {
+              case FunctionInvocation(Utils.maybe, _, Seq(
+              Equals(mapVar, value))) if mapVar == v => value
+            }
           }
         case _ => None
       }
     }
 
+    /** Finds the value of an element in a map, in the formula */
     def findConstraintVariableOrLiteral(m: MapApply): Expr = m match {
       case MapApply(v: Variable, key) =>
-        val TopLevelAnds(conjuncts) = unknownConstraints
-        conjuncts.collectFirst{
-          case Equals(v2, FiniteMap(pairs, _, _, _))
-            if v2 == v && pairs.exists(_._1 == key)
-          =>
-            pairs.find(_._1 == key).get._2
-          case FunctionInvocation(Utils.maybe, _, Seq(
-          Equals(v2, FiniteMap(pairs, _, _, _))))
-            if v2 == v && pairs.exists(_._1 == key)
-          =>
-            pairs.find(_._1 == key).get._2
-        } match {
-          case Some(subvar) => subvar
-          case _ => throw new Exception(s"Could not find key/value $v -> $key in "+unknownConstraints)
+        findConstraintValue(v) match {
+          case Some(FiniteMap(pairs, _, _, _)) =>
+            pairs.find(_._1 == key).map(_._2).getOrElse{
+              throw new Exception(s"Could not find key/value $v -> $key in "+unknownConstraints)
+            }
+          case _ =>
+            throw new Exception(s"Could not find key/value $v -> $key in "+unknownConstraints)
         }
       case MapApply(v: MapApply, k) =>
         findConstraintVariableOrLiteral(MapApply(findConstraintVariableOrLiteral(v), k))
