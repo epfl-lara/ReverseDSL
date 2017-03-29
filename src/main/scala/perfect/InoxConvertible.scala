@@ -280,15 +280,20 @@ object InoxConvertible {
     }
   }
 
-  implicit def Function2Convertible[A: InoxConvertible, B: InoxConvertible]: InoxConvertible[A => B] = new InoxConvertible[A => B] {
-    def getType: inox.trees.dsl.trees.Type = FunctionType(Seq(inoxTypeOf[A]), inoxTypeOf[B])
-    def produce(a: A => B): Expr = {
-      ???
-    }
-    def recoverFrom(e: Expr): A => B = {
-      ???
-    }
+  private case class FunctionNConvertible[FunType](tpe: Type*) extends InoxConvertible[FunType] {
+    def getType = FunctionType(tpe.init, tpe.last)
+    def produce(a: FunType): Expr = ???
+    def recoverFrom(e: Expr): FunType = ???
   }
+
+  implicit def Function2Convertible[A: InoxConvertible, B: InoxConvertible]
+    : InoxConvertible[A => B] = FunctionNConvertible[A => B](t[A], t[B])
+
+  implicit def Function3Convertible[A: InoxConvertible, B: InoxConvertible, C: InoxConvertible]
+  : InoxConvertible[(A, B) => C] = FunctionNConvertible[(A, B) => C](t[A], t[B], t[C])
+
+  implicit def Function4Convertible[A: InoxConvertible, B: InoxConvertible, C: InoxConvertible, D: InoxConvertible]
+  : InoxConvertible[(A, B, C) => D] = FunctionNConvertible[(A, B, C) => D](t[A], t[B], t[C], t[D])
 
   implicit def scalaNodeToXmlNode(node: scala.xml.Node): XmlTrees.Node = node match {
     case scala.xml.Text(text) =>
@@ -307,6 +312,10 @@ object InoxConvertible {
   implicit def scalaAttributesToXmlAttribute(m: MetaData): List[XmlTrees.XMLAttribute] = {
     m.asAttrMap.toList.map{ case (key, value) => XmlTrees.XMLAttribute(key, value) }
   }
+
+
+  /** Obtains the inox type of a given type. Private method */
+  private def t[A:InoxConvertible] = inoxTypeOf[A]
 
   /** Obtains the inox type of a given type. */
   def inoxTypeOf[A:InoxConvertible] = implicitly[InoxConvertible[A]].getType

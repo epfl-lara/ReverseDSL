@@ -19,6 +19,16 @@ trait LambdaPreservingEvaluator extends inox.evaluators.RecursiveEvaluator {
     case l@Lambda(_, _) =>
       val mapping = variablesOf(l).map(v => v -> rctx.mappings(v.toVal)).toMap
       replaceFromSymbols(mapping, l)
+    case FunctionInvocation(Utils.stringCompare, Seq(), Seq(left, right)) =>
+      val StringLiteral(s) = e(left)
+      val StringLiteral(t) = e(right)
+      if(s < t) {
+        IntLiteral(-1)
+      } else if(s == t) {
+        IntLiteral(0)
+      } else {
+        IntLiteral(1)
+      }
     case _ => super.e(expr)
   }
 }

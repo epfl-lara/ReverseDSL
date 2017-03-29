@@ -1,5 +1,5 @@
-package perfect
-import legacy._
+package legacy
+import perfect._
 
 import org.scalatest._
 import Matchers.{ === => _, _}

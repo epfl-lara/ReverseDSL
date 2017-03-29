@@ -42,6 +42,8 @@ trait TestHelpers {
     def getBody: Expr = {
       pf._1.symbols.functions.get(pf._2).map(_.fullBody).getOrElse(throw new Exception(s"Non-existent function in program $pf"))
     }
+    def repairFrom(e: Expr) = repairProgram(pf, e)
+    def shouldProduce(e: Expr) = checkProg(e, pf)
   }
 
   private def mkProg(funDef: FunDef) = {
@@ -100,7 +102,6 @@ trait TestHelpers {
   def checkProg(expected1: Expr, progfun: (InoxProgram, Identifier)): (InoxProgram, Identifier) = {
     checkProg(expected1, progfun._1, progfun._2)
   }
-
 
   protected def isVarIn(id: Identifier, body: inox.trees.Expr) = {
     inox.trees.exprOps.exists {

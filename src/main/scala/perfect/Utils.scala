@@ -68,8 +68,8 @@ object Utils {
     ValDef(name, StringType),
     ValDef(value, StringType)))
 
-  val xmlNodeConstructor = mkConstructor(xmlNode)()(None)(stp =>
-    Seq(ValDef(tag, StringType),
+  val xmlNodeConstructor = mkConstructor(xmlNode)()(None)(_ => Seq(
+      ValDef(tag, StringType),
       ValDef(attributes, T(list)(T(xmlAttribute)())),
       ValDef(children, T(list)(T(xmlNode)()))))
 
@@ -103,6 +103,10 @@ object Utils {
   val listconcat = FreshIdentifier("append")
   val flatten = FreshIdentifier("flatten")
   val flatmap = FreshIdentifier("flatMap")
+  val sortWith = FreshIdentifier("sortWith")
+  val merge = FreshIdentifier("merge")
+  val splitEven = FreshIdentifier("splitEven")
+  val stringCompare = FreshIdentifier("stringCompare")
 
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)

@@ -6,9 +6,9 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
+import perfect.ImplicitTuples.{_1, _2, tuple2}
 
 trait Lenses { self: ReverseProgram.type =>
-  import Utils._
 
   val reversers = List[Reverser](
     FilterReverser,
@@ -16,11 +16,22 @@ trait Lenses { self: ReverseProgram.type =>
     ListConcatReverser,
     FlattenReverser,
     FlatMapReverser,
-    StringConcatReverser
+    StringConcatReverser,
+    SplitEvenReverser,
+    MergeReverser,
+    SortWithReverser
   )
 
   val reversions = reversers.map(x => x.identifier -> x).toMap
-  val funDefs = reversers.map(_.funDef)
+  val funDefs = reversers.map(_.funDef) ++ List(
+    mkFunDef(Utils.stringCompare)(){case _ =>
+      (Seq("left"::StringType, "right"::StringType),
+        Int32Type,
+        { case Seq(l, r) =>
+            StringLength(l) - StringLength(r) // Dummy
+        })
+    }
+  )
 
   abstract class Reverser {
     def identifier: Identifier
@@ -30,23 +41,25 @@ trait Lenses { self: ReverseProgram.type =>
   }
 
   object ListLiteral {
+    import Utils._
     def unapply(e: Expr): Option[List[Expr]] = e match {
-      case ADT(ADTType(Utils.cons, tps), Seq(head, tail)) =>
+      case ADT(ADTType(cons, tps), Seq(head, tail)) =>
         unapply(tail).map(head :: _ )
-      case ADT(ADTType(Utils.nil, tps), Seq()) =>
+      case ADT(ADTType(nil, tps), Seq()) =>
         Some(Nil)
       case _ => None
     }
     def apply(e: List[Expr], tps: Seq[Type]): Expr = e match {
       case head :: tail =>
-        ADT(ADTType(Utils.cons, tps), Seq(head, apply(tail, tps)))
+        ADT(ADTType(cons, tps), Seq(head, apply(tail, tps)))
       case Nil =>
-        ADT(ADTType(Utils.nil, tps), Seq())
+        ADT(ADTType(nil, tps), Seq())
     }
   }
 
   /** Lense-like filter */
   case object FilterReverser extends Reverser with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.
+    import Utils._
     val identifier = Utils.filter
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
       val lambda = originalArgsValues.tail.head
@@ -60,21 +73,21 @@ trait Lenses { self: ReverseProgram.type =>
 
     // filter definition in inox
     val funDef = mkFunDef(identifier)("A"){ case Seq(tp) =>
-      (Seq("ls" :: T(Utils.list)(tp), "f" :: FunctionType(Seq(tp), BooleanType)),
-        T(Utils.list)(tp),
+      (Seq("ls" :: T(list)(tp), "f" :: FunctionType(Seq(tp), BooleanType)),
+        T(list)(tp),
         { case Seq(ls, f) =>
-          if_(ls.isInstOf(T(Utils.cons)(tp))) {
-            let("c"::T(Utils.cons)(tp), ls.asInstOf(T(Utils.cons)(tp)))(c =>
-              let("head"::tp, c.getField(Utils.head))( head =>
+          if_(ls.isInstOf(T(cons)(tp))) {
+            let("c"::T(cons)(tp), ls.asInstOf(T(cons)(tp)))(c =>
+              let("head"::tp, c.getField(head))( head =>
                 if_(Application(f, Seq(head))){
-                  ADT(T(Utils.cons)(tp), Seq(head, E(identifier)(tp)(c.getField(Utils.tail), f)))
+                  ADT(T(cons)(tp), Seq(head, E(identifier)(tp)(c.getField(tail), f)))
                 } else_ {
-                  E(identifier)(tp)(c.getField(Utils.tail), f)
+                  E(identifier)(tp)(c.getField(tail), f)
                 }
               )
             )
           } else_ {
-            ADT(T(Utils.nil)(tp), Seq())
+            ADT(T(nil)(tp), Seq())
           }
         })
     }
@@ -82,7 +95,8 @@ trait Lenses { self: ReverseProgram.type =>
 
   /** Lense-like map, with the possibility of changing the mapping lambda. */
   case object MapReverser extends Reverser {
-    val identifier = Utils.map
+    import Utils._
+    val identifier = map
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
       Log(s"map.apply($newOutput)")
@@ -139,17 +153,17 @@ trait Lenses { self: ReverseProgram.type =>
 
     // Map definition in inox
     val funDef = mkFunDef(identifier)("A", "B"){ case Seq(tA, tB) =>
-      (Seq("ls" :: T(Utils.list)(tA), "f" :: FunctionType(Seq(tA), tB)),
-        T(Utils.list)(tB),
+      (Seq("ls" :: T(list)(tA), "f" :: FunctionType(Seq(tA), tB)),
+        T(list)(tB),
         { case Seq(ls, f) =>
-          if_(ls.isInstOf(T(Utils.cons)(tA))) {
-            let("c"::T(Utils.cons)(tA), ls.asInstOf(T(Utils.cons)(tA)))(c =>
-              let("head"::tA, c.getField(Utils.head))( head =>
-                ADT(T(Utils.cons)(tB), Seq(Application(f, Seq(head)), E(identifier)(tA, tB)(c.getField(Utils.tail), f)))
+          if_(ls.isInstOf(T(cons)(tA))) {
+            let("c"::T(cons)(tA), ls.asInstOf(T(cons)(tA)))(c =>
+              let("head"::tA, c.getField(head))( head =>
+                ADT(T(cons)(tB), Seq(Application(f, Seq(head)), E(identifier)(tA, tB)(c.getField(tail), f)))
               )
             )
           } else_ {
-            ADT(T(Utils.nil)(tB), Seq())
+            ADT(T(nil)(tB), Seq())
           }
         })
     }
@@ -157,7 +171,8 @@ trait Lenses { self: ReverseProgram.type =>
 
   /** Lense-like map, with the possibility of changing the mapping lambda. */
   case object FlattenReverser extends Reverser {
-    val identifier = Utils.flatten
+    import Utils._
+    val identifier = flatten
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
       ???
@@ -165,19 +180,19 @@ trait Lenses { self: ReverseProgram.type =>
 
     // Flatten definition in inox
     val funDef = mkFunDef(identifier)("A"){ case Seq(tA) =>
-      (Seq("ls" :: T(Utils.list)(T(Utils.list)(tA))),
-        T(Utils.list)(tA),
+      (Seq("ls" :: T(list)(T(list)(tA))),
+        T(list)(tA),
         { case Seq(ls) =>
-          if_(ls.isInstOf(T(Utils.cons)(T(Utils.list)(tA)))) {
-            let("c"::T(Utils.cons)(T(Utils.list)(tA)), ls.asInstOf(T(Utils.cons)(T(Utils.list)(tA))))(c =>
-              let("head"::T(Utils.list)(tA), c.getField(Utils.head))( head =>
-                FunctionInvocation(Utils.listconcat, Seq(tA), Seq(head,
-                  FunctionInvocation(identifier, Seq(tA), Seq(c.getField(Utils.tail)))
+          if_(ls.isInstOf(T(cons)(T(list)(tA)))) {
+            let("c"::T(cons)(T(list)(tA)), ls.asInstOf(T(cons)(T(list)(tA))))(c =>
+              let("head"::T(list)(tA), c.getField(head))( head =>
+                FunctionInvocation(listconcat, Seq(tA), Seq(head,
+                  FunctionInvocation(identifier, Seq(tA), Seq(c.getField(tail)))
                 ))
               )
             )
           } else_ {
-            ADT(T(Utils.nil)(T(Utils.list)(tA)), Seq())
+            ADT(T(nil)(T(list)(tA)), Seq())
           }
         })
     }
@@ -185,7 +200,8 @@ trait Lenses { self: ReverseProgram.type =>
 
   /** Lense-like map, with the possibility of changing the mapping lambda. */
   case object FlatMapReverser extends Reverser {
-    val identifier = Utils.flatmap
+    import Utils._
+    val identifier = flatmap
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
       ???
@@ -193,17 +209,17 @@ trait Lenses { self: ReverseProgram.type =>
 
     // Flatmap definition in inox
     val funDef = mkFunDef(identifier)("A", "B"){ case Seq(tA, tB) =>
-      (Seq("ls" :: T(Utils.list)(tA), "f" :: FunctionType(Seq(tA), T(Utils.list)(tB))),
-        T(Utils.list)(tB),
+      (Seq("ls" :: T(list)(tA), "f" :: FunctionType(Seq(tA), T(list)(tB))),
+        T(list)(tB),
         { case Seq(ls, f) =>
-          if_(ls.isInstOf(T(Utils.cons)(tA))) {
-            let("c"::T(Utils.cons)(tA), ls.asInstOf(T(Utils.cons)(tA)))(c =>
-              let("headMapped"::T(Utils.list)(tB), f(c.getField(Utils.head)))( headMapped =>
-                E(Utils.listconcat)(headMapped, E(identifier)(tA, tB)(c.getField(Utils.tail), f))
+          if_(ls.isInstOf(T(cons)(tA))) {
+            let("c"::T(cons)(tA), ls.asInstOf(T(cons)(tA)))(c =>
+              let("headMapped"::T(list)(tB), f(c.getField(head)))( headMapped =>
+                E(listconcat)(tB)(headMapped, E(identifier)(tA, tB)(c.getField(tail), f))
               )
             )
           } else_ {
-            ADT(T(Utils.nil)(tB), Seq())
+            ADT(T(nil)(tB), Seq())
           }
         })
     }
@@ -212,7 +228,8 @@ trait Lenses { self: ReverseProgram.type =>
 
   /** Lense-like list concat, with the possibility of changing the mapping lambda. */
   case object ListConcatReverser extends Reverser {
-    val identifier = Utils.listconcat
+    import Utils._
+    val identifier = listconcat
 
     def startsWith(list: Expr, beginning: Expr): Boolean = (list, beginning) match {
       case (ADT(_, Seq(head, tail)), ADT(_, Seq())) => true
@@ -223,7 +240,7 @@ trait Lenses { self: ReverseProgram.type =>
 
     def reverse(list: Expr, gather: Option[Expr]): Expr = list match {
       case ADT(tpe@ADTType(c, targs), Seq(head, tail)) =>
-        val gathertail = gather.getOrElse(ADT(ADTType(Utils.nil, targs), Seq()))
+        val gathertail = gather.getOrElse(ADT(ADTType(nil, targs), Seq()))
         reverse(tail, Some(ADT(tpe, Seq(head, gathertail))))
       case ADT(_, Seq()) => gather.getOrElse(list)
     }
@@ -236,12 +253,12 @@ trait Lenses { self: ReverseProgram.type =>
       val rightValue = originalArgsValues.tail.head
 
       def defaultCase: Stream[(Seq[Expr], Formula)] = {
-        val left = ValDef(FreshIdentifier("l", true), T(Utils.list)(tps.head), Set())
-        val right = ValDef(FreshIdentifier("r", true), T(Utils.list)(tps.head), Set())
+        val left = ValDef(FreshIdentifier("l", true), T(list)(tps.head), Set())
+        val right = ValDef(FreshIdentifier("r", true), T(list)(tps.head), Set())
         Log(s"List default case: ${left.id} + ${right.id} == $newOutput")
 
         val f = Formula(
-          newOutput === FunctionInvocation(Utils.listconcat, tps, Seq(left.toVariable, right.toVariable)) &&
+          newOutput === FunctionInvocation(listconcat, tps, Seq(left.toVariable, right.toVariable)) &&
           not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
         )
 
@@ -284,13 +301,13 @@ trait Lenses { self: ReverseProgram.type =>
 
     // Concat definition in inox
     val funDef = mkFunDef(identifier)("A"){ case Seq(tA) =>
-      (Seq("left" :: T(Utils.list)(tA), "right" :: T(Utils.list)(tA)),
-        T(Utils.list)(tA),
+      (Seq("left" :: T(list)(tA), "right" :: T(list)(tA)),
+        T(list)(tA),
         { case Seq(left, right) =>
-          if_(left.isInstOf(T(Utils.cons)(tA))) {
-            let("c"::T(Utils.cons)(tA), left.asInstOf(T(Utils.cons)(tA)))(c =>
-              ADT(T(Utils.cons)(tA),
-                Seq(c.getField(Utils.head), E(identifier)(tA)(c.getField(Utils.tail), right)))
+          if_(left.isInstOf(T(cons)(tA))) {
+            let("c"::T(cons)(tA), left.asInstOf(T(cons)(tA)))(c =>
+              ADT(T(cons)(tA),
+                Seq(c.getField(head), E(identifier)(tA)(c.getField(tail), right)))
             )
           } else_ {
             right
@@ -301,6 +318,7 @@ trait Lenses { self: ReverseProgram.type =>
 
   /** Lense-like list concat, with the possibility of changing the mapping lambda. */
   case object StringConcatReverser extends Reverser {
+    import Utils._
     val identifier = FreshIdentifier("tmpstringconcat")
 
     def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
@@ -335,7 +353,7 @@ trait Lenses { self: ReverseProgram.type =>
 
         val newConstraint = (newOutput === FunctionInvocation(identifier, tps, Seq(left.toVariable, right.toVariable))
         &<>& (if(addMaybes)
-          E(Utils.maybe)(left.toVariable === leftValue) && E(Utils.maybe)(right.toVariable === rightValue)
+          E(maybe)(left.toVariable === leftValue) && E(maybe)(right.toVariable === rightValue)
         else BooleanLiteral(true)
         ) // Maybe use what is below for faster convergence?
         //            (if(addMaybes) not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
@@ -375,6 +393,92 @@ trait Lenses { self: ReverseProgram.type =>
         { case Seq(left, right) =>
           StringConcat(left, right)
         })
+    }
+  }
+
+  case object SplitEvenReverser extends Reverser {
+    import Utils._
+    import ImplicitTuples._
+    val identifier = splitEven
+    val funDef: FunDef = mkFunDef(identifier)("A") { case Seq(tA) =>
+      (Seq("l"::T(list)(tA)),
+       T(tuple2)(T(list)(tA), T(list)(tA)),
+        { case Seq(l) =>
+          if_(l.isInstOf(T(cons)(tA))) {
+            let("r"::T(tuple2)(T(list)(tA), T(list)(tA)),
+              FunctionInvocation(identifier, Seq(tA), Seq(l.asInstOf(T(cons)(tA)).getField(tail))))(r =>
+              ADT(T(tuple2)(T(list)(tA), T(list)(tA)), Seq(
+                ADT(T(cons)(tA), Seq(l.asInstOf(T(cons)(tA)).getField(head), r.getField(_2))),
+                r.getField(_1))))
+          } else_ {
+            ADT(T(tuple2)(T(list)(tA), T(list)(tA)), Seq(ADT(T(nil)(tA), Seq()), ADT(T(nil)(tA), Seq())))
+          }
+        }
+      )
+    }
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+      ???
+    }
+  }
+
+  // Merge two sorted lists.
+  case object MergeReverser extends Reverser {
+    import Utils._
+    val identifier = merge
+    val funDef : FunDef = mkFunDef(identifier)("A") { case Seq(tA) =>
+      (Seq("left":: T(list)(tA), "right":: T(list)(tA), "comp" :: FunctionType(Seq(tA, tA), Int32Type)),
+        T(list)(tA),
+        { case Seq(left, right, comp) =>
+          if_(left.isInstOf(T(cons)(tA))) {
+            if_(right.isInstOf(T(cons)(tA))) {
+              let("leftcons"::T(cons)(tA), left.asInstOf(T(cons)(tA)))( leftcons =>
+                let("rightcons"::T(cons)(tA), right.asInstOf(T(cons)(tA)))( rightcons =>
+                  if_(Application(comp, Seq(leftcons.getField(head), rightcons.getField(head))) <= IntLiteral(0)) {
+                    ADT(T(cons)(tA), Seq(leftcons.getField(head), FunctionInvocation(identifier, Seq(tA), Seq(leftcons.getField(tail), right, comp))))
+                  } else_ {
+                    ADT(T(cons)(tA), Seq(rightcons.getField(head), FunctionInvocation(identifier, Seq(tA), Seq(left, rightcons.getField(tail), comp))))
+                  }
+                )
+              )
+            } else_ {
+              left
+            }
+          } else_ {
+            right
+          }
+        })
+    }
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr],
+                             newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+      ???
+    }
+  }
+
+  case object SortWithReverser extends Reverser {
+    import Utils._
+    val identifier = sortWith
+    import InoxConvertible._
+
+    val funDef: inox.trees.FunDef = mkFunDef(identifier)("A"){ case Seq(tA) =>
+      (Seq("in" :: T(list)(tA), "comp" :: FunctionType(Seq(tA, tA), Int32Type)),
+      T(list)(tA),
+      { case Seq(input, comp) =>
+          if_(input.isInstOf(T(nil)(tA)) || input.asInstOf(T(cons)(tA)).getField(tail).isInstOf(T(nil)(tA))) {
+            input
+          } else_ {
+            let("r"::T(tuple2)(T(list)(tA), T(list)(tA)),
+              FunctionInvocation(splitEven, Seq(tA), Seq(input)))( r=>
+              FunctionInvocation(merge, Seq(tA), Seq(
+                FunctionInvocation(sortWith, Seq(tA), Seq(r.getField(_1), comp)),
+                FunctionInvocation(sortWith, Seq(tA), Seq(r.getField(_2), comp)),
+                comp))
+            )
+          }
+      })
+    }
+
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+      ???
     }
   }
 }
