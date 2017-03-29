@@ -217,7 +217,7 @@ object ReverseProgram extends lenses.Lenses {
     val prevBody = prevFunction.fullBody
     val newMain = FreshIdentifier("main")
     implicit val cache = new HashMap[Expr, Expr]
-    for { r <- repair(ProgramFormula(prevBody), outExpr)
+    for { r <- repair(ProgramFormula(prevBody), ProgramFormula(outExpr))
          ProgramFormula(newOutExpr, f) = r
          _ = Log("Remaining formula: " + f)
          _ = Log("Remaining expression: " + newOutExpr)
@@ -328,14 +328,16 @@ object ReverseProgram extends lenses.Lenses {
     * by trying to change the variables values, or the function body itself.
     *
     * @param program An expression that computed the value before newOut, and the formula contains the current mappings.
-    * @param newOut Either a literal value that should be produced by function, or a variable,
-    *               in which case the result will have in the formula a constraint over this variable,
-    *               Or a let-expression to denote a clone-and-paste.
+    * @param newOut A ProgramFormula resulting from the action of the user on the datat.
+    *               Either a literal value that should be produced by function,
+    *               or a variable, in which case the result will have in the formula a constraint over this variable,
+    *               Or an expression with constrained free variables to denote a clone-and-paste or many other things.
     * @return A set of possible expressions, along with a set of possible assignments to input variables.
     **/
-  def repair(program: ProgramFormula, newOut: Expr)
+  def repair(program: ProgramFormula, newOutProgram: ProgramFormula)
             (implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
     val ProgramFormula(function, functionformula) = program
+    val ProgramFormula(newOut, newOutFormula) = newOutProgram
     val currentValues = functionformula.known
     val stackLevel = Thread.currentThread().getStackTrace.length
     Log(s"\n@repair$stackLevel(\n  $program\n, $newOut)")
@@ -382,7 +384,7 @@ object ReverseProgram extends lenses.Lenses {
             case l: Literal[_] => // Raw replacement
               Stream(ProgramFormula(newOut))
             case m: MapApply =>
-              repair(program, program.formula.findConstraintVariableOrLiteral(m))
+              repair(program, newOutProgram.subExpr(program.formula.findConstraintVariableOrLiteral(m)))
 
             /*case l@Let(cloned: ValDef, _, _) =>
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
@@ -450,7 +452,7 @@ object ReverseProgram extends lenses.Lenses {
                     } else {
                       val i = fm.pairs.lastIndexWhere(_._1 == key_v)
                       val newValue = fm.pairs(i)._2
-                      lb += repair(program.subExpr(value), newValue).map(pf => (key, pf))
+                      lb += repair(program.subExpr(value), newOutProgram.subExpr(newValue)).map(pf => (key, pf))
                     }
                 }.toList
                 for {solution <- inox.utils.StreamUtils.cartesianProduct(newFiniteMapKV)
@@ -475,7 +477,7 @@ object ReverseProgram extends lenses.Lenses {
                 // We repair symbolically on every map's value.
                 val repairs = partEvaledPairs.map{
                   case (key_v, (key, value, value_v)) =>
-                    repair(program.subExpr(value), MapApply(newOut, key)).map((key_v, _))
+                    repair(program.subExpr(value), newOutProgram.subExpr(MapApply(newOut, key))).map((key_v, _))
                 }
                 for{keys_pf_seq <- inox.utils.StreamUtils.cartesianProduct(repairs)} yield {
                   val (keys, pf_seq) = keys_pf_seq.unzip
@@ -532,7 +534,8 @@ object ReverseProgram extends lenses.Lenses {
 
               val simplifiedExpectedBody = simplify(exprOps.replaceFromSymbols(oldToValue, expectedBody))
               for {pf <- repair(ProgramFormula(bodyWithFreshVariables,
-                Formula(freshToValue ++ freeVars.map(fv => fv -> currentValues(fv)).toMap)), simplifiedExpectedBody)
+                Formula(freshToValue ++ freeVars.map(fv => fv -> currentValues(fv)).toMap)),
+                  newOutProgram.subExpr(simplifiedExpectedBody))
               } yield {
                   val ProgramFormula(newBody, f) = pf
                   Log(s"Going to test if lambda can be repaired using $newBody, $f, $freshToValue")
@@ -561,7 +564,8 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case Let(vd, expr, body) =>
-          repair(ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), program.formula), newOut).map {
+          repair(ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), program.formula),
+            newOutProgram).map {
             case ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), f) =>
               ProgramFormula(Let(vd, expr, body), f)
             case e  => throw new Exception(s"Don't know how to get a Let back from $e")
@@ -569,7 +573,7 @@ object ReverseProgram extends lenses.Lenses {
 
         case StringConcat(expr1, expr2) =>
           ifEmpty(for(pf <- repair(program.subExpr(FunctionInvocation(StringConcatReverser.identifier, Nil,
-            Seq(expr1, expr2))), newOut)) yield {
+            Seq(expr1, expr2))), newOutProgram)) yield {
             pf match {
               case ProgramFormula(FunctionInvocation(StringConcatReverser.identifier, Nil, Seq(x, y)), f) =>
                 ProgramFormula(StringConcat(x, y), f)
@@ -585,7 +589,7 @@ object ReverseProgram extends lenses.Lenses {
             case v: Variable => Stream(ProgramFormula(v))
             case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
               val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
-                repair(ProgramFormula(aFun, program.formula), aVal)
+                repair(ProgramFormula(aFun, program.formula), newOutProgram.subExpr(aVal))
               }
               val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
               for {seq <- streamOfSeqSolutions
@@ -617,7 +621,7 @@ object ReverseProgram extends lenses.Lenses {
           val newVarsInConstraint = exprOps.variablesOf(newConstraint).map(_.toVal)
 
           for{ pf <- repair(program.subExpr(adt),
-            ADT(ADTType(constructor.id, constructor.tps), vds.map(_.toVariable))) } yield {
+            newOutProgram.subExpr(ADT(ADTType(constructor.id, constructor.tps), vds.map(_.toVariable)))) } yield {
             pf.wrap(x => ADTSelector(x, selector)) combineWith Formula(
               unknownConstraints = newConstraint)
           }
@@ -648,7 +652,7 @@ object ReverseProgram extends lenses.Lenses {
           val newConstraint = and(constraints : _*)
           val newVariablesConstraints = exprOps.variablesOf(newConstraint).map(_.toVal)
 
-          for{ pf <- repair(program.subExpr(map), finiteMapRepair) } yield {
+          for{ pf <- repair(program.subExpr(map), newOutProgram.subExpr(finiteMapRepair)) } yield {
             pf.wrap(x => MapApply(x, key)) combineWith Formula(
               unknownConstraints = newConstraint)
           }
@@ -668,7 +672,7 @@ object ReverseProgram extends lenses.Lenses {
               val freshArgumentValues = argumentValues.map{ case (k,v) => oldToFresh(k) -> v}
               val freshFormula = Formula(freshArgumentValues)
               for {pf <-
-                     repair(ProgramFormula(freshBody, freshFormula).wrappingEnabled, newOut)  /::
+                     repair(ProgramFormula(freshBody, freshFormula).wrappingEnabled, newOutProgram)  /::
                        Log.prefix(s"From repair$stackLevel'(\n  $freshBody,\n  $freshFormula,\n  $newOut), recovered:\n")
                    ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
@@ -677,7 +681,7 @@ object ReverseProgram extends lenses.Lenses {
                      combineArguments(program combineWith newBodyFreshFormula,
                        arguments.zip(freshArgsNames).map { case (arg, v) =>
                       val expected = newBodyFreshFormula.getOrElse(v, argumentValues(freshToOld(v).toVal))
-                      (arg, expected)
+                      (arg, newOutProgram.subExpr(expected))
                      })
                    (newArguments, newArgumentsFormula) = args
                    newLambda = if (isSameBody) l else Lambda(argNames, newBody)
@@ -685,7 +689,7 @@ object ReverseProgram extends lenses.Lenses {
                      case v: Variable => Stream(ProgramFormula(v, (
                        if(isSameBody) Formula() else
                          Formula(Map(v.toVal -> newLambda)))))
-                     case l => repair(ProgramFormula(l, program.formula), newLambda)
+                     case l => repair(ProgramFormula(l, program.formula), newOutProgram.subExpr(newLambda))
                    }
                    ProgramFormula(newAppliee, lambdaRepairFormula) = pfLambda
                    finalApplication = Application(newAppliee, newArguments)           /: Log.prefix("finalApplication")
@@ -703,9 +707,9 @@ object ReverseProgram extends lenses.Lenses {
             case None => Stream.empty  /: Log.prefix(s"No function $f reversible for : $funInv.\nIt evaluates to:\n$functionValue.")
             case Some(reverser) =>
               val argsValue = args.map(arg => evalWithCache(letm(currentValues) in arg))
-              val lenseResult = reverser.put(tpes)(argsValue, newOut)
+              val lenseResult = reverser.put(tpes)(argsValue, newOutProgram)
               for{l <- lenseResult; (newArgsValues, newForm) = l
-                  a <- combineArguments(program, args.zip(newArgsValues))
+                  a <- combineArguments(program, args.zip(newArgsValues.map(newOutProgram.subExpr _)))
                   (newArguments, newArgumentsFormula) = a
               } yield {
                 val formula = newForm combineWith newArgumentsFormula
@@ -731,13 +735,13 @@ object ReverseProgram extends lenses.Lenses {
               (if(vsSet contains old) {
                 Log.prefix("#1") :=
                   (for(pf <- repair(program.subExpr(sExpr),
-                  FiniteSet((vsSet - old + fresh).toSeq, tpe))) yield {
+                  newOutProgram.subExpr(FiniteSet((vsSet - old + fresh).toSeq, tpe)))) yield {
                   pf.wrap(x => SetAdd(x, elem))
                 })
               } else Stream.empty) #::: (
                 Log.prefix("#2") :=
                   (if(elem_v == old) {
-                  for(pf <- repair(program.subExpr(elem), fresh)) yield {
+                  for(pf <- repair(program.subExpr(elem), newOutProgram.subExpr(fresh))) yield {
                     pf.wrap(x => SetAdd(sExpr, x))
                   }
                 } else Stream.empty)
@@ -745,17 +749,17 @@ object ReverseProgram extends lenses.Lenses {
             case None => // Just added and removed elements.
               if(removed.isEmpty) { // Just added elements.
                 for(pf <- repair(program.subExpr(sExpr),
-                  FiniteSet((vsSet ++ (added - elem_v)).toSeq, tpe))) yield {
+                  newOutProgram.subExpr(FiniteSet((vsSet ++ (added - elem_v)).toSeq, tpe)))) yield {
                   pf.wrap(x => SetAdd(x, elem))
                 }
               } else {
                 if(removed contains elem_v) { // We replace SetAdd(f, v) by f
                   for(pf <- repair(program.subExpr(sExpr),
-                    FiniteSet(vsSet.toSeq, tpe)
+                    newOutProgram.subExpr(FiniteSet(vsSet.toSeq, tpe))
                   )) yield pf
                 } else { // All changes happened in the single set.
                   for(pf <- repair(program.subExpr(sExpr),
-                    FiniteSet((vsSet ++ (added-elem_v) -- removed).toSeq, tpe)
+                    newOutProgram.subExpr(FiniteSet((vsSet ++ (added-elem_v) -- removed).toSeq, tpe))
                   )) yield pf.wrap(x => SetAdd(x, elem))
                 }
               }
@@ -770,7 +774,7 @@ object ReverseProgram extends lenses.Lenses {
   /** Given a sequence of (arguments expression, expectedValue),
       returns the cartesian product of all argument programs and solutions. */
   private def combineArguments(pf: ProgramFormula,
-      arguments: Seq[(Expr, Expr)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
+      arguments: Seq[(Expr, ProgramFormula)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
     Log(s"combining arguments for $pf")
     val argumentsReversed = arguments.map { case (arg, expected) =>
       Log(s" repairing argument $arg should equal $expected")

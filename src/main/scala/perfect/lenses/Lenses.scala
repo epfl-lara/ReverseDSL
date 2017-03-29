@@ -26,7 +26,7 @@ trait Lenses { self: ReverseProgram.type =>
     def identifier: Identifier
     def funDef: FunDef
     def mapping = identifier -> this
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)]
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)]
   }
 
   object ListLiteral {
@@ -48,8 +48,9 @@ trait Lenses { self: ReverseProgram.type =>
   /** Lense-like filter */
   case object FilterReverser extends Reverser with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.
     val identifier = Utils.filter
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
       val lambda = originalArgsValues.tail.head
+      val newOutput = newOutputProgram.expr
       val ListLiteral(originalInput) = originalArgsValues.head
       //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
       filterRev(originalInput, (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true), ListLiteral.unapply(newOutput).get).map{ (e: List[Expr]) =>
@@ -83,7 +84,7 @@ trait Lenses { self: ReverseProgram.type =>
   case object MapReverser extends Reverser {
     val identifier = Utils.map
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
       Log(s"map.apply($newOutput)")
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
       val ListLiteral(originalInput) = originalArgsValues.head
@@ -101,7 +102,7 @@ trait Lenses { self: ReverseProgram.type =>
             }
           Log(s"in:$in\nnewformula:$newFormula")
           Log.prefix("res=") :=
-          repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), out).flatMap {
+          repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), newOutput.subExpr(out)).flatMap {
             case ProgramFormula(Application(_, Seq(in2)), _)
               if in2 != in => //The argument's values have changed
               Stream(Left(in))
@@ -120,7 +121,7 @@ trait Lenses { self: ReverseProgram.type =>
       }
 
       //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
-      mapr.mapRev(originalInput, ListLiteral.unapply(newOutput).get).flatMap{
+      mapr.mapRev(originalInput, ListLiteral.unapply(newOutput.expr).get).flatMap{
         (e: List[Either[Expr, (Expr, Lambda)]]) =>
         //Log("Final solution : " + e)
         val argumentsChanged = e.map{
@@ -158,7 +159,7 @@ trait Lenses { self: ReverseProgram.type =>
   case object FlattenReverser extends Reverser {
     val identifier = Utils.flatten
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
       ???
     }
 
@@ -186,7 +187,7 @@ trait Lenses { self: ReverseProgram.type =>
   case object FlatMapReverser extends Reverser {
     val identifier = Utils.flatmap
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
       ???
     }
 
@@ -229,7 +230,8 @@ trait Lenses { self: ReverseProgram.type =>
 
     def endsWith(list: Expr, end: Expr): Boolean = startsWith(reverse(list, None), reverse(end, None))
 
-    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+      val newOutput = newOutputProgram.expr
       val leftValue = originalArgsValues.head
       val rightValue = originalArgsValues.tail.head
 
@@ -301,7 +303,8 @@ trait Lenses { self: ReverseProgram.type =>
   case object StringConcatReverser extends Reverser {
     val identifier = FreshIdentifier("tmpstringconcat")
 
-    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: Expr)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+      val newOutput = newOutputProgram.expr
       val leftValue = originalArgsValues.head
       val rightValue = originalArgsValues.tail.head
 
