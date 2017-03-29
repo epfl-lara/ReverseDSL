@@ -593,6 +593,20 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     // Double repair !
   }
 
+  test("If-then-else") {
+    val pfun = function(
+      let("a" :: StringType, "Hello")(av =>
+        if_(av === "Hello") {
+          av
+        } else_ {
+          StringConcat(av, " !")
+        }
+      )
+    )(inoxTypeOf[String])
+    checkProg("Hello", pfun)
+    checkProg("Mikael !", repairProgram(pfun, "Mikael"))
+  }
+
   /* Add tests for:
      Integers operations
      List flatten, flatmap,

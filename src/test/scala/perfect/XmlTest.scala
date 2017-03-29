@@ -69,6 +69,7 @@ class XmlTest extends FunSuite with TestHelpers {
     val selectChildInput2 = ValDef(FreshIdentifier("i2"), inoxTypeOf[String], Set())
     val selectChildSubInput1 = ValDef(FreshIdentifier("i3"), inoxTypeOf[XmlTrees.Node], Set())
     val selectChild = ValDef(FreshIdentifier("selectChild"), FunctionType(Seq(inoxTypeOf[XmlTrees.Node], inoxTypeOf[String]), inoxTypeOf[List[XmlTrees.Node]]))
+    /** Select the first child with the given name */
     val selectChildImpl = Lambda(Seq(selectChildInput1, selectChildInput2),
       Application(Variable(filter, FunctionType(Seq(inoxTypeOf[List[XmlTrees.Node]], inoxTypeOf[String]), inoxTypeOf[List[XmlTrees.Node]]), Set()), Seq(selectChildInput1.toVariable.getField(children),
         Lambda(Seq(selectChildSubInput1), selectChildSubInput1.toVariable.getField(tag) === selectChildInput2.toVariable)

@@ -764,6 +764,17 @@ object ReverseProgram extends lenses.Lenses {
                 }
               }
           }
+        case IfExpr(cond, thenn, elze) =>
+          val cond_v = evalWithCache(letm(currentValues) in cond)
+          cond_v match {
+            case BooleanLiteral(true) =>
+              for(pf <- repair(program.subExpr(thenn), newOutProgram)) yield
+                pf.wrap(x => IfExpr(cond, x, elze))
+            case BooleanLiteral(false) =>
+              for(pf <- repair(program.subExpr(elze), newOutProgram)) yield
+                pf.wrap(x => IfExpr(cond, thenn, x))
+            case _ => throw new Exception(s"Not a boolean: $cond_v")
+          }
         case anyExpr =>
           Log(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")
           Stream.empty
