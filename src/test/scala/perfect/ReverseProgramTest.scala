@@ -272,21 +272,21 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected3 = "Hello bigworld"
     val expected4 = "Hello    world"
 
-    val pfun = function(StringConcat("Hello ", "world"))(inoxTypeOf[String])
+    val pfun = function("Hello " &+ "world")(inoxTypeOf[String])
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
     val pfun3 = checkProg(expected3, repairProgram(pfun, expected3, 3))
     val pfun4 = checkProg(expected4, repairProgram(pfun, expected4, 3))
 
-    pfun2 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
+    pfun2 matchBody { case StringLiteral(s) &+ StringLiteral(t) =>
       s shouldEqual "Hello "
       t shouldEqual "buddy"
     }
-    pfun3 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
+    pfun3 matchBody { case StringLiteral(s) &+ StringLiteral(t) =>
       s shouldEqual "Hello "
       t shouldEqual "bigworld"
     }
-    pfun4 matchBody { case StringConcat(StringLiteral(s), StringLiteral(t)) =>
+    pfun4 matchBody { case StringLiteral(s) &+ StringLiteral(t) =>
       (s, t) shouldEqual ("Hello    ", "world")
     }
   }
@@ -299,7 +299,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
     val pfun = function(
       let(ap, "Hello ")(av =>
-        StringConcat(av, "world")
+        av &+ "world"
       ))(inoxTypeOf[String])
 
     checkProg(expected1, pfun)
@@ -347,7 +347,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val pfun = function(
       let(ap, "Hello ")(av =>
       let(bp, "world")(bv =>
-        StringConcat(av, bv)
+        av &+ bv
       )
       ))(inoxTypeOf[String])
 
@@ -370,7 +370,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val pfun = function(
       let(ap, "Mikael")(av =>
         let(bp, " ")(bv =>
-          StringConcat(StringConcat(av, bv), av)
+          av &+ bv &+ av
         )
       ))(inoxTypeOf[String])
 
@@ -390,7 +390,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
     val pfun = function(
       let(ap, "Mikael")(av =>
-          StringConcat(StringConcat(av, " is nice, "), av)
+          av &+ " is nice, " &+ av
       ))(inoxTypeOf[String])
     //checkProg("Mikael is nice, Mikael", pfun)
     val s_pfun2 = repairProgramList(pfun, "Mikael is nice, Mikael is clever", 3)
@@ -412,7 +412,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
         Application(
         Lambda(Seq(ap),
           Lambda(Seq(bp),
-            StringConcat(StringConcat(ap.toVariable, ":"), bp.toVariable)
+            ap.toVariable &+ ":" &+ bp.toVariable
           )
         ), Seq("Winner")), Seq("Mikael"))
       )(inoxTypeOf[String])
@@ -474,7 +474,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       FunctionInvocation(Utils.map,Seq(inoxTypeOf[String], inoxTypeOf[String]),
         Seq(
           _List[String]("Margharita", "Salami", "Royal"),
-          Lambda(Seq(ap), StringConcat("Pizza ", ap.toVariable))
+          Lambda(Seq(ap), "Pizza " &+ ap.toVariable)
         )
       )
     )(inoxTypeOf[List[String]])
@@ -486,7 +486,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     }
     val pfun3 = repairProgram(pfun, _List[String]("The pizza Margharita", "Pizza Salami","Pizza Royal"))
     checkProg(_List[String]("The pizza Margharita", "The pizza Salami", "The pizza Royal"), pfun3) matchBody {
-      case FunctionInvocation(_, _, Seq(list, Lambda(vds, StringConcat(prefix, _)))) =>
+      case FunctionInvocation(_, _, Seq(list, Lambda(vds, prefix &+ _))) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Royal")
         prefix shouldEqual StringLiteral("The pizza ")
     }
@@ -577,13 +577,13 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val pfun = function(
       ADTSelector(
         ADT(T(tuple2)(StringType, StringType),
-          Seq(StringConcat("Hello", ", "), inoxExprOf[String]("world"))), _1)
+          Seq("Hello" &+ ", ", "world")), _1)
     )(inoxTypeOf[String])
 
     checkProg("Hello, ", pfun)
     checkProg("Hello! ", repairProgram(pfun, "Hello! ")) matchBody {
       case ADTSelector(ADT(_,
-        Seq(StringConcat(StringLiteral(s), StringLiteral(t)), StringLiteral(w))), `_1`) =>
+        Seq(StringLiteral(s) &+ StringLiteral(t), StringLiteral(w))), `_1`) =>
         s shouldEqual "Hello"
         t shouldEqual "! "
         w shouldEqual "world"
@@ -596,7 +596,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val a = ValDef(FreshIdentifier("a"), tp)
     val pfun = function(
       let(a, ADT(tp, Seq("Mikael", " ")))(av =>
-        StringConcat(StringConcat(ADTSelector(av, _1), ADTSelector(av, _2)), ADTSelector(av, _1))
+        //StringConcat(StringConcat(ADTSelector(av, _1), ADTSelector(av, _2)), ADTSelector(av, _1))
+        (ADTSelector(av, _1) &+ ADTSelector(av, _2)) &+ ADTSelector(av, _1)
       )
     )(inoxTypeOf[String])
 
@@ -627,11 +628,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   test("If-then-else") {
     val pfun = function(
       let("a" :: StringType, "Hello")(av =>
-        if_(av === "Hello") {
-          av
-        } else_ {
-          StringConcat(av, " !")
-        }
+        if_(av === "Hello") { av } else_ { av &+ " !" }
       )
     )(inoxTypeOf[String])
     checkProg("Hello", pfun)
@@ -655,7 +652,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
       val pfun = function("Hello world,")(inoxTypeOf[String])
       val clonedBody = let(ap, "world")(av =>
-        StringConcat(StringConcat(StringConcat("Hello ", av), ","), av)
+        "Hello " &+ av &+ "," &+ av
       )
       val pfun2 = repairProgram(pfun, clonedBody)
       pfun2 matchBody { case v => v shouldEqual clonedBody }
@@ -667,10 +664,10 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       val bp = valdef[String]("b")
 
       val initBody = let(ap, "world")(av =>
-        StringConcat("Hello ", av)
+        "Hello " &+ av
       )
       val clonedBody = let(bp, "Hello")(bv =>
-        StringConcat(StringConcat(bv, " world"), bv)
+        bv &+ " world" &+ bv
       )
       val pfun = function(initBody)(inoxTypeOf[String])
       val pfun2 = repairProgram(pfun, clonedBody)
@@ -690,10 +687,10 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       val bp = valdef[String]("b")
 
       val initBody = let(ap, "big world")(av =>
-        StringConcat("Hello ", av)
+        "Hello " &+ av
       )
       val clonedBody = let(bp, "Hello big")(bv =>
-        StringConcat(StringConcat(bv, " world"), bv)
+        bv &+ " world" &+ bv
       )
       val pfun = function(initBody)(inoxTypeOf[String])
       val pfun2 = repairProgram(pfun, clonedBody)

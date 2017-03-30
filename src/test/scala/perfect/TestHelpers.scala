@@ -31,6 +31,14 @@ trait TestHelpers {
 
   implicit def toProgramFormula[A : InoxConvertible](e: A): ProgramFormula = ProgramFormula(e: Expr)
 
+  implicit class AugmentedSubExpr[T <: Expr](e: T) {
+    @inline def &+(other: Expr) = StringConcat(e, other)
+  }
+  implicit class AugmentedString(e: String) extends AugmentedSubExpr(StringLiteral(e))
+  object &+ {
+    def unapply(e: Expr): Option[(Expr, Expr)] = e match { case StringConcat(a, b) => Some((a, b)) case _ => None }
+  }
+
   implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
     @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {
       case Some(funDef) => test(funDef)

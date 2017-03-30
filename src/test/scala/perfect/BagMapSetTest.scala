@@ -36,14 +36,13 @@ class BagMapSetTest extends FunSuite with TestHelpers {
           "howareu" -> "comment tu vas?"
         )
       ){ trv =>
-        StringConcat(StringConcat(MapApply(trv, "hello"), ", "), MapApply(trv, "howareu"))
+        MapApply(trv, "hello") &+ ", "  &+ MapApply(trv, "howareu")
       }
     )(inoxTypeOf[String])
 
     checkProg("Bonjour, comment tu vas?", pfun)
     checkProg("Salut, comment tu vas?", repairProgram(pfun, "Salut, comment tu vas?")) matchBody {
-      case Let(t, m, StringConcat(
-          StringConcat(MapApply(t2, StringLiteral("hello")), StringLiteral(", ")), MapApply(t3, StringLiteral("howareu")))) =>
+      case Let(t, m, MapApply(t2, StringLiteral("hello")) &+ StringLiteral(", ") &+ MapApply(t3, StringLiteral("howareu"))) =>
         exprOfInox[Map[String, String]](m) shouldEqual Map("hello" -> "Salut", "howareu" -> "comment tu vas?")
     }
   }
@@ -53,13 +52,10 @@ class BagMapSetTest extends FunSuite with TestHelpers {
       let("firstname" :: inoxTypeOf[String], "Mikael"){ firstname =>
       let("tr" :: inoxTypeOf[Map[String, String]],
         _Map[String, String](
-          "hello" -> StringConcat("Bonjour ", firstname),
-          "howareu" -> StringConcat(", comment tu vas, ", firstname)
+          "hello" -> ("Bonjour " &+ firstname),
+          "howareu" -> (", comment tu vas, " &+ firstname)
         )
-      ){ trv =>
-        StringConcat(MapApply(trv, "hello"), MapApply(trv, "howareu"))
-      }
-      }
+      ){ trv => MapApply(trv, "hello") &+ MapApply(trv, "howareu") }  }
     )(inoxTypeOf[String])
 
     checkProg("Bonjour Mikael, comment tu vas, Mikael", pfun)
@@ -71,12 +67,10 @@ class BagMapSetTest extends FunSuite with TestHelpers {
     val pfun = function(
       let("tr" :: inoxTypeOf[Map[String, String]],
         _Map[String, String](
-          "hello" -> StringConcat("Hello ", "World"),
-          "howareu" -> StringConcat(", comment tu vas", "???")
+          "hello" -> ("Hello " &+ "World"),
+          "howareu" -> (", comment tu vas" &+ "???")
         )
-      ){ trv =>
-        MapApply(trv, "newkey")
-      }
+      ){ trv => MapApply(trv, "newkey") }
     )(inoxTypeOf[String])
 
     checkProg(Utils.defaultValue(inoxTypeOf[String])(Utils.defaultSymbols), pfun)
@@ -84,8 +78,8 @@ class BagMapSetTest extends FunSuite with TestHelpers {
       repairProgram(pfun, "New world")) matchBody {
       case Let(tr, FiniteMap(pairs, _, _, _), MapApply(_, StringLiteral("newkey"))) =>
         pairs should contain((StringLiteral("newkey"), StringLiteral("New world")))
-        pairs should contain((StringLiteral("hello"), StringConcat("Hello ", "World")))
-        pairs should contain((StringLiteral("howareu"), StringConcat(", comment tu vas", "???")))
+        pairs should contain((StringLiteral("hello"), "Hello " &+ "World"))
+        pairs should contain((StringLiteral("howareu"), ", comment tu vas" &+ "???"))
     }
   }
 

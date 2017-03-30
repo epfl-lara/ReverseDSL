@@ -18,12 +18,12 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     val va = variable[String]("a")
     val vb = variable[String]("b")
     val vc = variable[String]("c")
-    val f = ReverseProgram.Formula(BooleanLiteral(true) && StringConcat(vb, "42") === vc && va === StringConcat(vc, vb) && vb === "17")
+    val f = ReverseProgram.Formula(BooleanLiteral(true) && (vb &+ "42") === vc && va === (vc &+ vb) && vb === "17")
     f.assignments match {
       case None => fail(s"Could not extract assignments from $f")
-      case Some(f) => f(va) shouldEqual Let(vb.toVal, "17", Let(vc.toVal, StringConcat(vb, "42"), Let(va.toVal, StringConcat(vc, vb), va)))
+      case Some(f) => f(va) shouldEqual Let(vb.toVal, "17", Let(vc.toVal, vb &+ "42", Let(va.toVal, vc &+ vb, va)))
     }
-    val f2 = ReverseProgram.Formula(BooleanLiteral(true) && StringConcat(vb, "42") === va && va === StringConcat(vc, vb) && vb === "17")
+    val f2 = ReverseProgram.Formula(BooleanLiteral(true) && (vb &+ "42") === va && va === (vc &+ vb) && vb === "17")
     f2.assignments shouldEqual None
   }
   test("Wrap") {
@@ -72,8 +72,30 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
-  test("Split") {
+  test("Split / Clone and paste") {
+    val output: Expr = "Hello big beautiful world"
+    val pfun = function(
+      let("a"::StringType, "Hello big ")(av =>
+        let("b"::StringType, "beautiful world")(bv =>
+          av &+ bv
+        )
+      )
+    )(inoxTypeOf[String])
 
+    pfun shouldProduce output
+
+    val tree = variable[String](ProgramFormula.tree)
+    val subtree = variable[String](ProgramFormula.subtree)
+    val newOut = ProgramFormula(
+      tree &+ "! It's really " &+ subtree  &+ ".",
+      (tree === "Hello " &+ subtree &+ " world") &&
+      subtree === "big beautiful"
+    )
+
+    val pfun2 = pfun repairFrom newOut shouldProduce
+      "Hello big beautiful world! It's really big beautiful."
+    pfun2 repairFrom "Hello big and beautiful world! It's really big beautiful." shouldProduce
+                     "Hello big and beautiful world! It's really big and beautiful."
   }
 
   test("Clone") {
