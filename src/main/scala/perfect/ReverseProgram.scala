@@ -716,11 +716,12 @@ object ReverseProgram extends lenses.Lenses {
               unknownConstraints = newConstraint)
           }
 
-        case m@Application(lambdaExpr, arguments) =>
+        case Application(lambdaExpr, arguments) =>
           val originalValue = (lambdaExpr match {
             case v: Variable => currentValues.getOrElse(v.toVal, evalWithCache(letm(currentValues) in v))
-            case l => evalWithCache(letm(currentValues) in l) // Should be a lambda
-          }) =: Log.Original_Value
+            case l: Lambda => l
+            case l => evalWithCache(letm(currentValues) in l)
+          }) /: Log.Original_Value
           originalValue match {
             case l@Lambda(argNames, body) =>
               val freshArgsNames = argNames.map(vd => ValDef(FreshIdentifier(vd.id.name, true), vd.tpe, vd.flags))
@@ -730,7 +731,7 @@ object ReverseProgram extends lenses.Lenses {
               val argumentValues = argNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
               val freshArgumentValues = argumentValues.map{ case (k,v) => oldToFresh(k) -> v}
               val freshFormula = Formula(freshArgumentValues)
-              val newpf = ProgramFormula(freshBody, freshFormula).wrappingEnabled
+              val newpf = (program.subExpr(freshBody) combineWith freshFormula).wrappingEnabled
               for {pf <-
                      repair(newpf, newOutProgram)  /::
                        Log.prefix(s"From repair$stackLevel'(\n  $newpf,\n  $newOutProgram), recovered:\n")
@@ -758,7 +759,7 @@ object ReverseProgram extends lenses.Lenses {
                 Log.prefix("[return] ")  :=
                 ProgramFormula(finalApplication: Expr, combinedFormula)
               }
-            case _ => throw new Exception(s"Don't know how to handle this case : $m of type ${m.getClass.getName}")
+            case _ => throw new Exception(s"Don't know how to handle this case : $function of type ${function.getClass.getName}")
           }
 
         case funInv@FunctionInvocation(f, tpes, args) =>
@@ -934,7 +935,6 @@ object ReverseProgram extends lenses.Lenses {
       }
       if(canWrap) {
         // We wrap the computation of functionValue with ADT construction
-
         val newFunction = exprOps.postMap {
           case t if t == functionValue => Some(function)
           case _ => None
@@ -945,9 +945,7 @@ object ReverseProgram extends lenses.Lenses {
 
         val (constraining, unconstrained) = variables.partition(constraintFreeVariables)
 
-        Stream(ProgramFormula(newFunction,
-          Formula(unknownConstraints = program.formula.unknownConstraints
-          )))
+        Stream(ProgramFormula(newFunction))
       } else Stream.empty
     } else {
       Stream.empty
