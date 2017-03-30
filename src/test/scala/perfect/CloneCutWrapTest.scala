@@ -49,7 +49,27 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("Unwrap") {
+    val output = _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
+    val pfun = function(
+      let("ad" :: inoxTypeOf[String], "Hello"){ av =>
+        _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node(av)))))
+      }
+    )(inoxTypeOf[Node])
+    pfun shouldProduce output
 
+    val tree = valdef[Node](ProgramFormula.tree)
+    val subtree = valdef[Node](ProgramFormula.subtree)
+    val newOut = ProgramFormula(
+      subtree.toVariable,
+      tree.toVariable === _Node("b", children=_List[Node](subtree.toVariable)) &&
+      subtree.toVariable === _Node("i", children=_List[Node](_Node("Hello")))
+    )
+    pfun repairFrom newOut shouldProduce {
+      _Node("i", children=_List[Node](_Node("Hello")))
+    } matchBody {
+      case Let(ad, StringLiteral("Hello"), e) =>
+        exprOps.variablesOf(e) should contain(ad.toVariable)
+    }
   }
 
   test("Split") {

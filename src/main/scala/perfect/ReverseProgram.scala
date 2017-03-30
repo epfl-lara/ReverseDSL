@@ -18,6 +18,7 @@ object ReverseProgram extends lenses.Lenses {
 
   object ProgramFormula {
     val tree = FreshIdentifier("tree") // Serves as a placeholder to identify where the tree was inserted.
+    val subtree = FreshIdentifier("subtree")
 
     def apply(e: Expr, f: Expr): ProgramFormula = ProgramFormula(e, Formula(f))
   }
@@ -367,7 +368,7 @@ object ReverseProgram extends lenses.Lenses {
     val ProgramFormula(newOut, newOutFormula) = newOutProgram
     val currentValues = functionformula.known
     val stackLevel = Thread.currentThread().getStackTrace.length
-    Log(s"\n@repair$stackLevel(\n  $program\n, $newOut)")
+    Log(s"\n@repair$stackLevel(\n  $program\n, $newOutProgram)")
     if(function == newOut) return { Log("@return original");
       Stream(program.withoutConstraints())
     }
@@ -383,7 +384,7 @@ object ReverseProgram extends lenses.Lenses {
 
     lazy val functionValue = program.functionValue
 
-    if(functionValue == newOut) return {
+    if(!newOut.isInstanceOf[Variable] && functionValue == newOut) return {
       Log("@return original function");
       Stream(program.withoutConstraints())
     }
@@ -620,9 +621,31 @@ object ReverseProgram extends lenses.Lenses {
               Formula(unknownConstraints=constraint)))
           }
 
-        case ADT(ADTType(tp, tpArgs), argsIn) =>
+        case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
           newOut match {
-            case v: Variable => Stream(ProgramFormula(v))
+            case Variable(ProgramFormula.subtree, tpe, s) =>
+              val treeVar = Variable(ProgramFormula.tree, tpe, s)
+              newOutFormula.findConstraintValue(treeVar) match {
+                case Some(originalTree) =>
+                  originalTree match {
+                    case Variable(vid, _, _) if vid == ProgramFormula.subtree => // End of it, no change to make.
+                      return Stream(program.withoutConstraints())
+                    case ADT(adtType2@ADTType(tp2, tpArgs2), argsIn2) =>
+                      if(adtType != adtType2) throw new Exception(s"Not the same type $adtType != $adtType2")
+                      val i = argsIn2.indexWhere(argIn => exprOps.exists{
+                        case k if k == Variable(ProgramFormula.subtree, tpe, s) => true
+                        case _ => false
+                      }(argIn))
+                      if(i == -1) throw new Exception(s"Could not find subtree in: $originalTree")
+
+                      repair(program.subExpr(argsIn(i)),
+                        ProgramFormula(newOut, treeVar === argsIn2(i)))
+                    case _ => throw new Exception(s"Not an ADT or the subtree: $originalTree")
+                  }
+                case None => throw new Exception(s"Could not find value of ${ValDef(ProgramFormula.tree, tpe, s)} in $newOutFormula")
+              }
+            case v: Variable =>
+              Stream(ProgramFormula(v))
             case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
               val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
                 repair(ProgramFormula(aFun, program.formula), newOutProgram.subExpr(aVal))
@@ -707,9 +730,10 @@ object ReverseProgram extends lenses.Lenses {
               val argumentValues = argNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
               val freshArgumentValues = argumentValues.map{ case (k,v) => oldToFresh(k) -> v}
               val freshFormula = Formula(freshArgumentValues)
+              val newpf = ProgramFormula(freshBody, freshFormula).wrappingEnabled
               for {pf <-
-                     repair(ProgramFormula(freshBody, freshFormula).wrappingEnabled, newOutProgram)  /::
-                       Log.prefix(s"From repair$stackLevel'(\n  $freshBody,\n  $freshFormula,\n  $newOut), recovered:\n")
+                     repair(newpf, newOutProgram)  /::
+                       Log.prefix(s"From repair$stackLevel'(\n  $newpf,\n  $newOutProgram), recovered:\n")
                    ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
                    isSameBody = (newBody == body)              /: Log.isSameBody
