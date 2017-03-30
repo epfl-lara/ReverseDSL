@@ -29,12 +29,13 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val out = Element("div", WebElement(TextNode("Hello world"))::Nil)
     checkProg(out, generateProgram(out))
   }
+  import perfect.ReverseProgram.ProgramFormula
 
   test("Change a constant output to another") {
     val out  = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val out2 = Element("pre", WebElement(TextNode("Hello code"))::Nil)
-    val (prog, fun) = ReverseProgram.put(out, None, None, None).head
-    checkProg(out2, ReverseProgram.put(out2, None, None, Some((prog, fun))).head)
+    val (prog, fun) = ReverseProgram.put(ProgramFormula(out), None).head
+    checkProg(out2, ReverseProgram.put(ProgramFormula(out2), Some((prog, fun))).head)
   }
 
   test("Variable assigment keeps the shape") {
@@ -488,6 +489,36 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       case FunctionInvocation(_, _, Seq(list, Lambda(vds, StringConcat(prefix, _)))) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Royal")
         prefix shouldEqual StringLiteral("The pizza ")
+    }
+  }
+
+  test("Reverse flatmap") {
+    val ap = valdef[String]("a")
+    val pfun = function(
+      FunctionInvocation(Utils.flatmap,Seq(inoxTypeOf[String], inoxTypeOf[String]),
+        Seq(
+          _List[String]("Margharita", "Royal", "Salami"),
+          Lambda(Seq(ap), if_(ap.toVariable === StringLiteral("Royal")) {
+            _List[String](ap.toVariable)
+          } else_ {
+            _List[String](ap.toVariable, StringConcat(ap.toVariable, " with mushrooms"))
+          })
+        )
+      )
+    )(inoxTypeOf[List[String]])
+
+    checkProg(_List[String]("Margharita", "Margharita with mushrooms", "Royal", "Salami", "Salami with mushrooms"), pfun)
+    repairProgram(pfun, _List[String]("Margharita", "Sushi with mushrooms", "Royal", "Salami", "Salami with mushrooms")) shouldProduce
+                        _List[String]("Sushi",      "Sushi with mushrooms", "Royal", "Salami", "Salami with mushrooms")
+    repairProgram(pfun, _List[String]("Margharita", "Margharita with champignons", "Royal", "Salami", "Salami with mushrooms")) shouldProduce
+                        _List[String]("Margharita", "Margharita with champignons", "Royal", "Salami", "Salami with champignons")
+    repairProgram(pfun, _List[String]("Margharita", "Margharita with mushrooms", "Royalty", "Salami", "Salami with mushrooms")) shouldProduce
+                        _List[String]("Margharita", "Margharita with mushrooms", "Royalty", "Salami", "Salami with mushrooms")
+
+    repairProgram(pfun, _List[String]("Margharita", "Margharita with mushrooms", "Royal", "Jambon", "Jambon with mushrooms", "Salami", "Salami with mushrooms")) shouldProduce
+      _List[String]("Margharita", "Margharita with mushrooms", "Royal", "Jambon", "Jambon with mushrooms", "Salami", "Salami with mushrooms") matchBody {
+      case FunctionInvocation(_, _, Seq(arg, lambda)) =>
+        arg shouldEqual _List[String]("Margharita", "Royal", "Jambon", "Salami")
     }
   }
 

@@ -16,15 +16,21 @@ object ReverseProgram extends lenses.Lenses {
   type OutExpr = Expr
   type Cache = HashMap[Expr, Expr]
 
+  object ProgramFormula {
+    val tree = FreshIdentifier("tree") // Serves as a placeholder to identify where the tree was inserted.
+
+    def apply(e: Expr, f: Expr): ProgramFormula = ProgramFormula(e, Formula(f))
+  }
+
   case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
     lazy val freeVars: Set[ValDef] = exprOps.variablesOf(expr).map(_.toVal)
     lazy val unchanged: Set[ValDef] = freeVars -- formula.varsToAssign
 
-    override def toString = expr.toString + s" [$formula]" + (if(canWrapInputString) " (wrapping enabled)" else "")
-    var canWrapInputString = false
+    override def toString = expr.toString + s" [$formula]" + (if(canDoWrapping) " (wrapping enabled)" else "")
+    var canDoWrapping = false
 
     def wrappingEnabled: this.type = {
-      this.canWrapInputString = true
+      this.canDoWrapping = true
       this
     }
 
@@ -36,6 +42,8 @@ object ReverseProgram extends lenses.Lenses {
     // Can be set-up externally to bypass the computation of the function value.
     // Must be set before a call to functionValue using .withComputedValue
     private var givenValue: Option[Expr] = None
+
+    lazy val bodyDefinition: Option[Expr] = formula.assignments.map(f => f(expr))
 
     def functionValue(implicit cache: Cache, symbols: Symbols): Expr = {
       givenValue match {
@@ -93,6 +101,24 @@ object ReverseProgram extends lenses.Lenses {
           List(v.toVal -> e)
         case _ => Nil
       }.toMap
+    }
+
+    /** If the constraints are complete, i.e. all variables can be defined, then we can generate a let-wrapper. */
+    lazy val assignments: Option[Expr => Expr] = {
+      def rec(constraints: List[Expr], seen: Set[Variable]): Option[Expr => Expr] = {
+        if(constraints == Nil) Some(x => x) else {
+          constraints.collectFirst[(Expr => Expr, Variable, Equals)]{
+            case equ@Equals(v: Variable, e: Expr) if (exprOps.variablesOf(e) -- seen).isEmpty =>
+              ((x: Expr) => Let(v.toVal, e, x), v, equ)
+            case equ@Equals(e: Expr, v: Variable) if (exprOps.variablesOf(e) -- seen).isEmpty =>
+              ((x: Expr) => Let(v.toVal, e, x), v, equ)
+          }.flatMap{ fve => rec(constraints.filter(x => x != fve._3), seen + fve._2).map(
+              (g: Expr => Expr) => ((x: Expr) => fve._1(g(x))))
+          }
+        }
+      }
+      val TopLevelAnds(ands) = unknownConstraints
+      rec(ands.toList.filter(x => x != BooleanLiteral(true)), Set())
     }
 
     def combineWith(other: Formula): Formula = {
@@ -199,15 +225,16 @@ object ReverseProgram extends lenses.Lenses {
     if(a.isEmpty) b else a
   }
 
-  def put[A: InoxConvertible](out: A, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
-    put(inoxExprOf[A](out), prevOut, modif, prevIn)
-  }
+  /*def put[A: InoxConvertible](out: A, prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
+    put(inoxExprOf[A](out), prevIn)
+  }*/
 
     /** Reverses a parameterless function, if possible.*/
-  def put(outExpr: Expr, prevOut: Option[OutExpr], modif: Option[ModificationSteps], prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
+  def put(outProg: ProgramFormula, prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
     if(prevIn == None) {
       implicit val symbols = defaultSymbols
       val main = FreshIdentifier("main")
+      val outExpr = outProg.bodyDefinition.getOrElse(throw new Exception(s"Ill-formed program: $outProg"))
       val fundef = mkFunDef(main)()(stp => (Seq(), outExpr.getType, _ => outExpr))
       return Stream((InoxProgram(context, Seq(fundef), allConstructors), main))
     }
@@ -217,7 +244,7 @@ object ReverseProgram extends lenses.Lenses {
     val prevBody = prevFunction.fullBody
     val newMain = FreshIdentifier("main")
     implicit val cache = new HashMap[Expr, Expr]
-    for { r <- repair(ProgramFormula(prevBody), ProgramFormula(outExpr))
+    for { r <- repair(ProgramFormula(prevBody), outProg)
          ProgramFormula(newOutExpr, f) = r
          _ = Log("Remaining formula: " + f)
          _ = Log("Remaining expression: " + newOutExpr)
@@ -345,6 +372,15 @@ object ReverseProgram extends lenses.Lenses {
       Stream(program.withoutConstraints())
     }
 
+    if(!function.isInstanceOf[Let] && program.canDoWrapping &&
+      newOutFormula.unknownConstraints != BooleanLiteral(true) &&
+      (exprOps.variablesOf(newOut) contains Variable(ProgramFormula.tree, program.expr.getType, Set()))) { // Maybe there is just a wrapping
+      Log("@return wrapped around tree: " + newOutProgram);
+      return Stream(ProgramFormula(exprOps.replaceFromSymbols(Map(ValDef(ProgramFormula.tree, program.expr.getType, Set()) ->
+        function
+      ), newOut)))
+    }
+
     lazy val functionValue = program.functionValue
 
     if(functionValue == newOut) return {
@@ -363,7 +399,7 @@ object ReverseProgram extends lenses.Lenses {
             case _ =>
               maybeWrap(program, newOut, functionValue) #::: maybeUnwrap(program, newOut, functionValue)
           }
-        case StringType if !newOut.isInstanceOf[Variable] && program.canWrapInputString =>
+        case StringType if !newOut.isInstanceOf[Variable] && program.canDoWrapping =>
           function match {
             case l: Let => Stream.empty[ProgramFormula]
             case Application(Lambda(_, _), _) => Stream.empty[ProgramFormula]

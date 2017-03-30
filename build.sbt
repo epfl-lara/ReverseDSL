@@ -17,6 +17,6 @@ resolvers += "Sonatype OSS Releases" at "https://oss.sonatype.org/content/reposi
 
 resolvers += "uuverifiers" at "http://logicrunch.it.uu.se:4096/~wv/maven"
 
-libraryDependencies += "ch.epfl.lara" %% "inox" % "1.0.2"
+libraryDependencies += "ch.epfl.lara" %% "inox" % "1.0.2-41f88"
 
 libraryDependencies ++= Seq("io.github.nicolasstucki" %% "multisets" % "0.4")

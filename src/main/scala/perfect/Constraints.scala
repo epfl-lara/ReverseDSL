@@ -199,7 +199,14 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
     val maybePart = e._2
     val numForceMaybeToKeep = e._3
     Log("The maybes are: " + e._2)
-
+    //val factory = SolverFactory.optimizer(prog, p.getOptions) for the new version of inox.
+    // Algorithm: After one solution, check which maybe SMT constraints hold (A, B, C) - and not D, E, F, G, and assert that
+    // (~A || ~B || ~C) && (D || E || F || G) && maxSat(A, B, C, D, E, F, G)
+    // - at least one of the previously true is false.
+    // - at least one of the previously false is true.
+    // Recursively, once for example D and E hold, add it.
+    // (~A || ~B || ~C) && (~D || ~E) &&  (F || G)  && maxSat(A, B, C, D, E, F, G)
+    // and so on...
     val solver = prog.getSolver.getNewSolver
     Log("solving " + and(e._1 ++ e._2 : _*))
     solver.assertCnstr(and(e._1 ++ e._2 : _*))

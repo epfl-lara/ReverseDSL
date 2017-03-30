@@ -320,13 +320,21 @@ object InoxConvertible {
   /** Obtains the inox type of a given type. */
   def inoxTypeOf[A:InoxConvertible] = implicitly[InoxConvertible[A]].getType
 
-  /** Creates a variable with the given name and type*/
-  def variable[A:InoxConvertible](name: String, alwaysShowUniqueId: Boolean = false) =
-    Variable(FreshIdentifier(name, alwaysShowUniqueId), inoxTypeOf[A], Set())
+  /** Creates a variable with the given identifier */
+  def variable[A:InoxConvertible](id: Identifier): Variable =
+    Variable(id, inoxTypeOf[A], Set())
 
   /** Creates a variable with the given name and type*/
-  def valdef[A:InoxConvertible](name: String, alwaysShowUniqueId: Boolean = false) =
-    ValDef(FreshIdentifier(name, alwaysShowUniqueId), inoxTypeOf[A], Set())
+  def variable[A:InoxConvertible](name: String, alwaysShowUniqueId: Boolean = false): Variable =
+    variable[A](FreshIdentifier(name, alwaysShowUniqueId))
+
+  /** Creates a variable with the given identifier*/
+  def valdef[A:InoxConvertible](id: Identifier): ValDef =
+    ValDef(id, inoxTypeOf[A], Set())
+
+  /** Creates a variable with the given name and type*/
+  def valdef[A:InoxConvertible](name: String, alwaysShowUniqueId: Boolean = false): ValDef =
+    valdef[A](FreshIdentifier(name, alwaysShowUniqueId))
 
   /** Obtains the expression from an inox expression */
   def exprOfInox[A:InoxConvertible](e: inox.trees.Expr) = implicitly[InoxConvertible[A]].recoverFrom(e)

@@ -1,5 +1,6 @@
 package perfect
 import legacy._
+import perfect.ReverseProgram.ProgramFormula
 
 /**
   * Created by Mikael on 09/03/2017.
@@ -26,6 +27,10 @@ trait TestHelpers {
 
   implicit def toExpr[A : InoxConvertible](e: A): Expr = inoxExprOf[A](e)
 
+  implicit def toProgramFormula(e: Expr): ProgramFormula = ProgramFormula(e)
+
+  implicit def toProgramFormula[A : InoxConvertible](e: A): ProgramFormula = ProgramFormula(e: Expr)
+
   implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
     @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {
       case Some(funDef) => test(funDef)
@@ -42,7 +47,7 @@ trait TestHelpers {
     def getBody: Expr = {
       pf._1.symbols.functions.get(pf._2).map(_.fullBody).getOrElse(throw new Exception(s"Non-existent function in program $pf"))
     }
-    def repairFrom(e: Expr) = repairProgram(pf, e)
+    def repairFrom(e: ProgramFormula) = repairProgram(pf, e)
     def shouldProduce(e: Expr) = checkProg(e, pf)
   }
 
@@ -59,8 +64,8 @@ trait TestHelpers {
     }) #::: s.drop(num)
   }
 
-  def repairProgramList(pf: PFun, expected2: Expr, lookInManyFirstSolutions: Int = 1): Stream[PFun] = {
-    val progfuns2 = ReverseProgram.put(expected2, None, None, Some(pf)).toStream
+  def repairProgramList(pf: PFun, expected2: ProgramFormula, lookInManyFirstSolutions: Int): Stream[PFun] = {
+    val progfuns2 = ReverseProgram.put(expected2, Some(pf)).toStream
     progfuns2.lengthCompare(0) should be > 0
     val initialValue = pf.getBody
     val sorted = sortStreamByDistance(progfuns2, lookInManyFirstSolutions, initialValue)
@@ -70,7 +75,7 @@ trait TestHelpers {
     sorted
   }
 
-  def repairProgram(pf: PFun, expected2: Expr, lookInManyFirstSolutions: Int = 1): PFun = {
+  def repairProgram(pf: PFun, expected2: ProgramFormula, lookInManyFirstSolutions: Int = 1): PFun = {
     val res =
     repairProgramList(pf, expected2, lookInManyFirstSolutions).head
     println("### repair:\n" + pf.getBody+"\n###by outputing: " + expected2 + " gives:\n" + res.getBody + "\n###")
@@ -78,7 +83,7 @@ trait TestHelpers {
   }
 
   def generateProgram[A: InoxConvertible](expected2: A) = {
-    val progfuns2 = ReverseProgram.put(expected2, None, None, None)
+    val progfuns2 = ReverseProgram.put(ProgramFormula(expected2), None)
     progfuns2.toStream.lengthCompare(1) should be >= 0
     progfuns2.head
   }

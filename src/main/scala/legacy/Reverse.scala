@@ -701,55 +701,16 @@ case class FilterReverse[A: InoxConvertible](f: A => Boolean) extends (List[A] %
   // ensuring res => res.forall(sol => filter(sol, f) == out && lehvenstein(l, sol) == lehvenstein(out, filter(sol, f))
 }
 
-case class FlatMap[A: InoxConvertible, B: InoxConvertible](fr: A ~~> List[B]) extends (List[A] %~> List[B]) {
+case class FlatMap[A: InoxConvertible, B: InoxConvertible](fr: A ~~> List[B]) extends (List[A] %~> List[B])
+    with perfect.lenses.FlatMapReverseLike[A, B, Nothing] {
   val f = fr.get _
-  val fRev = (x: List[B]) => fr.put(x, None).toList // TODO: replace None by something clever.
-  def get(in: Input) = flatMap(in, f)
+  val fRev = (opt: Option[A], x: List[B]) => fr.put(x, opt).toStream.map(Left[A, Nothing](_))
+  def get(in: Input) = flatMap(in)
   val methodName = "flatMap"+ Math.abs(this.hashCode()/2)
-  def putManual(out2: Output, in: Option[Input]) = flatMapRev(in.toList.flatten, f, fRev, out2)
-
-  def flatMap(l: List[A], f: A => List[B]): List[B] = l.flatMap(f)
-
-  def flatMapRev(l: List[A], f: A => List[B], fRev: List[B] => List[A], out: List[B]): List[List[A]] = {
-    l match {
-      case Nil =>
-        out match {
-          case Nil => List(Nil)
-          case _ =>
-            for{i <- (1 to out.length).toList
-                out_take_i = out.take(i)
-                a <- fRev(out_take_i)
-                sol <- flatMapRev(l, f, fRev, out.drop(i))} yield {
-              a::sol
-            }
-        }
-      case ha::tail =>
-        val expectedout = f(ha)
-        if(expectedout.length == 0) {
-          flatMapRev(tail, f, fRev, out).map(ha::_)
-        } else if(out == expectedout) {
-          flatMapRev(tail, f, fRev, Nil).map(ha::_)
-        } else if(out.take(expectedout.length) == expectedout) { // There has been an addition at the end
-          val t = flatMapRev(tail, f, fRev, out.drop(expectedout.length)).map(ha::_)
-          if(t.isEmpty) { // Fallback: We completely remove the hint
-            flatMapRev(Nil, f, fRev, out)
-          } else t
-        } else {
-          val k = out.indexOfSlice(expectedout)
-          if(k > 0) {
-            val frevouttakek = fRev(out.take(k))
-            val t = for{ sol <- flatMapRev(tail, f, fRev, out.drop(k + expectedout.length))
-                 a <- frevouttakek
-              } yield {
-                 a::ha::sol
-            }
-            if(t.isEmpty) {
-              flatMapRev(Nil, f, fRev, out)
-            } else t
-          } else {
-            flatMapRev(tail, f, fRev, out)
-          }
-        }
+  def putManual(out2: Output, in: Option[Input]) = flatMapRev(in.toList.flatten, out2).map{
+    l => l.map {
+      case Left(a) => a
+      case _ => throw new Exception("Unprepared to reverse that")
     }
   }
 }

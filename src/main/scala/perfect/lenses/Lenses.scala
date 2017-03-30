@@ -135,20 +135,7 @@ trait Lenses { self: ReverseProgram.type =>
       }
 
       //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
-      mapr.mapRev(originalInput, ListLiteral.unapply(newOutput.expr).get).flatMap{
-        (e: List[Either[Expr, (Expr, Lambda)]]) =>
-        //Log("Final solution : " + e)
-        val argumentsChanged = e.map{
-          case Left(e) => e
-          case Right((e, lambda)) => e
-        }
-        val newLambdas = if(e.exists(_.isInstanceOf[Right[_, _]])) {
-          e.collect{ case Right((expr, lambda: Lambda)) => lambda }.toStream
-        } else Stream(lambda)
-        for(l <- newLambdas) yield {
-          (Seq(ListLiteral(argumentsChanged, tpes.take(1)), l), Formula())
-        }
-      }
+      mapr.mapRev(originalInput, ListLiteral.unapply(newOutput.expr).get).flatMap(recombineArgumentsLambdas(lambda, tpes))
     }
 
     // Map definition in inox
@@ -175,7 +162,7 @@ trait Lenses { self: ReverseProgram.type =>
     val identifier = flatten
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
-      ???
+???
     }
 
     // Flatten definition in inox
@@ -198,13 +185,38 @@ trait Lenses { self: ReverseProgram.type =>
     }
   }
 
+  private def recombineArgumentsLambdas(lambda: Lambda, tpes: Seq[Type])(e: List[Either[Expr, (Expr, Lambda)]]) = {
+    val argumentsChanged = e.map{
+      case Left(e) => e
+      case Right((e, lambda)) => e
+    }
+    val newLambdas = if(e.exists(_.isInstanceOf[Right[_, _]])) {
+      e.collect{ case Right((expr, lambda: Lambda)) => lambda }.toStream
+    } else Stream(lambda)
+    for(l <- newLambdas) yield {
+      (Seq(ListLiteral(argumentsChanged, tpes.take(1)), l), Formula())
+    }
+  }
+
   /** Lense-like map, with the possibility of changing the mapping lambda. */
   case object FlatMapReverser extends Reverser {
     import Utils._
     val identifier = flatmap
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
-      ???
+      val ListLiteral(originalInput) = originalArgsValues.head
+      val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
+
+      val fmapr = new FlatMapReverseLike[Expr, Expr, (Expr, Lambda)] {
+        def f: Expr => List[Expr] = { e =>
+          ???
+        }
+        def fRev: (Option[Expr], List[Expr]) => Stream[Either[Expr, (Expr, Lambda)]] = { (optIn, out) =>
+          ???
+        }
+      }
+
+      fmapr.flatMapRev(originalInput, ListLiteral.unapply(newOutput.expr).get).flatMap(recombineArgumentsLambdas(lambda, tpes))
     }
 
     // Flatmap definition in inox
