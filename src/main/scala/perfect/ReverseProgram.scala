@@ -512,7 +512,15 @@ object ReverseProgram extends lenses.Lenses {
 
             /*case l@Let(cloned: ValDef, _, _) =>
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
-            case _ => throw new Exception("Don't know what to do, not a Literal, a Variable, or a let: "+newOut)
+            case _ =>
+              newOutProgram match {
+                case ProgramFormula.StringInsert(left, inserted, right) =>
+                  Stream(ProgramFormula(StringLiteral(left + inserted + right)))
+                case ProgramFormula.StringDelete(left, right) =>
+                  Stream(ProgramFormula(StringLiteral(left + right)))
+                case _ =>
+                  throw new Exception("Don't know what to do, not a Literal, a Variable, a let, a string insertion or deletion: "+newOut)
+              }
           }
         case l: FiniteSet =>
           if(isValue(l) && newOut.isInstanceOf[FiniteSet]) {

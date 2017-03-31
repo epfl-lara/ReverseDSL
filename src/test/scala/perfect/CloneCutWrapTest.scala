@@ -141,6 +141,25 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
+  test("Nested string insert direct") {
+    val pfun = function(
+      "Hello " +& "big " +& "world"
+    )(inoxTypeOf[String])
+
+    pfun repairFrom ProgramFormula.StringInsert("Hello big", " big", " world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "Hello "
+        t shouldEqual "big big "
+        u shouldEqual "world"
+    }
+    pfun repairFrom ProgramFormula.StringInsert("Hello"," big"," big world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "Hello big "
+        t shouldEqual "big "
+        u shouldEqual "world"
+    }
+  }
+
   test("String delete") {
     val pfun = function(
       let("a"::StringType, "Hello big ")(av =>
@@ -210,6 +229,31 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
         vc shouldEqual c.toVariable
+    }
+  }
+
+  test("Nested string delete direct") {
+    val pfun = function(
+      "Hello big " +& "big " +& "world"
+    )(inoxTypeOf[String])
+    // "Hello big big world"
+    pfun repairFrom ProgramFormula.StringDelete("Hello big"," world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "Hello big"
+        t shouldEqual " "
+        u shouldEqual "world"
+    }
+    pfun repairFrom ProgramFormula.StringDelete("Hello ","world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "Hello "
+        t shouldEqual ""
+        u shouldEqual "world"
+    }
+    pfun repairFrom ProgramFormula.StringDelete("Hello ","ld") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "Hello "
+        t shouldEqual ""
+        u shouldEqual "ld"
     }
   }
 
