@@ -160,6 +160,41 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
+  test("Nested string modification direct") {
+    val pfun = function(
+      "Hello " +& "big " +& "world"
+    )(inoxTypeOf[String])
+
+    pfun repairFrom ProgramFormula.StringInsert("Hello big ","change","") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "Hello "
+        t shouldEqual "big "
+        u shouldEqual "change"
+    }
+
+    pfun repairFrom ProgramFormula.StringInsert("","Good afternoon ","big world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "Good afternoon "
+        t shouldEqual "big "
+        u shouldEqual "world"
+    }
+
+    pfun repairFrom ProgramFormula.StringInsert("Hello ","great"," world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "Hello "
+        t shouldEqual "great "
+        u shouldEqual "world"
+    }
+
+    repairProgramList(pfun, ProgramFormula.StringInsert("Hello", ", amazing", " world"), 2).take(2).toList.map(x => x.getBody match {
+      case StringLiteral("Hello, amazing") +& StringLiteral(" ") +& StringLiteral("world") =>
+        1
+      case StringLiteral("Hello") +& StringLiteral(", amazing ") +& StringLiteral("world") =>
+        2
+    }).sum shouldEqual 3
+
+  }
+
   test("String delete") {
     val pfun = function(
       let("a"::StringType, "Hello big ")(av =>

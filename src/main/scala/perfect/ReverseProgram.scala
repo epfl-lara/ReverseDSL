@@ -33,14 +33,12 @@ object ReverseProgram extends lenses.Lenses {
 
     /** To build and extract a StringInsert specification */
     object StringInsert {
-
       def apply(left: Expr, s: Expr, right: Expr): ProgramFormula = {
-        val treeVar = Variable(FreshIdentifier("tree", true), StringType, Set())
-        val leftTreeStr = Variable(FreshIdentifier("leftTreeStr", true), StringType, Set())
+         val leftTreeStr = Variable(FreshIdentifier("leftTreeStr", true), StringType, Set())
         val rightTreeStr = Variable(FreshIdentifier("rightTreeStr", true), StringType, Set())
         ProgramFormula(
           leftTreeStr +& s +& rightTreeStr,
-          treeVar === (leftTreeStr +& rightTreeStr) && leftTreeStr === left && rightTreeStr === right
+          leftTreeStr === left && rightTreeStr === right
         )
       }
 
@@ -52,7 +50,6 @@ object ReverseProgram extends lenses.Lenses {
             Some((leftBefore, inserted, rightBefore))
           case _ => None
         }
-
       }
     }
 
@@ -120,12 +117,11 @@ object ReverseProgram extends lenses.Lenses {
         case Some(e) => e
         case None =>
           val res =
-            getFunctionValue.getOrElse(throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known (only ${formula.known.keySet} are).\n$this"))
-/*            if((freeVars -- formula.known.keySet).isEmpty) {
+          if((freeVars -- formula.known.keySet).isEmpty) {
             evalWithCache(letm(formula.known) in expr)
           } else {
             throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known (only ${formula.known.keySet} are).\n$this")
-          }*/
+          }
           givenValue = Some(res)
           res
       }
@@ -163,6 +159,9 @@ object ReverseProgram extends lenses.Lenses {
 
   case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) { // Can contain middle free variables.
     lazy val varsToAssign = known.keySet ++ (exprOps.variablesOf(unknownConstraints).map(_.toVal))
+
+    //val TopLevelAnds(ands) = unknownConstraints
+    //assert(ands.forall(x => !x.isInstanceOf[Lambda]))
 
     private var givenKnown: Option[Map[ValDef, Expr]] = None
 

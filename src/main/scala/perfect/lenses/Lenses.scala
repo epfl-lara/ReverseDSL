@@ -194,7 +194,7 @@ trait Lenses { self: ReverseProgram.type =>
       e.collect{ case Right((expr, lambda: Lambda)) => lambda }.toStream
     } else Stream(lambda)
     for(l <- newLambdas) yield {
-      (Seq(ProgramFormula(ListLiteral(argumentsChanged, tpes.take(1)), l)), Formula())
+      (Seq(ProgramFormula(ListLiteral(argumentsChanged, tpes.take(1))), ProgramFormula(l)), Formula())
     }
   }
 
@@ -379,26 +379,52 @@ trait Lenses { self: ReverseProgram.type =>
 
       // Prioritize changes that touch only one of the two expressions.
       newOutputProgram match {
-        case ProgramFormula.StringInsert(leftBefore, inserted, rightBefore) =>
+        case ProgramFormula.StringInsert(leftAfter, inserted, rightAfter) =>
           val StringLiteral(rightValue_s) = rightValue
           val StringLiteral(leftValue_s) = leftValue
-          // leftValue + rightValue ==> leftBefore + inserted + rightBefore
-          (rightValue_s.endsWith(rightBefore)).flatMap{ // the insertion happened on the right.
-            // rightValue => (leftBefore \ leftValue) + inserted + rightBefore
+          val totalValue_s = leftValue_s + rightValue_s
+          // Put in first the one to which we removed the most chars.
+
+          // leftValue + rightValue ==> leftAfter + inserted + rightAfter
+          val res = (rightValue_s.endsWith(rightAfter)).flatMap{ // the insertion may have happened on the right.
+            //  [  leftValue    ...     ][rightValue_s  ]
+            //  [ leftAfter ....            ][rightAfter]
+
+            // rightValue => (leftAfter \ leftValue) + inserted + rightAfter
             val newInsert = ProgramFormula.StringInsert(
-              StringLiteral(leftBefore.substring(leftValue_s.length)),
+              StringLiteral(if(leftValue_s.length < leftAfter.length) leftAfter.substring(leftValue_s.length) else ""),
               StringLiteral(inserted),
-              StringLiteral(rightBefore)) /: Log.Right_insert
-            Stream(((Seq(ProgramFormula(leftValue), newInsert)), Formula()))
-          } #:::
-          (leftValue_s.startsWith(leftBefore)).flatMap{ // the insertion happened on the left.
-            // leftValue => leftBefore + inserted + (rightBefore \ rightValue)
+              StringLiteral(rightAfter)) /: Log.Right_insert
+            val newLeftValue = if(leftValue_s.length <= leftAfter.length) { // Nothing deleted.
+              leftValue
+            } else {
+              StringLiteral(leftValue_s.substring(0, leftAfter.length))
+            }
+            val weight = rightAfter.length - rightValue_s.length
+
+            List((((Seq(ProgramFormula(newLeftValue), newInsert)), Formula()), weight))
+          } ++
+          (leftValue_s.startsWith(leftAfter)).flatMap{ // the insertion happened on the left.
+            //  [  leftValue    ...     ][rightValue_s  ]
+            //  [ leftAfter ...   ][        rightAfter  ]
+
+            // leftValue => leftAfter + inserted + (rightAfter \ rightValue)
             val newInsert = ProgramFormula.StringInsert(
-              StringLiteral(leftBefore),
+              StringLiteral(leftAfter),
               StringLiteral(inserted),
-              StringLiteral(rightBefore.substring(0, rightBefore.length - rightValue_s.length))) /: Log.Left_insert
-            Stream((Seq(newInsert, ProgramFormula(rightValue)), Formula()))
+              StringLiteral(if(rightValue_s.length < rightAfter.length) rightAfter.substring(0, rightAfter.length - rightValue_s.length) else "")) /: Log.Left_insert
+
+            val newRightValue = if(rightValue_s.length <= rightAfter.length) {
+              rightValue
+            } else {
+              StringLiteral(rightValue_s.substring(rightValue_s.length - rightAfter.length))
+            }
+            val weight = leftAfter.length - leftValue_s.length
+
+            List(((Seq(newInsert, ProgramFormula(newRightValue)), Formula()), weight))
           }
+
+          res.sortBy(_._2).map(_._1).toStream
 
         case ProgramFormula.StringDelete(leftAfter, rightAfter) =>
           val StringLiteral(rightValue_s) = rightValue
