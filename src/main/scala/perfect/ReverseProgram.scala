@@ -85,25 +85,55 @@ object ReverseProgram extends lenses.Lenses {
       }
     }
 
+    // Used to extract clone and paste expressions, when paste is to the right of the clone.
     object CloneAndPasteRight {
-      val beforeCloneName = "beforeClone"
-      val betweenClonePasteName = "betweenClonePaste"
-      val afterPasteName = "afterPaste"
       val cloneName = "clone"
       val pasteName = "paste"
 
-      def apply(beforeCloneValue: Expr, cloneValue: Expr, betweenClonePasteValue: Expr, afterPasteValue: Expr) = {
-        val beforeClone = Variable(FreshIdentifier(beforeCloneName, true), StringType, Set())
-        val betweenClonePaste = Variable(FreshIdentifier(betweenClonePasteName, true), StringType, Set())
-        val afterPaste = Variable(FreshIdentifier(afterPasteName, true), StringType, Set())
+      def apply(beforeCloneValue: Expr, cloneValue: Expr, betweenClonePasteValue: Expr, afterPasteValue: Expr): ProgramFormula = {
         val clone = Variable(FreshIdentifier(cloneName, true), StringType, Set())
         val paste = Variable(FreshIdentifier(pasteName, true), StringType, Set())
 
         ProgramFormula(
-          beforeClone +& clone +& betweenClonePaste +& paste +& afterPaste,
-          beforeClone === beforeCloneValue && clone === cloneValue && betweenClonePaste === betweenClonePasteValue &&
-          paste === clone && afterPaste === afterPasteValue
+          beforeCloneValue +& clone +& betweenClonePasteValue +& paste +& afterPasteValue,
+          clone === cloneValue && paste === clone
         )
+      }
+
+      def unapply(pf: ProgramFormula): Option[(String, String, String, String)] = {
+        pf.expr match {
+          case StringLiteral(bcvalue) +& (clone@Variable(id, _, _)) +& StringLiteral(bcpvalue) +& (paste@Variable(id2, _, _)) +& StringLiteral(apvalue)
+            if id.name == cloneName && id2.name == pasteName =>
+            val StringLiteral(cloneValue) = pf.formula.known(clone.toVal)
+            Some((bcvalue, cloneValue, bcpvalue, apvalue))
+          case _ => None
+        }
+      }
+    }
+
+    // Used to extract clone and paste expressions, when paste is to the left of the clone.
+    object CloneAndPasteLeft {
+      val cloneName = "clone"
+      val pasteName = "paste"
+
+      def apply(beforePasteValue: Expr, betweenPasteCloneValue: Expr, cloneValue: Expr, afterCloneValue: Expr): ProgramFormula = {
+        val clone = Variable(FreshIdentifier(cloneName, true), StringType, Set())
+        val paste = Variable(FreshIdentifier(pasteName, true), StringType, Set())
+
+        ProgramFormula(
+          beforePasteValue +& paste +& betweenPasteCloneValue +& clone +& afterCloneValue,
+          clone === cloneValue && paste === clone
+        )
+      }
+
+      def unapply(pf: ProgramFormula): Option[(String, String, String, String)] = {
+        pf.expr match {
+          case StringLiteral(bpvalue) +& (paste@Variable(id2, _, _)) +& StringLiteral(bpcvalue) +& (clone@Variable(id, _, _)) +& StringLiteral(acvalue)
+            if id.name == cloneName && id2.name == pasteName =>
+            val StringLiteral(cloneValue) = pf.formula.known(clone.toVal)
+            Some((bpvalue, bpcvalue, cloneValue, acvalue))
+          case _ => None
+        }
       }
     }
   }
