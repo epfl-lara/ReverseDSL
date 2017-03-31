@@ -35,8 +35,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   test("Change a constant output to another") {
     val out  = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val out2 = Element("pre", WebElement(TextNode("Hello code"))::Nil)
-    val (prog, fun) = ReverseProgram.put(ProgramFormula(out), None).head
-    checkProg(out2, ReverseProgram.put(ProgramFormula(out2), Some((prog, fun))).head)
+    val (prog, fun) = ReverseProgram.putPf(ProgramFormula(out), None).head
+    checkProg(out2, ReverseProgram.putPf(ProgramFormula(out2), Some((prog, fun))).head)
   }
 
   test("Variable assigment keeps the shape") {

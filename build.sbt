@@ -1,3 +1,6 @@
+name := "perfect"
+
+organization := "ch.epfl.lara.synthesis"
 
 scalaVersion := "2.11.8"
 

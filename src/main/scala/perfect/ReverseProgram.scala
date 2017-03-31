@@ -362,19 +362,46 @@ object ReverseProgram extends lenses.Lenses {
     put(inoxExprOf[A](out), prevIn)
   }*/
 
+  def put(outProg: ProgramFormula, prevIn: Option[Expr]): Stream[Expr] = {
+    if(prevIn == None) {
+      val outExpr = outProg.bodyDefinition.getOrElse(throw new Exception(s"Ill-formed program: $outProg"))
+      return Stream(outExpr)
+    }
+    implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
+    implicit val cache = new HashMap[Expr, Expr]
+    val newMain = FreshIdentifier("main")
+    for { r <- repair(ProgramFormula(prevIn.get), outProg)
+          ProgramFormula(newOutExpr, f) = r
+          _ = Log("Remaining formula: " + f)
+          _ = Log("Remaining expression: " + newOutExpr)
+          assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toSeq.map(_.toVal))
+          _ = Log("Found assignments: " + assignments)
+          finalNewOutExpr = exprOps.replaceFromSymbols(assignments, newOutExpr)
+          _ = Log("Final  expression: " + finalNewOutExpr)
+    } yield finalNewOutExpr
+  }
     /** Reverses a parameterless function, if possible.*/
-  def put(outProg: ProgramFormula, prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
+  def putPf(outProg: ProgramFormula, prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
+    val newMain = FreshIdentifier("main")
+    put(outProg, prevIn.map{ case (prevProgram, prevFunctionEntry) =>
+      val prevFunction = prevProgram.symbols.functions.getOrElse(prevFunctionEntry, return Nil)
+      prevFunction.fullBody
+    }).map{ finalNewOutExpr =>
+      implicit val symbols = prevIn.map(_._1.symbols).getOrElse(defaultSymbols)
+      val newFunDef = mkFunDef(newMain)()(stp => (Seq(), finalNewOutExpr.getType, _ => finalNewOutExpr))
+      val newProgram = InoxProgram(context, symbols.withFunctions(newFunDef::ReverseProgram.funDefs))
+      (newProgram, newMain)
+    }
+    /*
     if(prevIn == None) {
       implicit val symbols = defaultSymbols
       val main = FreshIdentifier("main")
-      val outExpr = outProg.bodyDefinition.getOrElse(throw new Exception(s"Ill-formed program: $outProg"))
       val fundef = mkFunDef(main)()(stp => (Seq(), outExpr.getType, _ => outExpr))
       return Stream((InoxProgram(context, Seq(fundef), allConstructors), main))
     }
     val (prevProgram, prevFunctionEntry) = prevIn.get
     implicit val symbols = prevProgram.symbols
-    val prevFunction = prevProgram.symbols.functions.getOrElse(prevFunctionEntry, return Nil)
-    val prevBody = prevFunction.fullBody
+
     val newMain = FreshIdentifier("main")
     implicit val cache = new HashMap[Expr, Expr]
     for { r <- repair(ProgramFormula(prevBody), outProg)
@@ -387,7 +414,7 @@ object ReverseProgram extends lenses.Lenses {
          _ = Log("Final  expression: " + finalNewOutExpr)
          newFunDef = mkFunDef(newMain)()(stp => (Seq(), prevFunction.returnType, _ => finalNewOutExpr))
          newProgram = InoxProgram(context, symbols.withFunctions(Seq(newFunDef)))
-    } yield (newProgram, newMain)
+    } yield (newProgram, newMain)*/
   }
 
   def simplify(expr: Expr)(implicit cache: Cache, symbols: Symbols): Expr = {

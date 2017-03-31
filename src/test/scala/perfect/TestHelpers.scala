@@ -67,7 +67,7 @@ trait TestHelpers {
 
   /** Returns all the solution, with the first lookInManyFirstSolutions being sorted */
   def repairProgramList(pf: PFun, expected2: ProgramFormula, lookInManyFirstSolutions: Int): Stream[PFun] = {
-    val progfuns2 = ReverseProgram.put(expected2, Some(pf)).toStream
+    val progfuns2 = ReverseProgram.putPf(expected2, Some(pf)).toStream
     progfuns2.lengthCompare(0) should be > 0
     val initialValue = pf.getBody
     val sorted = sortStreamByDistance(progfuns2, lookInManyFirstSolutions, initialValue)
@@ -87,7 +87,7 @@ trait TestHelpers {
   }
 
   def generateProgram[A: InoxConvertible](expected2: A) = {
-    val progfuns2 = ReverseProgram.put(ProgramFormula(expected2), None)
+    val progfuns2 = ReverseProgram.putPf(ProgramFormula(expected2), None)
     progfuns2.toStream.lengthCompare(1) should be >= 0
     progfuns2.head
   }
