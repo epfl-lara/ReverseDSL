@@ -330,6 +330,7 @@ trait Lenses { self: ReverseProgram.type =>
 
   /** Lense-like list concat, with the possibility of changing the mapping lambda. */
   case object StringConcatReverser extends Reverser {
+    import StringConcatExtended._
     import Utils._
     val identifier = FreshIdentifier("tmpstringconcat")
 
@@ -377,22 +378,34 @@ trait Lenses { self: ReverseProgram.type =>
       }
 
       // Prioritize changes that touch only one of the two expressions.
-      newOutput match {
-        case StringLiteral(s) =>
+      newOutputProgram match {
+        case ProgramFormula.StringInsert(leftBefore, inserted, rightBefore) =>
+          Log(s"Insert: $leftBefore + $inserted + $rightBefore")
+          val totalString = leftBefore + inserted + rightBefore
+          (asStr(leftValue).startsWith(leftBefore)).flatMap(rightCase(totalString)) #:::
+          (asStr(rightValue).endsWith(rightBefore)).flatMap(leftCase(totalString))
+
+        case ProgramFormula(StringLiteral(s), _) =>
           rightCase(s) append leftCase(s) append {
             defaultCase(false)
           }
-        case l@Let(vd, value, newbody) =>
-          /* Copy and paste, insertion, replacement:
-        *  => A single let(v, newText, newbody) with a single occurrence of v in newbody
-        *  Clone and paste
-        *  => A double let(clone, oldText, let(paste, clone, newbody)) with two occurrences of clone in newbody
-        *  Cut and paste
-        *  => A double let(cut, "", let(paste, clone, newbody)) with one occurrences of paste in newbody
-        *  Delete
-        *  => A single let(delete, "", newbody) with a single occurrence of delete in newbody
-        **/
-          ???
+        case ProgramFormula(StringConcat(StringLiteral(left), right), _) => // TODO !!
+          val leftValue_s = asStr(leftValue)
+          if(leftValue_s.startsWith(left)) {
+            val newLeftValue = leftValue_s.substring(left.length)
+            put(tps)(Seq(StringLiteral(newLeftValue), rightValue), newOutputProgram.subExpr(right))
+          } else {
+            ???
+          }
+        case ProgramFormula(StringConcat(left, StringLiteral(right)), _) => // TODO !!
+          //leftValue = "Hello big " && rightValue == "beautiful world" && right = " world"
+          val rightValue_s = asStr(rightValue)
+          if(rightValue_s.endsWith(right)) {
+            val newRightValue = rightValue_s.substring(0, rightValue_s.length - right.length)
+            put(tps)(Seq(leftValue, StringLiteral(newRightValue)), newOutputProgram.subExpr(left))
+          } else {
+            ???
+          }
         case _ =>
           defaultCase(true)
       }

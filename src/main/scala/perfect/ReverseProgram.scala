@@ -11,16 +11,48 @@ import scala.collection.mutable.{HashMap, ListBuffer}
   * Created by Mikael on 03/03/2017.
   */
 object ReverseProgram extends lenses.Lenses {
+  import StringConcatExtended._
   type FunctionEntry = Identifier
   type ModificationSteps = Unit
   type OutExpr = Expr
   type Cache = HashMap[Expr, Expr]
 
   object ProgramFormula {
+    import inox.trees.dsl._
+    // Contains the original value of the program to repair.
     val tree = FreshIdentifier("tree") // Serves as a placeholder to identify where the tree was inserted.
+    
+    // For semantic unwrap
     val subtree = FreshIdentifier("subtree")
+    
+    // For semantic insert for string
+    // ProgramFormula(leftTreeStr +& "The Insertion" +& rightTreeStr,
+    //   tree == leftTreeStr +& rightTreeStr && leftTreeStr == "String to the left && rightTreeStr = "String to the right"
 
     def apply(e: Expr, f: Expr): ProgramFormula = ProgramFormula(e, Formula(f))
+
+    /** To build a StringInsert specification*/
+    object StringInsert {
+      val treeVar = Variable(tree, StringType, Set())
+      val leftTreeStr = Variable(FreshIdentifier("leftTreeStr"), StringType, Set())
+      val rightTreeStr = Variable(FreshIdentifier("rightTreeStr"), StringType, Set())
+
+      def apply(left: Expr, s: Expr, right: Expr): ProgramFormula = ProgramFormula.apply(
+        leftTreeStr +& s +& rightTreeStr,
+        treeVar === (leftTreeStr +& rightTreeStr) && leftTreeStr === left && rightTreeStr === right
+      )
+
+      def unapply(f: ProgramFormula): Option[(String, String, String)] = {
+        f.expr match {
+          case `leftTreeStr` +& StringLiteral(inserted) +& `rightTreeStr` =>
+            val StringLiteral(leftBefore) = f.formula.known(leftTreeStr.toVal)
+            val StringLiteral(rightBefore) = f.formula.known(rightTreeStr.toVal)
+            Some((leftBefore, inserted, rightBefore))
+          case _ => None
+        }
+
+      }
+    }
   }
 
   case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
@@ -373,13 +405,29 @@ object ReverseProgram extends lenses.Lenses {
       Stream(program.withoutConstraints())
     }
 
+    val treeVar = Variable(ProgramFormula.tree, program.expr.getType, Set())
     if(!function.isInstanceOf[Let] && program.canDoWrapping &&
       newOutFormula.unknownConstraints != BooleanLiteral(true) &&
-      (exprOps.variablesOf(newOut) contains Variable(ProgramFormula.tree, program.expr.getType, Set()))) { // Maybe there is just a wrapping
-      Log("@return wrapped around tree: " + newOutProgram);
-      return Stream(ProgramFormula(exprOps.replaceFromSymbols(Map(ValDef(ProgramFormula.tree, program.expr.getType, Set()) ->
-        function
-      ), newOut)))
+      (exprOps.variablesOf(newOut) contains treeVar)) { // Maybe there is just a wrapping
+
+      newOutFormula.findConstraintValue(treeVar) match {
+        case Some(treeValue) => if(isValue(treeValue)) {
+          Log("@return wrapped around tree: " + newOutProgram);
+          return Stream(ProgramFormula(exprOps.replaceFromSymbols(Map(ValDef(ProgramFormula.tree, program.expr.getType, Set()) ->
+            function
+          ), newOut)))
+        } else {
+          //treeValue is not a simple value, there is some splitting to do to determine the value of the free variables.
+
+          if(exprOps.variablesOf(treeValue).map(_.id) == Set(ProgramFormula.subtree)) {
+            for{ pf <- repair(program, ProgramFormula(treeValue, newOutFormula)) } yield {
+              // This gives a solution assignment for subtree as well as variables on the rhs.
+              ???
+            }
+          }
+        }
+        case None =>
+      }
     }
 
     lazy val functionValue = program.functionValue
@@ -734,7 +782,7 @@ object ReverseProgram extends lenses.Lenses {
               val newpf = (program.subExpr(freshBody) combineWith freshFormula).wrappingEnabled
               for {pf <-
                      repair(newpf, newOutProgram)  /::
-                       Log.prefix(s"From repair$stackLevel'(\n  $newpf,\n  $newOutProgram), recovered:\n")
+                       Log.prefix(s"For repair$stackLevel, recovered:\n")
                    ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
                    isSameBody = (newBody == body)              /: Log.isSameBody

@@ -15,13 +15,14 @@ import inox._
 import inox.evaluators.EvaluationResults
 import inox.trees.{not => inoxNot, _}
 import inox.trees.dsl._
-import sun.swing.SwingUtilities2.RepaintListener
 
 import scala.reflect.runtime.universe.TypeTag
+
 
 /** Mixin for tests repairing programs */
 trait TestHelpers {
   import InoxConvertible._
+  import StringConcatExtended._
 
   type PFun = (InoxProgram, Identifier)
 
@@ -30,14 +31,6 @@ trait TestHelpers {
   implicit def toProgramFormula(e: Expr): ProgramFormula = ProgramFormula(e)
 
   implicit def toProgramFormula[A : InoxConvertible](e: A): ProgramFormula = ProgramFormula(e: Expr)
-
-  implicit class AugmentedSubExpr[T <: Expr](e: T) {
-    @inline def &+(other: Expr) = StringConcat(e, other)
-  }
-  implicit class AugmentedString(e: String) extends AugmentedSubExpr(StringLiteral(e))
-  object &+ {
-    def unapply(e: Expr): Option[(Expr, Expr)] = e match { case StringConcat(a, b) => Some((a, b)) case _ => None }
-  }
 
   implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
     @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {
@@ -72,13 +65,16 @@ trait TestHelpers {
     }) #::: s.drop(num)
   }
 
+  /** Returns all the solution, with the first lookInManyFirstSolutions being sorted */
   def repairProgramList(pf: PFun, expected2: ProgramFormula, lookInManyFirstSolutions: Int): Stream[PFun] = {
     val progfuns2 = ReverseProgram.put(expected2, Some(pf)).toStream
     progfuns2.lengthCompare(0) should be > 0
     val initialValue = pf.getBody
     val sorted = sortStreamByDistance(progfuns2, lookInManyFirstSolutions, initialValue)
-    sorted.take(lookInManyFirstSolutions).toList.zipWithIndex.foreach{ case (sol, i) =>
-      Log(s"Solution $i:" + sol.getBody)
+    if(Log.activate) {
+      sorted.take(lookInManyFirstSolutions).toList.zipWithIndex.foreach { case (sol, i) =>
+        Log(s"Solution $i:" + sol.getBody)
+      }
     }
     sorted
   }
