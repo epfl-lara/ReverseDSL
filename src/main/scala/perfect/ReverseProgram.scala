@@ -31,26 +31,50 @@ object ReverseProgram extends lenses.Lenses {
 
     def apply(e: Expr, f: Expr): ProgramFormula = ProgramFormula(e, Formula(f))
 
-    /** To build a StringInsert specification*/
+    /** To build and extract a StringInsert specification */
     object StringInsert {
-      val treeVar = Variable(tree, StringType, Set())
-      val leftTreeStr = Variable(FreshIdentifier("leftTreeStr"), StringType, Set())
-      val rightTreeStr = Variable(FreshIdentifier("rightTreeStr"), StringType, Set())
 
-      def apply(left: Expr, s: Expr, right: Expr): ProgramFormula = ProgramFormula.apply(
-        leftTreeStr +& s +& rightTreeStr,
-        treeVar === (leftTreeStr +& rightTreeStr) && leftTreeStr === left && rightTreeStr === right
-      )
+      def apply(left: Expr, s: Expr, right: Expr): ProgramFormula = {
+        val treeVar = Variable(FreshIdentifier("tree", true), StringType, Set())
+        val leftTreeStr = Variable(FreshIdentifier("leftTreeStr", true), StringType, Set())
+        val rightTreeStr = Variable(FreshIdentifier("rightTreeStr", true), StringType, Set())
+        ProgramFormula(
+          leftTreeStr +& s +& rightTreeStr,
+          treeVar === (leftTreeStr +& rightTreeStr) && leftTreeStr === left && rightTreeStr === right
+        )
+      }
 
       def unapply(f: ProgramFormula): Option[(String, String, String)] = {
         f.expr match {
-          case `leftTreeStr` +& StringLiteral(inserted) +& `rightTreeStr` =>
+          case (leftTreeStr@Variable(_, StringType, _)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(_, StringType, _)) =>
             val StringLiteral(leftBefore) = f.formula.known(leftTreeStr.toVal)
             val StringLiteral(rightBefore) = f.formula.known(rightTreeStr.toVal)
             Some((leftBefore, inserted, rightBefore))
           case _ => None
         }
 
+      }
+    }
+
+    /** To build and extract a StringDelete specification */
+    object StringDelete {
+      def apply(left: Expr, right: Expr): ProgramFormula = {
+        val leftTreeStr = Variable(FreshIdentifier("leftTreeStr", true), StringType, Set())
+        val rightTreeStr = Variable(FreshIdentifier("rightTreeStr", true), StringType, Set())
+        ProgramFormula(
+          leftTreeStr +& rightTreeStr,
+          leftTreeStr === left && rightTreeStr === right
+        )
+      }
+
+      def unapply(f: ProgramFormula): Option[(String, String)] = {
+        f.expr match {
+          case (leftTreeStr@Variable(_, StringType, _)) +& (rightTreeStr@Variable(_, StringType, _)) =>
+            val StringLiteral(leftBefore) = f.formula.known(leftTreeStr.toVal)
+            val StringLiteral(rightBefore) = f.formula.known(rightTreeStr.toVal)
+            Some((leftBefore, rightBefore))
+          case _ => None
+        }
       }
     }
   }
@@ -78,15 +102,30 @@ object ReverseProgram extends lenses.Lenses {
 
     lazy val bodyDefinition: Option[Expr] = formula.assignments.map(f => f(expr))
 
+    def getFunctionValue(implicit cache: Cache, symbols: Symbols): Option[Expr] = {
+      givenValue match {
+        case Some(e) => givenValue
+        case None => formula.assignments match {
+          case Some(f) =>
+            val res = evalWithCache(f(expr))
+            givenValue = Some(res)
+            givenValue
+          case _ => None
+        }
+      }
+    }
+
     def functionValue(implicit cache: Cache, symbols: Symbols): Expr = {
       givenValue match {
         case Some(e) => e
         case None =>
-          val res = if((freeVars -- formula.known.keySet).isEmpty) {
+          val res =
+            getFunctionValue.getOrElse(throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known (only ${formula.known.keySet} are).\n$this"))
+/*            if((freeVars -- formula.known.keySet).isEmpty) {
             evalWithCache(letm(formula.known) in expr)
           } else {
             throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known (only ${formula.known.keySet} are).\n$this")
-          }
+          }*/
           givenValue = Some(res)
           res
       }
@@ -401,7 +440,7 @@ object ReverseProgram extends lenses.Lenses {
     val currentValues = functionformula.known
     val stackLevel = Thread.currentThread().getStackTrace.length
     Log(s"\n@repair$stackLevel(\n  $program\n, $newOutProgram)")
-    if(function == newOut) return { Log("@return original");
+    if(function == newOut) return { Log("@return original without constraints");
       Stream(program.withoutConstraints())
     }
 
@@ -640,12 +679,13 @@ object ReverseProgram extends lenses.Lenses {
 
         // Variables are assigned the given value.
         case v@Variable(id, tpe, flags) =>
-          newOut match {
-            case v2: Variable =>
-              Stream(ProgramFormula(v, Formula(unknownConstraints= v2 === v)))/* && E(Utils.maybe)(v2 === currentValues(v.toVal))))*/
+          newOutProgram match {
+            case ProgramFormula.StringInsert(left, inserted, right) =>
+              Stream(ProgramFormula(v, Formula(v === StringLiteral(left + inserted + right))))
+            case ProgramFormula.StringDelete(left, right) =>
+              Stream(ProgramFormula(v, Formula(v === StringLiteral(left + right))))
             case _ =>
-              val varsOfNewOut = exprOps.variablesOf(newOut).map(_.toVal)
-              Stream(ProgramFormula(v, Formula(unknownConstraints = v === newOut)))
+              Stream(ProgramFormula(v, Formula(v === newOut) combineWith newOutFormula))
           }
 
         case Let(vd, expr, body) =>
@@ -818,7 +858,7 @@ object ReverseProgram extends lenses.Lenses {
               val argsValue = args.map(arg => evalWithCache(letm(currentValues) in arg))
               val lenseResult = reverser.put(tpes)(argsValue, newOutProgram)
               for{l <- lenseResult; (newArgsValues, newForm) = l
-                  a <- combineArguments(program, args.zip(newArgsValues.map(newOutProgram.subExpr _)))
+                  a <- combineArguments(program, args.zip(newArgsValues))
                   (newArguments, newArgumentsFormula) = a
               } yield {
                 val formula = newForm combineWith newArgumentsFormula

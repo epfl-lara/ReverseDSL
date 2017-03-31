@@ -37,7 +37,7 @@ trait Lenses { self: ReverseProgram.type =>
     def identifier: Identifier
     def funDef: FunDef
     def mapping = identifier -> this
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)]
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)]
   }
 
   object ListLiteral {
@@ -61,13 +61,13 @@ trait Lenses { self: ReverseProgram.type =>
   case object FilterReverser extends Reverser with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.
     import Utils._
     val identifier = Utils.filter
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       val lambda = originalArgsValues.tail.head
       val newOutput = newOutputProgram.expr
       val ListLiteral(originalInput) = originalArgsValues.head
       //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
       filterRev(originalInput, (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true), ListLiteral.unapply(newOutput).get).map{ (e: List[Expr]) =>
-        (Seq(ListLiteral(e, tpes), lambda), Formula())
+        (Seq(ProgramFormula(ListLiteral(e, tpes)), ProgramFormula(lambda)), Formula())
       }
     }
 
@@ -98,7 +98,7 @@ trait Lenses { self: ReverseProgram.type =>
     import Utils._
     val identifier = map
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       Log(s"map.apply($newOutput)")
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
       val ListLiteral(originalInput) = originalArgsValues.head
@@ -161,7 +161,7 @@ trait Lenses { self: ReverseProgram.type =>
     import Utils._
     val identifier = flatten
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
 ???
     }
 
@@ -194,7 +194,7 @@ trait Lenses { self: ReverseProgram.type =>
       e.collect{ case Right((expr, lambda: Lambda)) => lambda }.toStream
     } else Stream(lambda)
     for(l <- newLambdas) yield {
-      (Seq(ListLiteral(argumentsChanged, tpes.take(1)), l), Formula())
+      (Seq(ProgramFormula(ListLiteral(argumentsChanged, tpes.take(1)), l)), Formula())
     }
   }
 
@@ -203,7 +203,7 @@ trait Lenses { self: ReverseProgram.type =>
     import Utils._
     val identifier = flatmap
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       val ListLiteral(originalInput) = originalArgsValues.head
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
 
@@ -259,12 +259,12 @@ trait Lenses { self: ReverseProgram.type =>
 
     def endsWith(list: Expr, end: Expr): Boolean = startsWith(reverse(list, None), reverse(end, None))
 
-    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       val newOutput = newOutputProgram.expr
       val leftValue = originalArgsValues.head
       val rightValue = originalArgsValues.tail.head
 
-      def defaultCase: Stream[(Seq[Expr], Formula)] = {
+      def defaultCase: Stream[(Seq[ProgramFormula], Formula)] = {
         val left = ValDef(FreshIdentifier("l", true), T(list)(tps.head), Set())
         val right = ValDef(FreshIdentifier("r", true), T(list)(tps.head), Set())
         Log(s"List default case: ${left.id} + ${right.id} == $newOutput")
@@ -274,7 +274,7 @@ trait Lenses { self: ReverseProgram.type =>
           not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
         )
 
-        Stream((Seq(left.toVariable, right.toVariable), f))
+        Stream((Seq(ProgramFormula(left.toVariable), ProgramFormula(right.toVariable)), f))
       }
 
       // Prioritize changes that touch only one of the two expressions.
@@ -283,14 +283,14 @@ trait Lenses { self: ReverseProgram.type =>
           (leftValue match {
             case ListLiteral(lv) =>
               if (s.startsWith(lv)) {
-                Stream((Seq(leftValue, ListLiteral(s.drop(lv.length), tps)), Formula()))
+                Stream((Seq(ProgramFormula(leftValue), ProgramFormula(ListLiteral(s.drop(lv.length), tps))), Formula()))
               } else Stream.empty
             case _ => Stream.empty
           }) #::: (
             rightValue match {
               case ListLiteral(rv) =>
                 if (s.endsWith(rv)) {
-                  Stream((Seq(ListLiteral(s.take(s.length - rv.length), tps), rightValue), Formula()))
+                  Stream((Seq(ProgramFormula(ListLiteral(s.take(s.length - rv.length), tps)), ProgramFormula(rightValue)), Formula()))
                 } else Stream.empty
               case _ => Stream.empty
             }
@@ -334,32 +334,32 @@ trait Lenses { self: ReverseProgram.type =>
     import Utils._
     val identifier = FreshIdentifier("tmpstringconcat")
 
-    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       val newOutput = newOutputProgram.expr
       val leftValue = originalArgsValues.head
       val rightValue = originalArgsValues.tail.head
 
-      def leftCase(s: String):  Stream[(Seq[Expr], Formula)] = {
+      def leftCase(s: String):  Stream[(Seq[ProgramFormula], Formula)] = {
         Log.prefix("Testing left:") := (leftValue match {
           case StringLiteral(lv) =>
             (if (s.startsWith(lv)) {
-              Stream((Seq(leftValue, StringLiteral(s.drop(lv.length))), Formula()))
-            } else Stream.empty) /:: Log.prefix("Left worked:")
+              Stream((Seq(ProgramFormula(leftValue), ProgramFormula(StringLiteral(s.drop(lv.length)))), Formula()))
+            } else Stream.empty)  /:: Log.prefix("left worked:")
           case _ => Stream.empty
         })
       }
 
-      def rightCase(s: String): Stream[(Seq[Expr], Formula)] = {
+      def rightCase(s: String): Stream[(Seq[ProgramFormula], Formula)] = {
         Log.prefix("Testing right:") := (rightValue match {
           case StringLiteral(rv) =>
             (if (s.endsWith(rv)) {
-              Stream((Seq(StringLiteral(s.take(s.length - rv.length)), rightValue), Formula()))
+              Stream((Seq(ProgramFormula(StringLiteral(s.take(s.length - rv.length))), ProgramFormula(rightValue)), Formula()))
             } else Stream.empty)  /:: Log.prefix("right worked:")
           case _ => Stream.empty
         })
       }
 
-      def defaultCase(addMaybes: Boolean = false): Stream[(Seq[Expr], Formula)] = {
+      def defaultCase(addMaybes: Boolean = false): Stream[(Seq[ProgramFormula], Formula)] = {
         val left = ValDef(FreshIdentifier("l", true), StringType, Set())
         val right = ValDef(FreshIdentifier("r", true), StringType, Set())
         Log(s"String default case: ${left.id} + ${right.id} == $newOutput:")
@@ -374,17 +374,51 @@ trait Lenses { self: ReverseProgram.type =>
         val newVarsInConstraint = exprOps.variablesOf(newConstraint).map(_.toVal)
         val f = Formula(unknownConstraints = newConstraint)
 
-        Stream((Seq(left.toVariable, right.toVariable), f))
+        Stream((Seq(ProgramFormula(left.toVariable), ProgramFormula(right.toVariable)), f))
       }
 
       // Prioritize changes that touch only one of the two expressions.
       newOutputProgram match {
         case ProgramFormula.StringInsert(leftBefore, inserted, rightBefore) =>
-          Log(s"Insert: $leftBefore + $inserted + $rightBefore")
-          val totalString = leftBefore + inserted + rightBefore
-          (asStr(leftValue).startsWith(leftBefore)).flatMap(rightCase(totalString)) #:::
-          (asStr(rightValue).endsWith(rightBefore)).flatMap(leftCase(totalString))
+          val StringLiteral(rightValue_s) = rightValue
+          val StringLiteral(leftValue_s) = leftValue
+          // leftValue + rightValue ==> leftBefore + inserted + rightBefore
+          (rightValue_s.endsWith(rightBefore)).flatMap{ // the insertion happened on the right.
+            // rightValue => (leftBefore \ leftValue) + inserted + rightBefore
+            val newInsert = ProgramFormula.StringInsert(
+              StringLiteral(leftBefore.substring(leftValue_s.length)),
+              StringLiteral(inserted),
+              StringLiteral(rightBefore)) /: Log.Right_insert
+            Stream(((Seq(ProgramFormula(leftValue), newInsert)), Formula()))
+          } #:::
+          (leftValue_s.startsWith(leftBefore)).flatMap{ // the insertion happened on the left.
+            // leftValue => leftBefore + inserted + (rightBefore \ rightValue)
+            val newInsert = ProgramFormula.StringInsert(
+              StringLiteral(leftBefore),
+              StringLiteral(inserted),
+              StringLiteral(rightBefore.substring(0, rightBefore.length - rightValue_s.length))) /: Log.Left_insert
+            Stream((Seq(newInsert, ProgramFormula(rightValue)), Formula()))
+          }
 
+        case ProgramFormula.StringDelete(leftAfter, rightAfter) =>
+          val StringLiteral(rightValue_s) = rightValue
+          val StringLiteral(leftValue_s) = leftValue
+          // leftValue + rightValue ==> leftAfter + rightAfter
+          Stream((Seq(
+            if(leftValue_s.length > leftAfter.length) {
+              ProgramFormula.StringDelete(
+                StringLiteral(leftAfter),
+                StringLiteral(if(rightValue_s.length < rightAfter.length) rightAfter.substring(0, rightAfter.length - rightValue_s.length) else "")
+              ) /: Log.Left_delete
+            } else ProgramFormula(leftValue)
+            ,
+            if(rightValue_s.length > rightAfter.length) {
+              ProgramFormula.StringDelete(
+                StringLiteral(if(leftValue_s.length < leftAfter.length) leftAfter.substring(leftValue_s.length) else ""),
+                StringLiteral(rightAfter)
+              ) /: Log.Right_delete
+            } else ProgramFormula(rightValue)
+          ), Formula()))
         case ProgramFormula(StringLiteral(s), _) =>
           rightCase(s) append leftCase(s) append {
             defaultCase(false)
@@ -441,7 +475,7 @@ trait Lenses { self: ReverseProgram.type =>
         }
       )
     }
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       ???
     }
   }
@@ -474,7 +508,7 @@ trait Lenses { self: ReverseProgram.type =>
         })
     }
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr],
-                             newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+                             newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       ???
     }
   }
@@ -502,7 +536,7 @@ trait Lenses { self: ReverseProgram.type =>
       })
     }
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[Expr], Formula)] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       ???
     }
   }

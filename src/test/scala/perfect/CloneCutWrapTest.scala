@@ -74,7 +74,6 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("String insert") {
-    val output: Expr = "Hello"
     val pfun = function(
       let("a"::StringType, "Hello ")(av =>
         let("b"::StringType, " world")(bv =>
@@ -83,16 +82,14 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       )
     )(inoxTypeOf[String])
 
-    val pfun2 = pfun repairFrom ProgramFormula.StringInsert("Hello", " big", "  world")
-    pfun2 matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello", " big", "  world") matchBody {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello big "
         t shouldEqual " world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    val pfun3 = pfun repairFrom ProgramFormula.StringInsert("Hello  ", "big ", "world")
-    pfun3 matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello  ", "big ", "world") matchBody {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello "
         t shouldEqual " big world"
@@ -111,6 +108,109 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         vb shouldEqual b.toVariable
         2
     }.sum shouldEqual 3
+  }
+
+  test("Nested string insert") {
+    val pfun = function(
+      let("a"::StringType, "Hello ")(av =>
+        let("b"::StringType, "big ")(bv =>
+          let("c"::StringType, "world")(cv =>
+            av +& bv +& cv
+          )
+        )
+      )
+    )(inoxTypeOf[String])
+
+    pfun repairFrom ProgramFormula.StringInsert("Hello big", " big", " world") matchBody {
+      case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
+        s shouldEqual "Hello "
+        t shouldEqual "big big "
+        u shouldEqual "world"
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+        vc shouldEqual c.toVariable
+    }
+    pfun repairFrom ProgramFormula.StringInsert("Hello"," big"," big world") matchBody {
+      case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
+        s shouldEqual "Hello big "
+        t shouldEqual "big "
+        u shouldEqual "world"
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+        vc shouldEqual c.toVariable
+    }
+  }
+
+  test("String delete") {
+    val pfun = function(
+      let("a"::StringType, "Hello big ")(av =>
+        let("b"::StringType, " big world")(bv =>
+          av +& bv
+        )
+      )
+    )(inoxTypeOf[String])
+    // "Hello big  big world"
+    pfun repairFrom ProgramFormula.StringDelete("Hello"," big world") matchBody {
+      case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
+        s shouldEqual "Hello"
+        t shouldEqual " big world"
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+    }
+    pfun repairFrom ProgramFormula.StringDelete("Hello big ","world") matchBody {
+      case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
+        s shouldEqual "Hello big "
+        t shouldEqual "world"
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+    }
+    pfun repairFrom ProgramFormula.StringDelete("Hello ", "world") matchBody {
+      case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
+        s shouldEqual "Hello "
+        t shouldEqual "world"
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+    }
+  }
+
+  test("Nested string delete") {
+    val pfun = function(
+      let("a"::StringType, "Hello big ")(av =>
+        let("b"::StringType, "big ")(bv =>
+          let("c"::StringType, "world")(cv =>
+            av +& bv +& cv
+          )
+        )
+      )
+    )(inoxTypeOf[String])
+    // "Hello big big world"
+    pfun repairFrom ProgramFormula.StringDelete("Hello big"," world") matchBody {
+      case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
+        s shouldEqual "Hello big"
+        t shouldEqual " "
+        u shouldEqual "world"
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+        vc shouldEqual c.toVariable
+    }
+    pfun repairFrom ProgramFormula.StringDelete("Hello ","world") matchBody {
+      case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
+        s shouldEqual "Hello "
+        t shouldEqual ""
+        u shouldEqual "world"
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+        vc shouldEqual c.toVariable
+    }
+    pfun repairFrom ProgramFormula.StringDelete("Hello ","ld") matchBody {
+      case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
+        s shouldEqual "Hello "
+        t shouldEqual ""
+        u shouldEqual "ld"
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+        vc shouldEqual c.toVariable
+    }
   }
 
   test("Split / Clone and paste") {
