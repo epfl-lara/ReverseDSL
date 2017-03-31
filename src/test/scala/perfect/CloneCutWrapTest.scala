@@ -160,6 +160,38 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
+  test("String insert direct test space weight") {
+    val pfun = function(
+      "Hello " +& "world"
+    )(inoxTypeOf[String])
+
+    pfun repairFrom ProgramFormula.StringInsert("Hello ", " ", "world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) =>
+        s shouldEqual "Hello  "
+        t shouldEqual "world"
+    }
+    pfun repairFrom ProgramFormula.StringInsert("Hello ", "big", "world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) =>
+        s shouldEqual "Hello "
+        t shouldEqual "bigworld"
+    }
+
+    val pfun2 = function(
+      "Hello" +& " world"
+    )(inoxTypeOf[String])
+
+    pfun2 repairFrom ProgramFormula.StringInsert("Hello", " ", " world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) =>
+        s shouldEqual "Hello"
+        t shouldEqual "  world"
+    }
+    pfun2 repairFrom ProgramFormula.StringInsert("Hello", "big", " world") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) =>
+        s shouldEqual "Hellobig"
+        t shouldEqual " world"
+    }
+  }
+
   test("Nested string modification direct") {
     val pfun = function(
       "Hello " +& "big " +& "world"
@@ -292,7 +324,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
-  test("Split / Clone and paste") {
+  /*test("Split / Clone and paste") {
     val output: Expr = "Hello big beautiful world"
     val pfun = function(
       let("a"::StringType, "Hello big ")(av =>
@@ -316,7 +348,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       "Hello big beautiful world! It is really big beautiful."
     pfun2 repairFrom "Hello big and beautiful world! It is really big beautiful." shouldProduce
                      "Hello big and beautiful world! It is really big and beautiful."
-  }
+  }*/
 
   test("Clone") {
 

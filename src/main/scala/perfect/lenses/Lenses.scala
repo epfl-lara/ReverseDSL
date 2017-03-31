@@ -386,45 +386,60 @@ trait Lenses { self: ReverseProgram.type =>
           // Put in first the one to which we removed the most chars.
 
           // leftValue + rightValue ==> leftAfter + inserted + rightAfter
-          val res = (rightValue_s.endsWith(rightAfter)).flatMap{ // the insertion may have happened on the right.
+          val res: List[((Seq[ProgramFormula], Formula), (Int, Int))] = (rightValue_s.endsWith(rightAfter)).flatMap{ // the insertion may have happened on the right.
             //  [  leftValue    ...     ][rightValue_s  ]
             //  [ leftAfter ....            ][rightAfter]
 
             // rightValue => (leftAfter \ leftValue) + inserted + rightAfter
+            val newLeftAfter = if(leftValue_s.length < leftAfter.length) leftAfter.substring(leftValue_s.length) else ""
+            val newRightAfter = rightAfter
+
             val newInsert = ProgramFormula.StringInsert(
-              StringLiteral(if(leftValue_s.length < leftAfter.length) leftAfter.substring(leftValue_s.length) else ""),
+              StringLiteral(newLeftAfter),
               StringLiteral(inserted),
-              StringLiteral(rightAfter)) /: Log.Right_insert
+              StringLiteral(newRightAfter))
             val newLeftValue = if(leftValue_s.length <= leftAfter.length) { // Nothing deleted.
               leftValue
             } else {
               StringLiteral(leftValue_s.substring(0, leftAfter.length))
             }
-            val weight = rightAfter.length - rightValue_s.length
+            val spaceWeight = (
+                Distances.spaceJump(newLeftAfter, inserted).flatMap(List(1)) ++
+                Distances.spaceJump(inserted, newRightAfter).flatMap(List(1))
+              ).length
+            val overwriteWeight = rightAfter.length - rightValue_s.length
 
-            List((((Seq(ProgramFormula(newLeftValue), newInsert)), Formula()), weight))
+            List((((Seq(ProgramFormula(newLeftValue), newInsert)), Formula()), (spaceWeight, overwriteWeight))) /: Log.Right_insert
           } ++
           (leftValue_s.startsWith(leftAfter)).flatMap{ // the insertion happened on the left.
             //  [  leftValue    ...     ][rightValue_s  ]
             //  [ leftAfter ...   ][        rightAfter  ]
 
             // leftValue => leftAfter + inserted + (rightAfter \ rightValue)
+
+            val newLeftAfter = leftAfter
+            val newRightAfter = if(rightValue_s.length < rightAfter.length) rightAfter.substring(0, rightAfter.length - rightValue_s.length) else ""
+
             val newInsert = ProgramFormula.StringInsert(
-              StringLiteral(leftAfter),
+              StringLiteral(newLeftAfter),
               StringLiteral(inserted),
-              StringLiteral(if(rightValue_s.length < rightAfter.length) rightAfter.substring(0, rightAfter.length - rightValue_s.length) else "")) /: Log.Left_insert
+              StringLiteral(newRightAfter))
 
             val newRightValue = if(rightValue_s.length <= rightAfter.length) {
               rightValue
             } else {
               StringLiteral(rightValue_s.substring(rightValue_s.length - rightAfter.length))
             }
-            val weight = leftAfter.length - leftValue_s.length
+            val spaceWeight = (
+                Distances.spaceJump(newLeftAfter, inserted).flatMap(List(1)) ++
+                Distances.spaceJump(inserted, newRightAfter).flatMap(List(1))
+              ).length
+            val overwriteWeight = leftAfter.length - leftValue_s.length
 
-            List(((Seq(newInsert, ProgramFormula(newRightValue)), Formula()), weight))
+            List(((Seq(newInsert, ProgramFormula(newRightValue)), Formula()), (spaceWeight, overwriteWeight))) /: Log.Left_insert
           }
 
-          res.sortBy(_._2).map(_._1).toStream
+          res.sortWith{ (x, y) => x._2._1 < y._2._1 || (x._2._1 == y._2._1 && x._2._2 < y._2._2)}.map(_._1).toStream
 
         case ProgramFormula.StringDelete(leftAfter, rightAfter) =>
           val StringLiteral(rightValue_s) = rightValue

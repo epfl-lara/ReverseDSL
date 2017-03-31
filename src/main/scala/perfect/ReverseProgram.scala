@@ -31,20 +31,26 @@ object ReverseProgram extends lenses.Lenses {
 
     def apply(e: Expr, f: Expr): ProgramFormula = ProgramFormula(e, Formula(f))
 
-    /** To build and extract a StringInsert specification */
+    /** To build and extract a StringInsert specification. Works for modifications as well */
     object StringInsert {
+      private val leftName = "leftTreeStr"
+      private val rightName = "rightTreeStr"
+
       def apply(left: Expr, s: Expr, right: Expr): ProgramFormula = {
-         val leftTreeStr = Variable(FreshIdentifier("leftTreeStr", true), StringType, Set())
-        val rightTreeStr = Variable(FreshIdentifier("rightTreeStr", true), StringType, Set())
+         val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
+        val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
         ProgramFormula(
           leftTreeStr +& s +& rightTreeStr,
+          // tree === leftTreeStr +& rightTreeStr && (if not modificaiton)
           leftTreeStr === left && rightTreeStr === right
         )
       }
 
       def unapply(f: ProgramFormula): Option[(String, String, String)] = {
         f.expr match {
-          case (leftTreeStr@Variable(_, StringType, _)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(_, StringType, _)) =>
+          case (leftTreeStr@Variable(idLeft, StringType, _)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(idRight, StringType, _))
+            if idLeft.name == leftName && idRight.name == rightName
+          =>
             val StringLiteral(leftBefore) = f.formula.known(leftTreeStr.toVal)
             val StringLiteral(rightBefore) = f.formula.known(rightTreeStr.toVal)
             Some((leftBefore, inserted, rightBefore))
@@ -55,9 +61,11 @@ object ReverseProgram extends lenses.Lenses {
 
     /** To build and extract a StringDelete specification */
     object StringDelete {
+      private val leftName = "leftTreeStr"
+      private val rightName = "rightTreeStr"
       def apply(left: Expr, right: Expr): ProgramFormula = {
-        val leftTreeStr = Variable(FreshIdentifier("leftTreeStr", true), StringType, Set())
-        val rightTreeStr = Variable(FreshIdentifier("rightTreeStr", true), StringType, Set())
+        val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
+        val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
         ProgramFormula(
           leftTreeStr +& rightTreeStr,
           leftTreeStr === left && rightTreeStr === right
@@ -66,12 +74,36 @@ object ReverseProgram extends lenses.Lenses {
 
       def unapply(f: ProgramFormula): Option[(String, String)] = {
         f.expr match {
-          case (leftTreeStr@Variable(_, StringType, _)) +& (rightTreeStr@Variable(_, StringType, _)) =>
+          case (leftTreeStr@Variable(idLeft, StringType, _)) +& (rightTreeStr@Variable(idRight, StringType, _))
+            if idLeft.name == leftName && idRight.name == rightName
+          =>
             val StringLiteral(leftBefore) = f.formula.known(leftTreeStr.toVal)
             val StringLiteral(rightBefore) = f.formula.known(rightTreeStr.toVal)
             Some((leftBefore, rightBefore))
           case _ => None
         }
+      }
+    }
+
+    object CloneAndPasteRight {
+      val beforeCloneName = "beforeClone"
+      val betweenClonePasteName = "betweenClonePaste"
+      val afterPasteName = "afterPaste"
+      val cloneName = "clone"
+      val pasteName = "paste"
+
+      def apply(beforeCloneValue: Expr, cloneValue: Expr, betweenClonePasteValue: Expr, afterPasteValue: Expr) = {
+        val beforeClone = Variable(FreshIdentifier(beforeCloneName, true), StringType, Set())
+        val betweenClonePaste = Variable(FreshIdentifier(betweenClonePasteName, true), StringType, Set())
+        val afterPaste = Variable(FreshIdentifier(afterPasteName, true), StringType, Set())
+        val clone = Variable(FreshIdentifier(cloneName, true), StringType, Set())
+        val paste = Variable(FreshIdentifier(pasteName, true), StringType, Set())
+
+        ProgramFormula(
+          beforeClone +& clone +& betweenClonePaste +& paste +& afterPaste,
+          beforeClone === beforeCloneValue && clone === cloneValue && betweenClonePaste === betweenClonePasteValue &&
+          paste === clone && afterPaste === afterPasteValue
+        )
       }
     }
   }

@@ -73,13 +73,21 @@ trait Distances {
     }
   }
 
+  @inline def differentSpaceChar(a: Char, b: Char): Boolean = {
+    val isASpaceChar = a.isSpaceChar
+    val isBSpaceChar = b.isSpaceChar
+    isASpaceChar && !isBSpaceChar || !isASpaceChar && isBSpaceChar
+  }
+
+  @inline def spaceJump(a: String, b: String): Boolean = {
+    a.nonEmpty && b.nonEmpty && differentSpaceChar(a(a.length - 1), b(0))
+  }
+
   def distanceWithoutSubstitution(a: Any, b: Any): Int = {
     if (a == b) 0 else {
       (a, b) match {
         case (a: Char, b: Char) =>
-          val isASpaceChar = a.isSpaceChar
-          val isBSpaceChar = b.isSpaceChar
-          if(isASpaceChar && !isBSpaceChar || !isASpaceChar && isBSpaceChar) 3 else 2
+          if(differentSpaceChar(a, b)) 3 else 2
         case (a: String, b: String) => Levenshtein.distance(a, b, distanceWithoutSubstitution, size)
         case (a: TraversableOnce[_], b: TraversableOnce[_]) => Levenshtein.distance(a, b, distanceWithoutSubstitution, size)
         case (a: Product, b: Product) =>
