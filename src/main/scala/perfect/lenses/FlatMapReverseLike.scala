@@ -10,13 +10,59 @@ trait FlatMapReverseLike[A, B, F] {
 
   def flatMap(l: List[A]): List[B] = l.flatMap(f)
 
+  // Split lOut into three components:
+  // The parts which are rendered correctly in out (first and last value)
+  // The parts which differ from out. Empty if elements have been removed.
+  private def recombine(lOut: List[List[B]], out: List[B]): (List[List[B]], List[B], List[List[B]]) = {
+    lOut match {
+      case Nil => (Nil, out, Nil)
+      case lOutHead::tail =>
+        if(out.startsWith(lOutHead)) {
+          val (before, middle, after) = recombine(lOut.tail, out.drop(lOutHead.length))
+          (lOutHead :: before, middle, after)
+        } else {
+          val optI = (0 to lOut.length).find { i =>
+            out.endsWith(lOut.drop(i).flatten)
+          }
+          assert(optI.isInstanceOf[Some[Int]], "[Internal error] should not happen")
+          val i = optI.asInstanceOf[Some[Int]].get
+          val after = lOut.drop(i)
+          (Nil, out.take(out.length - after.flatten.length), after)
+        }
+    }
+  } /: perfect.Log.prefix(s"recombine($lOut, $out)=")
+
+  // Shortcut to quickly isolate parts which have changed.
+  private def flatMapRevAuxInit(l: List[A], lOut: List[List[B]], out: List[B]): Stream[List[Either[A, F]]] = {
+    val (before, middle, after) = recombine(lOut, out)
+    val beforeA: List[Either[A, F]] = l.take(before.length).map(x => Left[A, F](x))
+    val afterA: List[Either[A, F]] = l.drop(l.length - after.length).map(x => Left[A, F](x))
+
+    // Elements which have changed.
+    val afterChanged: List[B] = middle
+
+    if(afterChanged.isEmpty) { // Elements have simplfy been deleted.
+      Stream(beforeA ++ afterA)
+    } else {
+      val beforeChanged: List[A] = l.drop(before.length).take(l.length - before.length - after.length)
+      val beforeChangedOut: List[List[B]] = lOut.drop(before.length).take(l.length - before.length - after.length)
+
+      perfect.Log("List before not changed:"+beforeA)
+      perfect.Log("List after not changed:"+afterA)
+      for(s <- flatMapRevAux(beforeChanged, beforeChangedOut, afterChanged)) yield {
+        beforeA ++ s ++ afterA
+      }
+    }
+  }
+
   private def flatMapRevAux(l: List[A], lOut: List[List[B]], out: List[B]): Stream[List[Either[A, F]]] = {
+    perfect.Log(s"Repairing $l = $lOut => $out")
     l match {
       case Nil =>
         out match {
           case Nil => Stream(Nil)
           case _ => // All possibilities !
-            for{i <- (1 to out.length).toStream
+            for{i <- (out.length to 1 by -1).toStream
                 out_take_i = out.take(i)
                 a <- fRev(None, out_take_i)
                 sol <- flatMapRevAux(l, lOut, out.drop(i))} yield {
@@ -30,10 +76,14 @@ trait FlatMapReverseLike[A, B, F] {
         } else if(out == expectedout) {
           flatMapRevAux(tail, lOut.tail, Nil).map(Left(ha)::_)
         } else if(out.take(expectedout.length) == expectedout) { // There has been an addition at the end
-          val t = flatMapRevAux(tail, lOut.tail, out.drop(expectedout.length)).map(Left(ha)::_)
-          if(t.isEmpty) { // Fallback: We completely remove the hint
+          val t = flatMapRevAux(tail, lOut.tail, out.drop(expectedout.length)).map(Left(ha) :: _)
+          if (t.isEmpty) { // Fallback: We completely remove the hint
             flatMapRevAux(Nil, Nil, out)
           } else t
+        } else if(out.drop(expectedout.length) == lOut.tail.flatten) { // The elements for this particular item have changed.
+          for{ a <- fRev(Some(l.head), out.take(expectedout.length)) } yield {
+            a::(l.tail.map(x => Left[A, F](x)))
+          }
         } else {
           val k = out.indexOfSlice(lOut.flatten)
           if(k > 0) {
@@ -54,7 +104,7 @@ trait FlatMapReverseLike[A, B, F] {
   }
 
   def flatMapRev(l: List[A], out: List[B]): Stream[List[Either[A, F]]] = {
-    flatMapRevAux(l, l.map(f), out)
+    flatMapRevAuxInit(l, l.map(f), out)
   }
 }
 

@@ -102,24 +102,24 @@ trait Lenses { self: ReverseProgram.type =>
       Log(s"map.apply($newOutput)")
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
       val ListLiteral(originalInput) = originalArgsValues.head
-      val uniqueString = "_"
+      val uniqueUnknownValue = defaultValue(lambda.args.head.getType)
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
       val mapr = new MapReverseLike[Expr, Expr, (Expr, Lambda)] {
         override def f = (expr: Expr) => evalWithCache(Application(lambda, Seq(expr)))
 
         override def fRev = (prevIn: Option[Expr], out: Expr) => {
-          Log(s"fRev: $prevIn, $out")
+          Log(s"Map.fRev: $prevIn, $out")
           val (Seq(in), newFormula) =
             prevIn.map(x => (Seq(x), Formula(Map[ValDef, Expr]()))).getOrElse {
               val unknown = ValDef(FreshIdentifier("unknown"),lambda.args.head.getType)
-              (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> StringLiteral(uniqueString))))
+              (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> uniqueUnknownValue)))
             }
           Log(s"in:$in\nnewformula:$newFormula")
           Log.prefix("res=") :=
           repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), newOutput.subExpr(out)).flatMap {
             case ProgramFormula(Application(_, Seq(in2)), _)
               if in2 != in => //The argument's values have changed
-              Stream(Left(in))
+              Stream(Left(in2))
             case ProgramFormula(Application(_, Seq(in2)), f:Formula)
               if in2 == in && in2.isInstanceOf[Variable] =>
               // The repair introduced a variable. We evaluate all possible values.
@@ -130,7 +130,7 @@ trait Lenses { self: ReverseProgram.type =>
               f.evalPossible(lambda2).map(lambda => Right((in, castOrFail[Expr, Lambda](lambda))))
             case e@ProgramFormula(app, f) =>
               throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
-          }.filter(_ != Left(StringLiteral(uniqueString)))
+          }.filter(_ != Left(uniqueUnknownValue))
         }
       }
 
@@ -206,13 +206,37 @@ trait Lenses { self: ReverseProgram.type =>
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       val ListLiteral(originalInput) = originalArgsValues.head
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
+      val uniqueUnknownValue = defaultValue(lambda.args.head.getType)
 
       val fmapr = new FlatMapReverseLike[Expr, Expr, (Expr, Lambda)] {
-        def f: Expr => List[Expr] = { e =>
-          ???
+        def f: Expr => List[Expr] = { (expr: Expr) =>
+          val ListLiteral(l) = evalWithCache(Application(lambda, Seq(expr)))
+          l
         }
-        def fRev: (Option[Expr], List[Expr]) => Stream[Either[Expr, (Expr, Lambda)]] = { (optIn, out) =>
-          ???
+        def fRev: (Option[Expr], List[Expr]) => Stream[Either[Expr, (Expr, Lambda)]] = { (prevIn, out) =>
+          Log(s"Flatmap.fRev: $prevIn, $out")
+          val (Seq(in), newFormula) =
+            prevIn.map(x => (Seq(x), Formula(Map[ValDef, Expr]()))).getOrElse {
+              val unknown = ValDef(FreshIdentifier("unknown"),lambda.args.head.getType)
+              (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> uniqueUnknownValue)))
+            }
+          Log(s"flatmap in:$in\nnewformula:$newFormula")
+          Log.res :=
+            repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), newOutput.subExpr(ListLiteral(out, tpes.drop(1)))).flatMap {
+              case ProgramFormula(Application(_, Seq(in2)), _)
+                if in2 != in => //The argument's values have changed
+                Stream(Left(in2))
+              case ProgramFormula(Application(_, Seq(in2)), f:Formula)
+                if in2 == in && in2.isInstanceOf[Variable] =>
+                // The repair introduced a variable. We evaluate all possible values.
+                // TODO: Alternatively, propagate the constraint on the variable
+                f.evalPossible(in2).map(Left(_))
+              case e@ProgramFormula(Application(lambda2: Lambda, Seq(in2)), f:Formula)
+                if in2 == in && lambda2 != lambda => // The lambda has changed.
+                f.evalPossible(lambda2).map(lambda => Right((in, castOrFail[Expr, Lambda](lambda))))
+              case e@ProgramFormula(app, f) =>
+                throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
+            }.filter(_ != Left(uniqueUnknownValue))
         }
       }
 

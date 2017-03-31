@@ -514,7 +514,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     repairProgram(pfun, _List[String]("Margharita", "Margharita with champignons", "Royal", "Salami", "Salami with mushrooms")) shouldProduce
                         _List[String]("Margharita", "Margharita with champignons", "Royal", "Salami", "Salami with champignons")
     repairProgram(pfun, _List[String]("Margharita", "Margharita with mushrooms", "Royalty", "Salami", "Salami with mushrooms")) shouldProduce
-                        _List[String]("Margharita", "Margharita with mushrooms", "Royalty", "Salami", "Salami with mushrooms")
+                        _List[String]("Margharita", "Margharita with mushrooms", "Royalty", "Royalty with mushrooms", "Salami", "Salami with mushrooms")
 
     repairProgram(pfun, _List[String]("Margharita", "Margharita with mushrooms", "Royal", "Jambon", "Jambon with mushrooms", "Salami", "Salami with mushrooms")) shouldProduce
       _List[String]("Margharita", "Margharita with mushrooms", "Royal", "Jambon", "Jambon with mushrooms", "Salami", "Salami with mushrooms") matchBody {
