@@ -1,5 +1,6 @@
 package perfect
 import legacy._
+import perfect.InoxConvertible._List
 
 /**
   * Created by Mikael on 03/03/2017.
@@ -520,6 +521,44 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       _List[String]("Margharita", "Margharita with mushrooms", "Royal", "Jambon", "Jambon with mushrooms", "Salami", "Salami with mushrooms") matchBody {
       case FunctionInvocation(_, _, Seq(arg, lambda)) =>
         arg shouldEqual _List[String]("Margharita", "Royal", "Jambon", "Salami")
+    }
+  }
+
+  test("Reverse mkString") {
+    val ap = valdef[String]("a")
+    val pfun = function(
+      FunctionInvocation(Utils.mkString,Seq(),
+        Seq(
+          _List[String]("- Margharita", "- Royal", "- Salami"),
+          StringLiteral("\n")
+        )
+      )
+    )(inoxTypeOf[String])
+
+    checkProg("- Margharita\n- Royal\n- Salami", pfun)
+    repairProgram(pfun, "- Ham\n- Royal\n- Salami") matchBody {
+      case FunctionInvocation(_, _, Seq(
+      l, StringLiteral("\n")
+      )) =>
+      l shouldEqual _List[String]("- Ham", "- Royal", "- Salami")
+    }
+    repairProgram(pfun, "- Margharita\n- Royal\n\n- Salami") matchBody {
+      case FunctionInvocation(_, _, Seq(
+      l, StringLiteral("\n")
+      )) =>
+      l shouldEqual _List[String]("- Margharita", "- Royal", "", "- Salami")
+    }
+    repairProgram(pfun, "- Margharita\n- Royal\n- Ham\n- Salami") matchBody {
+      case FunctionInvocation(_, _, Seq(
+      l, StringLiteral("\n")
+      )) =>
+      l shouldEqual _List[String]("- Margharita", "- Royal", "- Ham", "- Salami")
+    }
+    repairProgram(pfun, "- Margharita\n- Salami") matchBody {
+      case FunctionInvocation(_, _, Seq(
+      l, StringLiteral("\n")
+      )) =>
+      l shouldEqual  _List[String]("- Margharita", "- Salami")
     }
   }
 

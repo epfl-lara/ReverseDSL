@@ -107,6 +107,7 @@ object Utils {
   val merge = FreshIdentifier("merge")
   val splitEven = FreshIdentifier("splitEven")
   val stringCompare = FreshIdentifier("stringCompare")
+  val mkString = FreshIdentifier("mkString")
 
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)

@@ -19,7 +19,8 @@ trait Lenses { self: ReverseProgram.type =>
     StringConcatReverser,
     SplitEvenReverser,
     MergeReverser,
-    SortWithReverser
+    SortWithReverser,
+    MkStringReverser
   )
 
   val reversions = reversers.map(x => x.identifier -> x).toMap
@@ -180,6 +181,83 @@ trait Lenses { self: ReverseProgram.type =>
             )
           } else_ {
             ADT(T(nil)(T(list)(tA)), Seq())
+          }
+        })
+    }
+  }
+
+  case object MkStringReverser extends Reverser {
+    import Utils._
+    import StringConcatExtended._
+    val identifier = mkString
+
+    private def separateModifs(in: List[String], infix: String, out: String): (List[String], String, List[String]) = {
+      in match {
+        case Nil => (Nil, out, Nil)
+        case lOutHead::tail =>
+          if(out.startsWith(lOutHead + infix)) {
+            val (before, middle, after) = separateModifs(in.tail, infix, out.drop(lOutHead.length + infix.length))
+            (lOutHead :: before, middle, after)
+          } else if(out == lOutHead) { // Last element
+            (lOutHead::Nil, "", Nil)
+          } else {
+            val optI = (0 to in.length).find { i =>
+              out.endsWith(in.drop(i).map(infix + _).mkString)
+            }
+            assert(optI.isInstanceOf[Some[Int]], "[Internal error] should not happen")
+            val i = optI.asInstanceOf[Some[Int]].get
+            val after = in.drop(i)
+            (Nil, out.take(out.length - after.map(infix + _).mkString.length), after)
+          }
+      }
+    }
+
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
+      val ListLiteral(originalInput) = originalArgsValues.head
+      val StringLiteral(infix) = originalArgsValues.tail.head
+      val originalInputList: List[String] = originalInput.map{
+        case StringLiteral(l) => l
+        case e => throw new Exception(s"not a string: $e")
+      }
+      newOutputProgram match {
+//        case ProgramFormula.StringInsert(left, inserted, right) =>
+
+        case _ =>
+          val StringLiteral(newOut) = newOutputProgram.functionValue
+          val (before, middle, after) = separateModifs(originalInputList, infix, newOut)
+          Log(s"Separator($originalInputList, '$infix', '$newOut')=")
+          Log(s"($before, $middle, $after)")
+
+          val notHandled = originalInputList.drop(before.length).take(originalInputList.length - before.length - after.length)
+          val middleList: List[String] = if(infix.nonEmpty) { // We split middle using infix.
+            middle.split(java.util.regex.Pattern.quote(infix)).toList
+          } else { // We consider the new element as a new one.
+            List(middle)
+          }
+          val list = ListLiteral((before ++ middleList ++ after).map(x => StringLiteral(x)), Seq(StringType))
+          Stream((Seq(ProgramFormula(list), ProgramFormula(StringLiteral(infix))), Formula()))
+      }
+    }
+
+    // Flatten definition in inox
+    val funDef = mkFunDef(identifier)(){ case Seq() =>
+      (Seq("ls" :: T(list)(StringType), "infix"::StringType),
+        StringType,
+        { case Seq(ls, infix) =>
+          if_(ls.isInstOf(T(cons)(StringType))) {
+            let("c"::T(cons)(StringType), ls.asInstOf(T(cons)(StringType)))(c =>
+              let("head"::StringType, c.getField(head))( head =>
+                let("tail"::T(list)(StringType), c.getField(tail))( tail =>
+                  if_(tail.isInstOf(T(cons)(StringType))) {
+                    head +& infix +& FunctionInvocation(identifier, Seq(), Seq(tail, infix))
+                  } else_ {
+                    head
+                  }
+              )
+            )
+            )
+          } else_ {
+            StringLiteral("")
           }
         })
     }
