@@ -86,20 +86,25 @@ class BagMapSetTest extends FunSuite with TestHelpers {
 
   test("Repair double map indirection") {
     val pfun = function(
+      let("lang" :: StringType, "fr")(lang =>
       let("tr" :: inoxTypeOf[Map[String, Map[String, String]]],
         _Map[String, Map[String, String]](
           "fr" -> _Map[String, String]("hello" -> "Bonjour"),
           "en" -> _Map[String, String]("hello" -> "Hello")
         )
       ){ trv =>
-        MapApply(MapApply(trv, "fr"), "hello")
+        MapApply(MapApply(trv, lang), "hello") +& " " +& lang
       }
+      )
     )(inoxTypeOf[String])
 
-    checkProg("Bonjour", pfun)
-    checkProg("Salut",
-      repairProgram(pfun, "Salut")) matchBody {
-      case Let(tr, FiniteMap(
+    checkProg("Hello en",
+      repairProgram(pfun, "Bonjour en"))
+
+    checkProg("Bonjour fr", pfun)
+    checkProg("Salut fr",
+      repairProgram(pfun, "Salut fr")) matchBody {
+      case Let(lang, StringLiteral(l), Let(tr, FiniteMap(
         Seq(
         (StringLiteral("fr"), FiniteMap(
           Seq((StringLiteral("hello"), StringLiteral(hellofr))),
@@ -107,9 +112,12 @@ class BagMapSetTest extends FunSuite with TestHelpers {
         )), (StringLiteral("en"), FiniteMap(
         Seq((StringLiteral("hello"), StringLiteral(helloen))),
         _, _, _
-        ))), _, _, _), MapApply(MapApply(_, StringLiteral("fr")), StringLiteral("hello"))) =>
+        ))), _, _, _), MapApply(MapApply(_, langVar1), StringLiteral("hello")) +& StringLiteral(" ") +& langVar2)) =>
         hellofr shouldEqual "Salut"
         helloen shouldEqual "Hello"
+        l shouldEqual "fr"
+        langVar1 shouldEqual lang.toVariable
+        langVar2 shouldEqual langVar1
     }
   }
   // TODO: Revert MapUpdated.
