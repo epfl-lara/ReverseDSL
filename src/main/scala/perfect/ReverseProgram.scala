@@ -924,8 +924,15 @@ object ReverseProgram extends lenses.Lenses {
                     assert(argsIn.length == 2, "supposed that there was an element here, but there was none.")
                     val updatedOutProgram = ProgramFormula.ListInsert(tpe, before.tail, inserted, after, remaining)
 
-                    for(pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)) yield {
-                      pf.wrap(x => ADT(ADTType(tp, tpArgs), Seq(argsIn(0), x)))
+                    for{pfHead <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(before.head))
+                      pfTail <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
+                      ProgramFormula(
+                        ListLiteral.concat(
+                          ListLiteral(List(pfHead.expr), tpe),
+                          pfTail.expr
+                        ),
+                        pfHead.formula combineWith pfTail.formula
+                      )
                     }
                   }
                 case _ =>
@@ -1037,7 +1044,7 @@ object ReverseProgram extends lenses.Lenses {
           reversions.get(f) match {
             case None => Stream.empty  /: Log.prefix(s"No function $f reversible for : $funInv.\nIt evaluates to:\n$functionValue.")
             case Some(reverser) =>
-              val argsValue = args.map(arg => evalWithCache(letm(currentValues) in arg))
+              val argsValue = args.map(arg => evalWithCache(letm(currentValues) in arg)) // One day, args.map(arg => program.subExpr(arg))
               val lenseResult = reverser.put(tpes)(argsValue, newOutProgram)
               for{l <- lenseResult; (newArgsValues, newForm) = l
                   a <- combineArguments(program, args.zip(newArgsValues))

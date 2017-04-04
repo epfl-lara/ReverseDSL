@@ -542,30 +542,28 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       }
     }
 
+    MkString(List[String]("a","c", "d"), "#") repairFrom ProgramFormula.StringInsert("a","b", "d") matchBody {
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("abd") }
+
     MkString(List[String]("a","c"), "") repairFrom ProgramFormula.StringInsert("a","b", "c") matchBody {
-      case MkString(l, StringLiteral("b")) =>
-        l shouldEqual _List[String]("a","c")
-    }
+      case MkString(l, StringLiteral("b")) => l shouldEqual _List[String]("a","c") }
 
     MkString(List[String]("a", "b", "c"), "#") repairFrom ProgramFormula.StringInsert("a#","e#f#q","b#c") matchBody {
-      case MkString(l, StringLiteral("#")) =>
-        l shouldEqual _List[String]("a", "e", "f", "qb", "c")
-    }
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("a", "e", "f", "qb", "c") }
 
     MkString(List[String](), "#") repairFrom ProgramFormula.StringInsert("","a#b","") matchBody {
-      case MkString(l, StringLiteral("#")) =>
-        l shouldEqual _List[String]("a","b")
-    }
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("a","b") }
 
     MkString(List[String](""), "") repairFrom ProgramFormula.StringInsert("","aloha", "") matchBody {
-      case MkString(l, StringLiteral("")) =>
-        l shouldEqual _List[String]("aloha")
-    }
+      case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("aloha") }
 
 
     val pfun = MkString(List("- Margharita", "- Royal", "- Salami"), "\n")
 
     pfun shouldProduce "- Margharita\n- Royal\n- Salami"
+
+
+
 
     MkString(List[String](), "") repairFrom ProgramFormula.StringInsert("","aloha", "") matchBody {
       case MkString(l, StringLiteral("")) =>
@@ -595,10 +593,10 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","\n","- Royal\n- Salami") shouldProduce "- Margharita\n\n- Royal\n- Salami"
     pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","- Sushi\n","- Royal\n- Salami") shouldProduce "- Margharita\n- Sushi\n- Royal\n- Salami"
 
-    pfun repairFrom ProgramFormula.StringInsert("- ","Ham","\n- Royal\n- Salami") matchBody {
+/*    pfun repairFrom ProgramFormula.StringInsert("- ","Ham","\n- Royal\n- Salami") matchBody {
       case MkString(l, StringLiteral("\n")) =>
         l shouldEqual _List[String]("- Ham", "- Royal", "- Salami")
-    }
+    }*/
   }
 
   test("Reverse list concatenation") {
