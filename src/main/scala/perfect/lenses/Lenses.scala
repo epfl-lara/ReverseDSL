@@ -225,6 +225,17 @@ trait Lenses { self: ReverseProgram.type =>
       }
     }
     import InoxConvertible.conversions._
+
+    implicit class AugmentedList[A](l: List[A]) {
+      def mapFirst(p: A => A): List[A] = l match {
+        case Nil => Nil
+        case head::tail => p(head)::tail
+      }
+      def mapLast(p: A => A): List[A] = l match {
+        case Nil => Nil
+        case init :+ last => init :+ p(last)
+      }
+    }
     
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       val originalInputExpr@ListLiteral(originalInput, _) = originalArgsValues.head
@@ -234,7 +245,9 @@ trait Lenses { self: ReverseProgram.type =>
         case e => throw new Exception(s"not a string: $e")
       }
       newOutputProgram match {
-        case ProgramFormula.StringInsert(left, inserted, right) =>
+        case ProgramFormula.StringInsert(left, inserted_, right) =>
+          var inserted = inserted_
+
           def middleInsertedPossible(inserted: String) = // All possible lists of inserted elements in the middle.
             (if (inserted != "" && infix.nonEmpty) {
               List(inserted.split(java.util.regex.Pattern.quote(infix)).toList)
@@ -264,7 +277,7 @@ trait Lenses { self: ReverseProgram.type =>
           }
 
           // If infix explicitly selected, we replace it.
-          val (leftUntouched: List[ElementOrInfix],
+          val all@(leftUntouched: List[ElementOrInfix],
           leftUpdated: String, // should be a prefix of notHandledList.map(_.s).mkString
           notHandledList: List[ElementOrInfix],
           rightUpdated: String, // should be a suffix of notHandledList.map(_.s).mkString
@@ -275,68 +288,72 @@ trait Lenses { self: ReverseProgram.type =>
             (init, left.substring(init.map(_.s).mkString.length), remaining.take(remaining.length - tail.length),
               right.substring(0, right.length - tail.map(_.s).mkString.length), tail)
           }
-          
-          assert(notHandledList.map(_.s).mkString.startsWith(leftUpdated))
-          assert(notHandledList.map(_.s).mkString.endsWith(rightUpdated))
+          Log("(lun,lup,nh,rup,run)="+all)
+
+          assert(notHandledList.map(_.s).mkString.startsWith(leftUpdated), "The repair given was inconsistent with previous function value")
+          assert(notHandledList.map(_.s).mkString.endsWith(rightUpdated), "The repair given was inconsistent with previous function value")
 
           val solutions = collection.mutable.ListBuffer[(Seq[ProgramFormula], Formula)]()
 
           //     [leftUntouched   ][          notHandledList           ][rightUntouched]
           // ==> [leftUntouched   ]leftUpdated [inserted]rightUpdated   [rightUntouched]
-          if (leftUpdated == "" && rightUpdated == "") {
-            if(notHandledList.length == 1 && notHandledList.head.isInstanceOf[Infix]) { // The prefix was selected and updated !
-              solutions += ((Seq(ProgramFormula(originalInputExpr), ProgramFormula.StringInsert(StringLiteral(""), StringLiteral(inserted), StringLiteral(""))), Formula()))
-            } else if(notHandledList.length % 2 == 0) { // An insertion occurred either on the element before or the element after.
-              // Some more elements have been possibly inserted as well. We prioritize splitting on the infix if it is not empty.
-              (leftUntouched.lastOption, rightUntouched.headOption) match {
-                case (someInfixOrNone, Some(firstElem: Element)) =>
-                  assert(someInfixOrNone.isEmpty || someInfixOrNone.get.isInstanceOf[Infix])
+            //When complete coverage, replace this if-then-else by this body because it's the same code with coverage
 
-                  if(infix != "") { // TODO: Add weights to attach to lastElem or firstElem
-                    if(inserted.endsWith(infix)) { // Only elements have been inserted.
-                      solutions ++= (for{ lInserted <- middleInsertedPossible(inserted.substring(0, inserted.length - infix.length)) } yield
-                        (Seq(ProgramFormula.ListInsert(
-                          StringType,
-                          leftUntouched.toOriginalListExpr,
-                          lInserted.map{ (s: String) => StringLiteral(s)},
-                          rightUntouched.toOriginalListExpr,
-                          BooleanLiteral(true)),
+          if(notHandledList.length == 1 && notHandledList.head.isInstanceOf[Infix]) { // The prefix was selected and updated !
+            solutions += ((Seq(ProgramFormula(originalInputExpr),
+              ProgramFormula.StringInsert(StringLiteral(leftUpdated), StringLiteral(inserted), StringLiteral(rightUpdated))), Formula()))
+          } else if(notHandledList.length % 2 == 0) { // An insertion occurred either on the element before or the element after.
+            // Some more elements have been possibly inserted as well. We prioritize splitting on the infix if it is not empty.
+            (leftUntouched.lastOption, rightUntouched.headOption) match {
+              case (someInfixOrNone, Some(firstElem: Element)) =>
+                assert(someInfixOrNone.isEmpty || someInfixOrNone.get.isInstanceOf[Infix])
+                inserted = leftUpdated + inserted + rightUpdated
+                if(infix != "") { // TODO: Add weights to attach to lastElem or firstElem
+                  if(inserted.endsWith(infix)) { // Only elements have been inserted.
+                    solutions ++= (for{ lInserted <- middleInsertedPossible(inserted.substring(0, inserted.length - infix.length)) } yield
+                      (Seq(ProgramFormula.ListInsert(
+                        StringType,
+                        leftUntouched.toOriginalListExpr,
+                        lInserted.map{ (s: String) => StringLiteral(s)},
+                        rightUntouched.toOriginalListExpr,
+                        BooleanLiteral(true)),
                         ProgramFormula(infixExpr)), Formula())
                       )
-                    } else { // Does not end with infix, hence there is an StringInsertion and maybe a ListInsert.
-                      solutions ++= (for{ lInserted <- middleInsertedPossible(inserted)} yield {
-                        val pf = ProgramFormula.StringInsert("", lInserted.last, firstElem.s)
-                        if(lInserted.length == 1) {
-                          val newExpr = ListLiteral.concat(
-                              ListLiteral(leftUntouched.toOriginalListExpr, StringType),
-                              ListLiteral(List(pf.expr), StringType),
-                              ListLiteral(rightUntouched.tail.toOriginalListExpr, StringType))
-                          (Seq(ProgramFormula(newExpr, pf.formula), ProgramFormula(infixExpr)), Formula())
-                        } else { // New elements have been furthermore inserted.
-                          val newPf = ProgramFormula.ListInsert(
-                            StringType,
-                            leftUntouched.toOriginalListExpr,
-                            lInserted.init.map{ (s: String) => StringLiteral(s)},
-                            pf.expr :: rightUntouched.tail.toOriginalListExpr,
-                            BooleanLiteral(true)) combineWith pf.formula
-                          (Seq(newPf, ProgramFormula(infixExpr)), Formula())
-                        }
-                      })
-                    }
-                  } else { // Infix is empty.
-                    assert(infix == "")
-                    val ifPrepend = ProgramFormula.StringInsert("", inserted, firstElem.s)
-
-                    val toAdd = List(
-                      // First suppose that the prefix has been updated.
-                      (Seq(ProgramFormula(originalInputExpr), ProgramFormula.StringInsert("", inserted, "")), Formula()),
+                  } else { // Does not end with infix, hence there is an StringInsertion and maybe a ListInsert.
+                    solutions ++= (for{ lInserted <- middleInsertedPossible(inserted)} yield {
+                      val pf = ProgramFormula.StringInsert("", lInserted.last, firstElem.s)
+                      if(lInserted.length == 1) {
+                        val newExpr = ListLiteral.concat(
+                          ListLiteral(leftUntouched.toOriginalListExpr, StringType),
+                          ListLiteral(List(pf.expr), StringType),
+                          ListLiteral(rightUntouched.tail.toOriginalListExpr, StringType))
+                        (Seq(ProgramFormula(newExpr, pf.formula), ProgramFormula(infixExpr)), Formula())
+                      } else { // New elements have been furthermore inserted.
+                        val newPf = ProgramFormula.ListInsert(
+                          StringType,
+                          leftUntouched.toOriginalListExpr,
+                          lInserted.init.map{ (s: String) => StringLiteral(s)},
+                          pf.expr :: rightUntouched.tail.toOriginalListExpr,
+                          BooleanLiteral(true)) combineWith pf.formula
+                        (Seq(newPf, ProgramFormula(infixExpr)), Formula())
+                      }
+                    })
+                  }
+                } else { // Infix is empty.
+                  assert(infix == "")
+                  val ifPrepend = ProgramFormula.StringInsert("", inserted, firstElem.s)
+                  val toAdd =
+                  // First suppose that the infix has been updated if it was present
+                    (if(someInfixOrNone != None)
+                      List((Seq(ProgramFormula(originalInputExpr), ProgramFormula.StringInsert("", inserted, "")), Formula()))
+                    else Nil) ++ List(
                       // Then the element to the right.
                       (Seq(ProgramFormula(
                         ListLiteral.concat(
                           ListLiteral(leftUntouched.toOriginalListExpr, StringType),
                           ListLiteral(List(ifPrepend.expr), StringType),
                           ListLiteral(rightUntouched.tail.toOriginalListExpr, StringType)
-                      ), ifPrepend.formula), ProgramFormula(infixExpr)), Formula())
+                        ), ifPrepend.formula), ProgramFormula(infixExpr)), Formula())
                     ) ++ {  // Then the element to the left, if any
                       if(someInfixOrNone != None) {
                         val ifAppend = ProgramFormula.StringInsert(leftUntouched.init.last.s, inserted, "")
@@ -348,179 +365,156 @@ trait Lenses { self: ReverseProgram.type =>
                           ), ifAppend.formula), ProgramFormula(infixExpr)), Formula()))
                       } else Nil
                     }
-                    
-                    solutions ++= toAdd
-                  }
-                  
-                case (Some(lastElem: Element), someInfixOrNone) =>
-                  assert(someInfixOrNone.isEmpty || someInfixOrNone.get.isInstanceOf[Infix])
-                  assert(infix != "" || someInfixOrNone == None) // Because else it would have been into left.
 
-                  if(inserted.startsWith(infix) && infix != "") { // Only elements have been inserted.
-                    solutions ++= (for{ lInserted <- middleInsertedPossible(inserted.substring(infix.length)) } yield
-                      (Seq(ProgramFormula.ListInsert(
-                          StringType,
-                          leftUntouched.toOriginalListExpr,
-                          lInserted.map{ (s: String) => StringLiteral(s)},
-                          rightUntouched.toOriginalListExpr,
-                          BooleanLiteral(true)),
-                        ProgramFormula(infixExpr)), Formula())
-                      )
-                  } else { // Does not start with infix, hence there is an StringInsertion and maybe a ListInsert.
-                    solutions ++= (for{ lInserted <- middleInsertedPossible(inserted)} yield {
-                      val pf = ProgramFormula.StringInsert(lastElem.s, lInserted.last, "")
-                      if(lInserted.length == 1) {
-                        val newExpr = ListLiteral.concat(
-                          ListLiteral(leftUntouched.init.toOriginalListExpr, StringType),
-                          ListLiteral(List(pf.expr), StringType),
-                          ListLiteral(rightUntouched.toOriginalListExpr, StringType))
-                        (Seq(ProgramFormula(newExpr, pf.formula), ProgramFormula(infixExpr)), Formula())
-                      } else { // New elements have been furthermore inserted.
-                        val newPf = ProgramFormula.ListInsert(
-                          StringType,
-                          leftUntouched.init.toOriginalListExpr :+ pf.expr,
-                          lInserted.tail.map{ (s: String) => StringLiteral(s)},
-                          rightUntouched.toOriginalListExpr,
-                          BooleanLiteral(true)) combineWith pf.formula
-                        (Seq(newPf, ProgramFormula(infixExpr)), Formula())
-                      }
-                    })
-                  }
+                  solutions ++= toAdd
+                }
 
-                case (None, None) => // Empty list since the beginning. We just add elements, splitting them if needed.
-                  solutions ++= (for { lInserted <- middleInsertedPossible(inserted) } yield {
-                    (Seq(
-                      ProgramFormula.ListInsert(StringType,
-                        Nil,
-                        lInserted.map(x => StringLiteral(x)),
-                        Nil,
-                        BooleanLiteral(true)
-                      ),
-                      ProgramFormula(infixExpr)
-                    ), Formula())
-                  })
-                case e => throw new Exception(s"[Internal error]: did not expect: $e")
-              }
-            } else { // notHandledList.length % 2 == 1 && leftUpdated == "" && rightUpdated == ""
-              (leftUntouched.lastOption, rightUntouched.headOption) match {
-                case (Some(prev: Element), Some(next: Element)) =>
-                  assert(infix != "") // Else infix would have been taken in leftUntouched.
-                  val (startsWithInfix, remainingInserted) = if(inserted.startsWith(infix)) (true, inserted.substring(infix.length)) else (false, inserted)
-                  val (endsWithInfix, finalInserted) = if(remainingInserted.endsWith(infix)) (true, remainingInserted.substring(0, remainingInserted.length - infix.length)) else (false, remainingInserted)
+              case (Some(lastElem: Element), someInfixOrNone) =>
+                assert(someInfixOrNone.isEmpty || someInfixOrNone.get.isInstanceOf[Infix])
+                assert(infix != "" || someInfixOrNone == None) // Because else it would have been into left.
+                inserted = leftUpdated + inserted + rightUpdated
 
-                  solutions ++= (for{ lInserted <- middleInsertedPossible(finalInserted) } yield {
-                    if(startsWithInfix && endsWithInfix) { // Pure insertion of the elements.
-                      (Seq(ProgramFormula.ListInsert(
+                if(inserted.startsWith(infix) && infix != "") { // Only elements have been inserted.
+                  solutions ++= (for{ lInserted <- middleInsertedPossible(inserted.substring(infix.length)) } yield
+                    (Seq(ProgramFormula.ListInsert(
+                      StringType,
+                      leftUntouched.toOriginalListExpr,
+                      lInserted.map{ (s: String) => StringLiteral(s)},
+                      rightUntouched.toOriginalListExpr,
+                      BooleanLiteral(true)),
+                      ProgramFormula(infixExpr)), Formula())
+                    )
+                } else { // Does not start with infix, hence there is an StringInsertion and maybe a ListInsert.
+                  solutions ++= (for{ lInserted <- middleInsertedPossible(inserted)} yield {
+                    val pf = ProgramFormula.StringInsert(lastElem.s, lInserted.head, "")
+                    if(lInserted.length == 1) {
+                      val newExpr = ListLiteral.concat(
+                        ListLiteral(leftUntouched.init.toOriginalListExpr, StringType),
+                        ListLiteral(List(pf.expr), StringType),
+                        ListLiteral(rightUntouched.toOriginalListExpr, StringType))
+                      (Seq(ProgramFormula(newExpr, pf.formula), ProgramFormula(infixExpr)), Formula())
+                    } else { // New elements have been furthermore inserted.
+                      val newPf = ProgramFormula.ListInsert(
                         StringType,
-                        leftUntouched.toOriginalListExpr,
-                        lInserted.map(x => StringLiteral(x)),
+                        leftUntouched.init.toOriginalListExpr :+ pf.expr,
+                        lInserted.tail.map{ (s: String) => StringLiteral(s)},
                         rightUntouched.toOriginalListExpr,
-                        BooleanLiteral(true)
-                      )), Formula())
-                    } else if(lInserted.length == 1) {
-                      if(!startsWithInfix && !endsWithInfix) { // Merge of two elements by inserting something else.
-                        // We report this as deleting the second argument and updating the first one with the value of the second.
-                        // TODO: Do better once we have the technology of argument value rewriting.
-                        val insertion = ProgramFormula.StringInsert(prev.s, lInserted.head + next.s, "")
-                        (Seq(ProgramFormula.ListInsert(
-                          StringType,
-                          leftUntouched.init.toOriginalListExpr :+ insertion.expr,
-                          Nil,
-                          rightUntouched.tail.toOriginalListExpr,
-                          BooleanLiteral(true)
-                        ) combineWith insertion.formula, ProgramFormula(infixExpr)), Formula())
-                      } else if(startsWithInfix && !endsWithInfix) { // We merge the insertion with the right element
-                        val insertion = ProgramFormula.StringInsert("", lInserted.last, next.s)
-                        (Seq(ProgramFormula(
-                          ListLiteral(
-                            leftUntouched.toOriginalListExpr ++
-                              (insertion.expr +: rightUntouched.tail.toOriginalListExpr),
-                            StringType
-                          ), insertion.formula), ProgramFormula(infixExpr)), Formula())
-                      } else /*if(!startsWithInfix && endsWithInfix) */{ // We merge the insertion with the right element
-                        val insertion = ProgramFormula.StringInsert(prev.s, lInserted.head, "")
-                        (Seq(ProgramFormula(
-                          ListLiteral(
-                            (leftUntouched.init.toOriginalListExpr :+ insertion.expr) ++
-                            rightUntouched.toOriginalListExpr,
-                            StringType
-                          ), insertion.formula), ProgramFormula(infixExpr)), Formula())
-                      }
-                    } else { // lInserted.length > 1
-                      if(!startsWithInfix && !endsWithInfix) { // There is room for modifying two elements and inserting the rest.
-                        val insertionPrev = ProgramFormula.StringInsert(prev.s, lInserted.head, "")
-                        val insertionNext = ProgramFormula.StringInsert("", lInserted.last, next.s)
-                        (Seq(ProgramFormula.ListInsert(
-                          StringType,
-                          leftUntouched.init.toOriginalListExpr :+ insertionPrev.expr,
-                          lInserted.tail.init.map( x => StringLiteral(x) ),
-                          insertionNext.expr +: rightUntouched.tail.toOriginalListExpr,
-                          BooleanLiteral(true)
-                        ) combineWith insertionPrev.formula combineWith insertionNext.formula, ProgramFormula(infixExpr)), Formula())
-                      } else if(startsWithInfix && !endsWithInfix) { // We merge the insertion with the right element
-                        val insertion = ProgramFormula.StringInsert("", lInserted.last, next.s)
-                        (Seq(ProgramFormula.ListInsert(
-                            StringType,
-                            leftUntouched.toOriginalListExpr,
-                            lInserted.init.map(x => StringLiteral(x)),
-                            (insertion.expr +: rightUntouched.tail.toOriginalListExpr),
-                          insertion.formula.unknownConstraints
-                          ), ProgramFormula(infixExpr)), Formula())
-                      } else /*if(!startsWithInfix && endsWithInfix)*/ { // We merge the insertion with the right element
-                        val insertion = ProgramFormula.StringInsert(prev.s, lInserted.head, "")
-                        (Seq(ProgramFormula.ListInsert(
-                          StringType,
-                          leftUntouched.init.toOriginalListExpr :+ insertion.expr,
-                        lInserted.tail.map(x => StringLiteral(x)),
-                          rightUntouched.toOriginalListExpr,
-                          insertion.formula.unknownConstraints), ProgramFormula(infixExpr)), Formula())
-                      }
+                        BooleanLiteral(true)) combineWith pf.formula
+                      (Seq(newPf, ProgramFormula(infixExpr)), Formula())
                     }
                   })
-                case (Some(prev: Infix), Some(next: Infix)) =>
-                  // Simple insertion between two infixes.
-                  solutions ++= (for{ lInserted <- middleInsertedPossible(inserted) } yield {
+                }
+
+              case (None, None) => // Empty list since the beginning. We just add elements, splitting them if needed.
+                solutions ++= (for { lInserted <- middleInsertedPossible(inserted) } yield {
+                  (Seq(
+                    ProgramFormula.ListInsert(StringType,
+                      Nil,
+                      lInserted.map(x => StringLiteral(x)),
+                      Nil,
+                      BooleanLiteral(true)
+                    ),
+                    ProgramFormula(infixExpr)
+                  ), Formula())
+                })
+              case e => throw new Exception(s"[Internal error]: did not expect: $e")
+            }
+          } else { // notHandledList.length % 2 == 1
+            (leftUntouched.lastOption, rightUntouched.headOption) match {
+              case (Some(prev: Element), Some(next: Element)) =>
+                assert(infix != "") // Else infix would have been taken in leftUntouched.
+                inserted = leftUpdated + inserted + rightUpdated
+                val (startsWithInfix, remainingInserted) = if(inserted.startsWith(infix)) (true, inserted.substring(infix.length)) else (false, inserted)
+                val (endsWithInfix, finalInserted) = if(remainingInserted.endsWith(infix)) (true, remainingInserted.substring(0, remainingInserted.length - infix.length)) else (false, remainingInserted)
+
+                solutions ++= (for{ lInserted <- middleInsertedPossible(finalInserted) } yield {
+                  if(startsWithInfix && endsWithInfix) { // Pure insertion of the elements.
                     (Seq(ProgramFormula.ListInsert(
                       StringType,
                       leftUntouched.toOriginalListExpr,
                       lInserted.map(x => StringLiteral(x)),
                       rightUntouched.toOriginalListExpr,
                       BooleanLiteral(true)
-                    )), Formula())
-                  })
-                case (Some(prev: Infix), Some(next: Element)) => throw new Exception("[Internal error]")
-                case (Some(prev: Element), Some(next: Infix)) => throw new Exception("[Internal error]")
-                case (None, Some(next: Element)) =>
-                  ???
-                case (None, Some(next: Infix)) =>
-                  ???
-                case (Some(next: Element), None) =>
-                  ???
-                case (Some(next: Infix), None) =>
-                  ???
-
-                case (None, None) => // No element in the list.
-                  solutions ++= (for { lInserted <- middleInsertedPossible(inserted) } yield {
-                    (Seq(
-                      ProgramFormula.ListInsert(StringType,
+                    ), ProgramFormula(infixExpr)), Formula())
+                  } else if(lInserted.length == 1) {
+                    if(!startsWithInfix && !endsWithInfix) { // Merge of two elements by inserting something else.
+                      // We report this as deleting the second argument and updating the first one with the value of the second.
+                      // TODO: Do better once we have the technology of argument value rewriting.
+                      val insertion = ProgramFormula.StringInsert(prev.s, lInserted.head + next.s, "")
+                      (Seq(ProgramFormula.ListInsert(
+                        StringType,
+                        leftUntouched.init.toOriginalListExpr :+ insertion.expr,
                         Nil,
-                        lInserted.map(x => StringLiteral(x)),
-                        Nil,
+                        rightUntouched.tail.toOriginalListExpr,
                         BooleanLiteral(true)
-                      ),
-                      ProgramFormula(infixExpr)
-                    ), Formula())
-                  })
-              }
-            }
-          } else if(notHandledList.length == 1) { // Only one element is not present anymore. It has been edited from the inside.
-            ???
-            // Many elements might have been inserted, especially if we edited an element.
-            notHandledList.head match {
-              case e: Element =>
+                      ) combineWith insertion.formula, ProgramFormula(infixExpr)), Formula())
+                    } else if(startsWithInfix && !endsWithInfix) { // We merge the insertion with the right element
+                      val insertion = ProgramFormula.StringInsert("", lInserted.last, next.s)
+                      (Seq(ProgramFormula(
+                        ListLiteral(
+                          leftUntouched.toOriginalListExpr ++
+                            (insertion.expr +: rightUntouched.tail.toOriginalListExpr),
+                          StringType
+                        ), insertion.formula), ProgramFormula(infixExpr)), Formula())
+                    } else /*if(!startsWithInfix && endsWithInfix) */{ // We merge the insertion with the right element
+                      val insertion = ProgramFormula.StringInsert(prev.s, lInserted.head, "")
+                      (Seq(ProgramFormula(
+                        ListLiteral(
+                          (leftUntouched.init.toOriginalListExpr :+ insertion.expr) ++
+                            rightUntouched.toOriginalListExpr,
+                          StringType
+                        ), insertion.formula), ProgramFormula(infixExpr)), Formula())
+                    }
+                  } else { // lInserted.length > 1
+                    if(!startsWithInfix && !endsWithInfix) { // There is room for modifying two elements and inserting the rest.
+                      val insertionPrev = ProgramFormula.StringInsert(prev.s, lInserted.head, "")
+                      val insertionNext = ProgramFormula.StringInsert("", lInserted.last, next.s)
+                      (Seq(ProgramFormula.ListInsert(
+                        StringType,
+                        leftUntouched.init.toOriginalListExpr :+ insertionPrev.expr,
+                        lInserted.tail.init.map( x => StringLiteral(x) ),
+                        insertionNext.expr +: rightUntouched.tail.toOriginalListExpr,
+                        BooleanLiteral(true)
+                      ) combineWith insertionPrev.formula combineWith insertionNext.formula, ProgramFormula(infixExpr)), Formula())
+                    } else if(startsWithInfix && !endsWithInfix) { // We merge the insertion with the right element
+                      val insertion = ProgramFormula.StringInsert("", lInserted.last, next.s)
+                      (Seq(ProgramFormula.ListInsert(
+                        StringType,
+                        leftUntouched.toOriginalListExpr,
+                        lInserted.init.map(x => StringLiteral(x)),
+                        (insertion.expr +: rightUntouched.tail.toOriginalListExpr),
+                        insertion.formula.unknownConstraints
+                      ), ProgramFormula(infixExpr)), Formula())
+                    } else /*if(!startsWithInfix && endsWithInfix)*/ { // We merge the insertion with the right element
+                      val insertion = ProgramFormula.StringInsert(prev.s, lInserted.head, "")
+                      (Seq(ProgramFormula.ListInsert(
+                        StringType,
+                        leftUntouched.init.toOriginalListExpr :+ insertion.expr,
+                        lInserted.tail.map(x => StringLiteral(x)),
+                        rightUntouched.toOriginalListExpr,
+                        insertion.formula.unknownConstraints), ProgramFormula(infixExpr)), Formula())
+                    }
+                  }
+                })
+              case (Some(_: Infix) | None, Some(_: Infix) | None) =>
 
-              case i: Infix =>
-
+                inserted = leftUpdated + inserted + rightUpdated
+                // Simple insertion between two infixes.
+                solutions ++= (for{ lInserted <- middleInsertedPossible(inserted) } yield {
+                  (Seq(ProgramFormula.ListInsert(
+                    StringType,
+                    leftUntouched.toOriginalListExpr,
+                    lInserted.map(x => StringLiteral(x)),
+                    rightUntouched.toOriginalListExpr,
+                    BooleanLiteral(true)
+                  ), ProgramFormula(infixExpr)), Formula())
+                })
+              case (Some(prev: Infix), Some(next: Element)) => throw new Exception("[Internal error]")
+              case (Some(prev: Element), Some(next: Infix)) => throw new Exception("[Internal error]")
+              case (None, Some(next: Element)) => // This would mean that notHandled is of even size, impossible
+                throw new Exception("[Internal error]")
+              case (Some(next: Element), None) => // This would mean that notHandled is of even size, impossible
+                throw new Exception("[Internal error]")
             }
           }
 

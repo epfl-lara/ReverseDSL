@@ -887,33 +887,26 @@ object ReverseProgram extends lenses.Lenses {
                       Stream(
                         ProgramFormula(ListLiteral(inserted, tpe))
                       )
-                    } else {
+                    } else { // after.length > 0
+                      Log("afterLength > 0")
                       val ListLiteral(functionValueList, tpe) = functionValue
                       if(after.length == functionValueList.length) { // No deletion.
-                        if(after.length > 0) {
-                          for{ pf <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(after.head))
-                               pf2 <- repair(program.subExpr(argsIn(1)), ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail, remaining)) } yield {
-                            ProgramFormula(ListLiteral.concat(
-                              ListLiteral(inserted, tpe),
-                              ListLiteral(List(pf.expr), tpe),
-                              pf2.expr), pf.formula combineWith pf2.formula)
-                          }
-                        } else {
-                          Stream(ProgramFormula(
-                            ListLiteral.concat(
-                              ListLiteral(inserted, tpe),
-                              function
-                            )
-                          ))
+                        Log("afterLength == functionValueList.length")
+                        for{ pf <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(after.head))
+                             pf2 <- repair(program.subExpr(argsIn(1)), ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail, remaining)) } yield {
+                          ProgramFormula(ListLiteral.concat(
+                            ListLiteral(inserted, tpe),
+                            ListLiteral(List(pf.expr), tpe),
+                            pf2.expr), pf.formula combineWith pf2.formula)
                         }
                       } else {
+                        Log("afterLength < functionValueList.length")
                         assert(after.length < functionValueList.length) // some deletion happened.
                         val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after, remaining) // Recursive problem if
                         for{ pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
                           pf.wrap{ x =>
                             ListLiteral.concat(
                               ListLiteral(inserted, tpe),
-                              ListLiteral(List(after.head), tpe),
                               x
                             )
                           }

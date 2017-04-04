@@ -542,6 +542,51 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       }
     }
 
+    MkString(List[String]("a","dc"), "") repairFrom ProgramFormula.StringInsert("a","b", "c") matchBody {
+      case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("a","bc") }
+
+    MkString(List[String]("dc"), "") repairFrom ProgramFormula.StringInsert("","kp", "c") matchBody {
+      case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("kpc") }
+
+   /* MkString(List[String]("abc","def","gh"), "") repairFrom ProgramFormula.StringInsert("ab","#","efgh") matchBody {
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("ab","ef","gh") }*/
+
+    MkString(List[String]("c","ob","d"), "?#") repairFrom ProgramFormula.StringInsert("c?#o","m?#k", "d") matchBody {
+      case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","om","kd") }
+
+    MkString(List[String]("c","ob","d"), "?#") repairFrom ProgramFormula.StringInsert("c?#o","k", "d") matchBody {
+      case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","okd") }
+
+    MkString(List[String]("c","ob","d"), "?#") repairFrom ProgramFormula.StringInsert("c?#o","k?#", "d") matchBody {
+      case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","ok", "d") }
+
+    MkString(List[String]("c","d"), "?#") repairFrom ProgramFormula.StringInsert("c?",":", "#d") matchBody {
+      case MkString(l, StringLiteral("?:#")) => l shouldEqual _List[String]("c","d") }
+
+    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("","m#k", "#e") matchBody {
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("m","k","e") }
+
+    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c#","m#k", "#e") matchBody {
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("c","m","k","e") }
+
+    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c","m#k", "e") matchBody {
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("cm","ke") }
+
+    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c","m#k#", "e") matchBody {
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("cm","k","e") }
+
+    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c","#m#k", "e") matchBody {
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("c","m","ke") }
+
+    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c","#m#k#", "e") matchBody {
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("c","m","k","e") }
+
+    MkString(List[String]("c"), "#") repairFrom ProgramFormula.StringInsert("c","k#d", "") matchBody {
+      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("ck","d") }
+
+    MkString(List[String]("c"), "") repairFrom ProgramFormula.StringInsert("","kp", "c") matchBody {
+      case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("kpc") }
+
     MkString(List[String]("a","c", "d"), "#") repairFrom ProgramFormula.StringInsert("a","b", "d") matchBody {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("abd") }
 
@@ -593,10 +638,10 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","\n","- Royal\n- Salami") shouldProduce "- Margharita\n\n- Royal\n- Salami"
     pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","- Sushi\n","- Royal\n- Salami") shouldProduce "- Margharita\n- Sushi\n- Royal\n- Salami"
 
-/*    pfun repairFrom ProgramFormula.StringInsert("- ","Ham","\n- Royal\n- Salami") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("- ","Ham","\n- Royal\n- Salami") matchBody {
       case MkString(l, StringLiteral("\n")) =>
         l shouldEqual _List[String]("- Ham", "- Royal", "- Salami")
-    }*/
+    }
   }
 
   test("Reverse list concatenation") {
