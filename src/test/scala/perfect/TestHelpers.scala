@@ -20,17 +20,11 @@ import scala.reflect.runtime.universe.TypeTag
 
 
 /** Mixin for tests repairing programs */
-trait TestHelpers {
+trait TestHelpers extends InoxConvertible.conversions {
   import InoxConvertible._
   import StringConcatExtended._
 
   type PFun = (InoxProgram, Identifier)
-
-  implicit def toExpr[A : InoxConvertible](e: A): Expr = inoxExprOf[A](e)
-
-  implicit def toProgramFormula(e: Expr): ProgramFormula = ProgramFormula(e)
-
-  implicit def toProgramFormula[A : InoxConvertible](e: A): ProgramFormula = ProgramFormula(e: Expr)
 
   implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
     @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {

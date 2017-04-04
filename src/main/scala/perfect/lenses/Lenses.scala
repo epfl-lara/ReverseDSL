@@ -43,18 +43,30 @@ trait Lenses { self: ReverseProgram.type =>
 
   object ListLiteral {
     import Utils._
-    def unapply(e: Expr): Option[List[Expr]] = e match {
-      case ADT(ADTType(cons, tps), Seq(head, tail)) =>
-        unapply(tail).map(head :: _ )
-      case ADT(ADTType(nil, tps), Seq()) =>
-        Some(Nil)
+    def unapply(e: Expr): Option[(List[Expr], Type)] = e match {
+      case ADT(ADTType(cons, Seq(tp)), Seq(head, tail)) =>
+        unapply(tail).map(res => (head :: res._1, tp))
+      case ADT(ADTType(nil, Seq(tp)), Seq()) =>
+        Some((Nil, tp))
       case _ => None
     }
-    def apply(e: List[Expr], tps: Seq[Type]): Expr = e match {
+    def apply(e: List[Expr], tp: Type): Expr = e match {
       case head :: tail =>
-        ADT(ADTType(cons, tps), Seq(head, apply(tail, tps)))
+        ADT(ADTType(cons, Seq(tp)), Seq(head, apply(tail, tp)))
       case Nil =>
-        ADT(ADTType(nil, tps), Seq())
+        ADT(ADTType(nil, Seq(tp)), Seq())
+    }
+    /** Requires either f to be empty, or e to be a ListLiteral */
+    def concat(e: Expr, f: Expr*): Expr = {
+      if(f.isEmpty) e else {
+        e match {
+          case ADT(ADTType(cons, Seq(tp)), Seq(head, tail)) =>
+            ADT(ADTType(cons, Seq(tp)), Seq(head, concat(tail, f: _*)))
+          case ADT(ADTType(nil, Seq(tp)), Seq()) =>
+            concat(f.head, f.tail: _*)
+          case _ => throw new Exception("[internal error] cannot concatenate non-literal on the left using ListLiteral.concat")
+        }
+      }
     }
   }
 
@@ -65,10 +77,10 @@ trait Lenses { self: ReverseProgram.type =>
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       val lambda = originalArgsValues.tail.head
       val newOutput = newOutputProgram.expr
-      val ListLiteral(originalInput) = originalArgsValues.head
+      val ListLiteral(originalInput, _) = originalArgsValues.head
       //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
-      filterRev(originalInput, (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true), ListLiteral.unapply(newOutput).get).map{ (e: List[Expr]) =>
-        (Seq(ProgramFormula(ListLiteral(e, tpes)), ProgramFormula(lambda)), Formula())
+      filterRev(originalInput, (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true), ListLiteral.unapply(newOutput).get._1).map{ (e: List[Expr]) =>
+        (Seq(ProgramFormula(ListLiteral(e, tpes.head)), ProgramFormula(lambda)), Formula())
       }
     }
 
@@ -102,7 +114,7 @@ trait Lenses { self: ReverseProgram.type =>
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       Log(s"map.apply($newOutput)")
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
-      val ListLiteral(originalInput) = originalArgsValues.head
+      val ListLiteral(originalInput, _) = originalArgsValues.head
       val uniqueUnknownValue = defaultValue(lambda.args.head.getType)
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
       val mapr = new MapReverseLike[Expr, Expr, (Expr, Lambda)] {
@@ -136,7 +148,7 @@ trait Lenses { self: ReverseProgram.type =>
       }
 
       //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
-      mapr.mapRev(originalInput, ListLiteral.unapply(newOutput.expr).get).flatMap(recombineArgumentsLambdas(lambda, tpes))
+      mapr.mapRev(originalInput, ListLiteral.unapply(newOutput.expr).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
     }
 
     // Map definition in inox
@@ -189,6 +201,7 @@ trait Lenses { self: ReverseProgram.type =>
   case object MkStringReverser extends Reverser {
     import Utils._
     import StringConcatExtended._
+    import InoxConvertible._
     val identifier = mkString
 
     private def separateModifs(in: List[String], infix: String, out: String): (List[String], String, List[String]) = {
@@ -211,16 +224,333 @@ trait Lenses { self: ReverseProgram.type =>
           }
       }
     }
-
+    import InoxConvertible.conversions._
+    
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
-      val ListLiteral(originalInput) = originalArgsValues.head
-      val StringLiteral(infix) = originalArgsValues.tail.head
+      val originalInputExpr@ListLiteral(originalInput, _) = originalArgsValues.head
+      val infixExpr@StringLiteral(infix) = originalArgsValues.tail.head
       val originalInputList: List[String] = originalInput.map{
         case StringLiteral(l) => l
         case e => throw new Exception(s"not a string: $e")
       }
       newOutputProgram match {
-//        case ProgramFormula.StringInsert(left, inserted, right) =>
+        case ProgramFormula.StringInsert(left, inserted, right) =>
+          def middleInsertedPossible(inserted: String) = // All possible lists of inserted elements in the middle.
+            (if (inserted != "" && infix.nonEmpty) {
+              List(inserted.split(java.util.regex.Pattern.quote(infix)).toList)
+            } else {
+              Nil
+            }) ++ List(List(inserted))
+
+          // Priority to the insertion/modification/deletion of elements
+          // If not ambiguous (e.g. infix selected and replaced, or infix empty), change the infix.
+          // Todo: Return an index of where the start selection occurred (position in list, inside element + maybe prefix)
+          // Return same index for out.
+          // StringInsert for left element being changed, right element being changed (if not the same).
+          // ListInsert for elements in the middle.
+          sealed abstract class ElementOrInfix {
+            def s: String
+          }
+          case class Element(s: String) extends ElementOrInfix
+          case class Infix(s: String) extends ElementOrInfix
+          
+          implicit class AugmentedElementOrInfixList(l: List[ElementOrInfix]) {
+            def toOriginalListExpr: List[Expr] = l.collect{ case e: Element => StringLiteral(e.s)}
+          }
+
+          val lElementOrInfix: List[ElementOrInfix] = originalInputList match {
+            case Nil => Nil
+            case head :: tail => (collection.mutable.ListBuffer[ElementOrInfix](Element(head)) /: tail) { case (l, e) => (l += Infix(infix)) += Element(e) }.toList
+          }
+
+          // If infix explicitly selected, we replace it.
+          val (leftUntouched: List[ElementOrInfix],
+          leftUpdated: String, // should be a prefix of notHandledList.map(_.s).mkString
+          notHandledList: List[ElementOrInfix],
+          rightUpdated: String, // should be a suffix of notHandledList.map(_.s).mkString
+          rightUntouched: List[ElementOrInfix]) = {
+            val Some(init) = lElementOrInfix.inits.find(l => left.startsWith(l.map(_.s).mkString))
+            val remaining = lElementOrInfix.drop(init.length)
+            val Some(tail) = remaining.tails.find(l => right.endsWith(l.map(_.s).mkString))
+            (init, left.substring(init.map(_.s).mkString.length), remaining.take(remaining.length - tail.length),
+              right.substring(0, right.length - tail.map(_.s).mkString.length), tail)
+          }
+          
+          assert(notHandledList.map(_.s).mkString.startsWith(leftUpdated))
+          assert(notHandledList.map(_.s).mkString.endsWith(rightUpdated))
+
+          val solutions = collection.mutable.ListBuffer[(Seq[ProgramFormula], Formula)]()
+
+          //     [leftUntouched   ][          notHandledList           ][rightUntouched]
+          // ==> [leftUntouched   ]leftUpdated [inserted]rightUpdated   [rightUntouched]
+          if (leftUpdated == "" && rightUpdated == "") {
+            if(notHandledList.length == 1 && notHandledList.head.isInstanceOf[Infix]) { // The prefix was selected and updated !
+              solutions += ((Seq(ProgramFormula(originalInputExpr), ProgramFormula.StringInsert(StringLiteral(""), StringLiteral(inserted), StringLiteral(""))), Formula()))
+            } else if(notHandledList.length == 0) { // An insertion occurred either on the element before or the element after.
+              // Some more elements have been possibly inserted as well. We prioritize splitting on the infix if it is not empty.
+              (leftUntouched.lastOption, rightUntouched.headOption) match {
+                case (someInfixOrNone, Some(firstElem: Element)) =>
+                  assert(someInfixOrNone.isEmpty || someInfixOrNone.get.isInstanceOf[Infix])
+
+                  if(infix != "") { // TODO: Add weights to attach to lastElem or firstElem
+                    if(inserted.endsWith(infix)) { // Only elements have been inserted.
+                      solutions ++= (for{ lInserted <- middleInsertedPossible(inserted.substring(0, inserted.length - infix.length)) } yield
+                        (Seq(ProgramFormula.ListInsert(
+                          StringType,
+                          leftUntouched.toOriginalListExpr,
+                          lInserted.map{ (s: String) => StringLiteral(s)},
+                          rightUntouched.toOriginalListExpr,
+                          BooleanLiteral(true)),
+                        ProgramFormula(infixExpr)), Formula())
+                      )
+                    } else { // Does not end with infix, hence there is an StringInsertion and maybe a ListInsert.
+                      solutions ++= (for{ lInserted <- middleInsertedPossible(inserted)} yield {
+                        val pf = ProgramFormula.StringInsert("", lInserted.last, firstElem.s)
+                        if(lInserted.length == 1) {
+                          val newExpr = ListLiteral.concat(
+                              ListLiteral(leftUntouched.toOriginalListExpr, StringType),
+                              ListLiteral(List(pf.expr), StringType),
+                              ListLiteral(rightUntouched.tail.toOriginalListExpr, StringType))
+                          (Seq(ProgramFormula(newExpr, pf.formula), ProgramFormula(infixExpr)), Formula())
+                        } else { // New elements have been furthermore inserted.
+                          val newPf = ProgramFormula.ListInsert(
+                            StringType,
+                            leftUntouched.toOriginalListExpr,
+                            lInserted.init.map{ (s: String) => StringLiteral(s)},
+                            pf.expr :: rightUntouched.tail.toOriginalListExpr,
+                            BooleanLiteral(true)) combineWith pf.formula
+                          (Seq(newPf, ProgramFormula(infixExpr)), Formula())
+                        }
+                      })
+                    }
+                  } else { // Infix is empty.
+                    val ifPrepend = ProgramFormula.StringInsert("", inserted, firstElem.s)
+
+                    val toAdd = List(
+                      // First suppose that the prefix has been updated.
+                      (Seq(ProgramFormula(originalInputExpr), ProgramFormula.StringInsert("", inserted, "")), Formula()),
+                      // Then the element to the right.
+                      (Seq(ProgramFormula(
+                        ListLiteral.concat(
+                          ListLiteral(leftUntouched.toOriginalListExpr, StringType),
+                          ListLiteral(List(ifPrepend.expr), StringType),
+                          ListLiteral(rightUntouched.tail.toOriginalListExpr, StringType)
+                      ), ifPrepend.formula), ProgramFormula(infixExpr)), Formula())
+                    ) ++ {  // Then the element to the left, if any
+                      if(someInfixOrNone != None) {
+                        val ifAppend = ProgramFormula.StringInsert(leftUntouched.init.last.s, inserted, "")
+                        List((Seq(ProgramFormula(
+                          ListLiteral.concat(
+                            ListLiteral(leftUntouched.init.toOriginalListExpr, StringType),
+                            ListLiteral(List(ifAppend.expr), StringType),
+                            ListLiteral(rightUntouched.toOriginalListExpr, StringType)
+                          ), ifAppend.formula), ProgramFormula(infixExpr)), Formula()))
+                      } else Nil
+                    }
+                    
+                    solutions ++= toAdd
+                  }
+                  
+                case (Some(lastElem: Element), someInfixOrNone) =>
+                  assert(someInfixOrNone.isEmpty || someInfixOrNone.get.isInstanceOf[Infix])
+                  assert(infix != "" || someInfixOrNone == None) // Because else it would have been into left.
+
+                  if(inserted.startsWith(infix) && infix != "") { // Only elements have been inserted.
+                    solutions ++= (for{ lInserted <- middleInsertedPossible(inserted.substring(infix.length)) } yield
+                      (Seq(ProgramFormula.ListInsert(
+                          StringType,
+                          leftUntouched.toOriginalListExpr,
+                          lInserted.map{ (s: String) => StringLiteral(s)},
+                          rightUntouched.toOriginalListExpr,
+                          BooleanLiteral(true)),
+                        ProgramFormula(infixExpr)), Formula())
+                      )
+                  } else { // Does not start with infix, hence there is an StringInsertion and maybe a ListInsert.
+                    solutions ++= (for{ lInserted <- middleInsertedPossible(inserted)} yield {
+                      val pf = ProgramFormula.StringInsert(lastElem.s, lInserted.last, "")
+                      if(lInserted.length == 1) {
+                        val newExpr = ListLiteral.concat(
+                          ListLiteral(leftUntouched.init.toOriginalListExpr, StringType),
+                          ListLiteral(List(pf.expr), StringType),
+                          ListLiteral(rightUntouched.toOriginalListExpr, StringType))
+                        (Seq(ProgramFormula(newExpr, pf.formula), ProgramFormula(infixExpr)), Formula())
+                      } else { // New elements have been furthermore inserted.
+                        val newPf = ProgramFormula.ListInsert(
+                          StringType,
+                          leftUntouched.init.toOriginalListExpr :+ pf.expr,
+                          lInserted.tail.map{ (s: String) => StringLiteral(s)},
+                          rightUntouched.toOriginalListExpr,
+                          BooleanLiteral(true)) combineWith pf.formula
+                        (Seq(newPf, ProgramFormula(infixExpr)), Formula())
+                      }
+                    })
+                  }
+
+                case (None, None) => // Empty list since the beginning. We just add elements, splitting them if needed.
+                  solutions ++= (for { lInserted <- middleInsertedPossible(inserted) } yield {
+                    (Seq(
+                      ProgramFormula.ListInsert(StringType,
+                        Nil,
+                        lInserted.map(x => StringLiteral(x)),
+                        Nil,
+                        BooleanLiteral(true)
+                      ),
+                      ProgramFormula(infixExpr)
+                    ), Formula())
+                  })
+                case e => throw new Exception(s"[Internal error]: did not expect: $e")
+              }
+            } else { // notHandledList.length >= 1 && leftUpdated == "" && rightUpdated == ""
+              ???
+            }
+          } else if(notHandledList.length == 1) { // Only one element is not present anymore. It has been edited from the inside.
+            ???
+            // Many elements might have been inserted, especially if we edited an element.
+            notHandledList.head match {
+              case e: Element =>
+
+              case i: Infix =>
+
+            }
+          }
+
+          return solutions.toStream
+/*
+          def selectionStart(index: Int, leftSame: String): List[(Int, Int)] = {
+            if(index == originalInputList.length) {
+              assert(leftSame == "")
+              List((index, 0))
+            } else {
+              val elem = originalInputList(index)
+              val prefixLength = if(index == 0) 0 else infix.length
+              if(elem.length + prefixLength < leftSame.length) {
+                selectionStart(index + 1, leftSame.substring(elem.length + prefixLength))
+              } else if(elem.length + prefixLength == leftSame.length) {
+                (index, elem.length + prefixLength)::selectionStart(index + 1, "")
+              } else {
+                List((index, elem.length + prefixLength))
+              }
+            }
+          }
+          def selectionEnd(index: Int, rightSame: String): List[(Int, Int)] = {
+            if(index == -1) {
+              assert(rightSame == "")
+              List((index, 0))
+            } else {
+              val elem = originalInputList(index)
+              val suffixLength = if(index == originalInputList.length) 0 else infix.length
+              if(elem.length + suffixLength < rightSame.length) {
+                selectionEnd(index - 1, rightSame.substring(0, rightSame.length - (elem.length + suffixLength)))
+              } else if(elem.length + suffixLength == rightSame.length) {
+                (index, elem.length + suffixLength)::selectionEnd(index - 1, "")
+              } else {
+                List((index, elem.length + suffixLength))
+              }
+            }
+          }
+          val selStart = selectionStart(0, left)
+          val selEnd = selectionStart(originalInput.length, right)*/
+
+
+
+
+          /*
+          val Some(iLeft) = (originalInputList.length to 0 by -1).find(i => left.startsWith(originalInputList.take(i).mkString(infix)))
+          val Some(iRight) = (iLeft to originalInputList.length).find(i => right.endsWith(originalInputList.drop(i).mkString(infix)))
+          val before = originalInputList.take(iLeft)
+          val after = originalInputList.drop(iRight)
+          val notHandled = originalInputList.drop(iLeft).take(originalInputList.length - before.length - after.length)
+
+          val leftWithoutBefore = left.substring(before.mkString(infix).length)
+          val rightWithoutAfter = right.substring(0, right.length - after.mkString(infix).length)
+
+          val solutions = collection.mutable.ListBuffer[(Seq[ProgramFormula], Formula)]()
+          // Three kinds of solutions, to be sorted:
+          // - One element is modified (ProgramFormula.StringInsert)
+          // - A subset of elements is replaced by multiple elements (ProgramFormula.ListInsert)
+          // - The infix is modified (ProgramFormula.StringInsert)
+
+          //  [  left                            ][inserted][right                             ]
+          //  [be#fo#re][ leftwithoutBefore      ][inserted][rightWithoutAfter  ][  af#te#r    ]
+          //            [     #not#handled#       /* new  */                    ]
+          //    Note that leftwithoutBefore cannot start with #not, and rightWithoutAfter cannot end with handled#
+          // If nothandled is empty, it means that we may have touched the infix itself.
+
+          val notHandledString = if(notHandled.length == 0) {
+            if(before.nonEmpty && after.nonEmpty) infix else ""
+          } else (if(before.nonEmpty) infix else "") + notHandled.mkString(infix) + (if(after.nonEmpty) infix else "")
+          // Faster computation to arrive at this assert statement.
+          assert(before.mkString(infix) + notHandledString + after.mkString(infix) == originalInputList.mkString(infix))
+
+
+
+          val (leftWithoutBefore2, reallyInsertedLeft) = if(before.nonEmpty && (leftWithoutBefore + inserted).startsWith(infix)) {
+            (infix, (leftWithoutBefore + inserted).substring(infix.length))
+          } else (leftWithoutBefore, inserted)
+          val (reallyInserted, rightWithoutAfter2) = if(after.nonEmpty && (reallyInsertedLeft + rightWithoutAfter).endsWith(infix)) {
+            ((reallyInsertedLeft + rightWithoutAfter).substring(0, (reallyInsertedLeft + rightWithoutAfter).length - infix.length), infix)
+          } else (reallyInsertedLeft, rightWithoutAfter)
+
+          //if(notHandled.length == 0) { // All elements are still there. Some edit or insertion happened.
+          // We may just have replaced the infix by something else
+          // or inserted starts or ends with the infix in which case elements have been inserted, possibly merged with existing ones.
+          //  assert(infix.startsWith(leftWithoutBefore))
+          //  assert(infix.endsWith(rightWithoutAfter))
+          // If before.nonEmpty and after.nonEmpty
+          //##
+          //#[#element#]# in which case we insert element 'element'
+          //#[element]## in which case we insert element 'element#' and we change the infix to # ?
+          //##[element##] in which case we insert element 'element#' and we change the infix to # ?
+          //##[#] in which case we change the infix
+          //#[#]# in which case we change the infix
+          //#[/]# in which case we could put / in the prefix
+          //#[] in which case we remove one char from the prefix.
+          // Rule to change the infix: Because leftWithoutBefore2 and rightWithoutBefore2 are not the infix itself.
+          // [leftWithoutBefore2][reallyInserted][rightWithoutAfter2]
+          // If before.isEmpty or after.isEmpty, we just added an element or augmented an existing one.
+
+          // if before.isEmpty or after.isEmpty, then there is no chance that we modified the infix itself.
+          // Else, if we did not keep the same infix at the beginning and at the end, we suppose that we modified the infix.
+          Log(1)
+          if((before.nonEmpty && leftWithoutBefore2 != infix) || (after.nonEmpty && rightWithoutAfter2 != infix)) {
+            Log(2)
+            // We consider that the infix has been changed to the whole.
+            solutions += ((Seq(ProgramFormula(originalInputExpr), ProgramFormula.StringInsert(StringLiteral(leftWithoutBefore), StringLiteral(inserted), StringLiteral(rightWithoutAfter))), Formula()))
+          } else {
+            Log(3)
+            if(before.nonEmpty && after.nonEmpty) { // Special case.
+              Log(4)
+              // assert(leftWithoutBefore2 == infix && rightWithoutAfter2 == infix)
+              // .... ##abcd##
+              // .... ##ab[ef##gh]cd## // What are we doing here? Insertion of an element to the right and modification on the left? We should provide both.
+              for {insertion <- middleInsertedPossible(reallyInserted)} yield {
+                (Seq(ProgramFormula.ListInsert(StringType, before.map(inoxExprOf[String]), insertion.map(inoxExprOf[String]), after.map(inoxExprOf[String])), ProgramFormula(infixExpr)), Formula())
+              }
+            } else { // Three cases in one.
+              Log(s"5 : ($leftWithoutBefore, $inserted, $rightWithoutAfter")
+              Log(s"5 : ($leftWithoutBefore2, $reallyInserted, $rightWithoutAfter2")
+              // We did not change the infix, therefore the elements are added to the left,
+              // with a possible change of the first element of after if the separator was not included.
+              solutions ++= (for {insertion <- middleInsertedPossible(reallyInserted)} yield {
+                Log("6 " + insertion)
+                if ((after.isEmpty || rightWithoutAfter2 == infix) && (before.isEmpty || leftWithoutBefore2 == infix)) { // Just an insertion
+                  Log("7 ")
+                  (Seq(ProgramFormula.ListInsert(StringType, before.map(inoxExprOf[String]), insertion.map(inoxExprOf[String]), after.map(inoxExprOf[String])), ProgramFormula(infixExpr)), Formula())
+                } else { // We have to modify one of the element before concatenation with the left and right.
+                  Log("8 ")
+                  val headAfter = after.headOption.getOrElse(rightWithoutAfter)
+                  val beforeLast = before.lastOption.getOrElse(leftWithoutBefore)
+                  val (insertionSplitList, insertionSplitElem) = if(before.nonEmpty) (insertion.init, insertion.last) else (insertion.tail, insertion.head)
+                  val pf = ProgramFormula.StringInsert(StringLiteral(beforeLast), StringLiteral(insertionSplitElem), StringLiteral(headAfter))
+                  val tailAfter = after.tails.drop(1).take(1).toList.headOption.map(x => pf.expr :: x.map(inoxExprOf[String])).getOrElse(Nil)
+                  val beforeInit = before.inits.drop(1).take(1).toList.headOption.map(x => x.map(inoxExprOf[String]) ++ List(pf.expr)).getOrElse(Nil)
+                  val pfFinal = ProgramFormula.ListInsert(StringType, beforeInit, insertionSplitList.map(inoxExprOf[String]), tailAfter) combineWith pf.formula
+                  (Seq(pfFinal, ProgramFormula(infixExpr)), Formula())
+                }
+              })
+            }
+          }
+          return solutions.toStream*/
 
         case _ =>
           val StringLiteral(newOut) = newOutputProgram.functionValue
@@ -234,7 +564,7 @@ trait Lenses { self: ReverseProgram.type =>
           } else { // We consider the new element as a new one.
             List(middle)
           }
-          val list = ListLiteral((before ++ middleList ++ after).map(x => StringLiteral(x)), Seq(StringType))
+          val list = ListLiteral((before ++ middleList ++ after).map(x => StringLiteral(x)), StringType)
           Stream((Seq(ProgramFormula(list), ProgramFormula(StringLiteral(infix))), Formula()))
       }
     }
@@ -272,7 +602,7 @@ trait Lenses { self: ReverseProgram.type =>
       e.collect{ case Right((expr, lambda: Lambda)) => lambda }.toStream
     } else Stream(lambda)
     for(l <- newLambdas) yield {
-      (Seq(ProgramFormula(ListLiteral(argumentsChanged, tpes.take(1))), ProgramFormula(l)), Formula())
+      (Seq(ProgramFormula(ListLiteral(argumentsChanged, tpes.head)), ProgramFormula(l)), Formula())
     }
   }
 
@@ -282,13 +612,13 @@ trait Lenses { self: ReverseProgram.type =>
     val identifier = flatmap
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
-      val ListLiteral(originalInput) = originalArgsValues.head
+      val ListLiteral(originalInput, _) = originalArgsValues.head
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
       val uniqueUnknownValue = defaultValue(lambda.args.head.getType)
 
       val fmapr = new FlatMapReverseLike[Expr, Expr, (Expr, Lambda)] {
         def f: Expr => List[Expr] = { (expr: Expr) =>
-          val ListLiteral(l) = evalWithCache(Application(lambda, Seq(expr)))
+          val ListLiteral(l, _) = evalWithCache(Application(lambda, Seq(expr)))
           l
         }
         def fRev: (Option[Expr], List[Expr]) => Stream[Either[Expr, (Expr, Lambda)]] = { (prevIn, out) =>
@@ -300,7 +630,7 @@ trait Lenses { self: ReverseProgram.type =>
             }
           Log(s"flatmap in:$in\nnewformula:$newFormula")
           Log.res :=
-            repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), newOutput.subExpr(ListLiteral(out, tpes.drop(1)))).flatMap {
+            repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), newOutput.subExpr(ListLiteral(out, tpes(1)))).flatMap {
               case ProgramFormula(Application(_, Seq(in2)), _)
                 if in2 != in => //The argument's values have changed
                 Stream(Left(in2))
@@ -318,7 +648,7 @@ trait Lenses { self: ReverseProgram.type =>
         }
       }
 
-      fmapr.flatMapRev(originalInput, ListLiteral.unapply(newOutput.expr).get).flatMap(recombineArgumentsLambdas(lambda, tpes))
+      fmapr.flatMapRev(originalInput, ListLiteral.unapply(newOutput.expr).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
     }
 
     // Flatmap definition in inox
@@ -381,18 +711,18 @@ trait Lenses { self: ReverseProgram.type =>
 
       // Prioritize changes that touch only one of the two expressions.
       newOutput match {
-        case ListLiteral(s) =>
+        case ListLiteral(s, _) =>
           (leftValue match {
-            case ListLiteral(lv) =>
+            case ListLiteral(lv, _) =>
               if (s.startsWith(lv)) {
-                Stream((Seq(ProgramFormula(leftValue), ProgramFormula(ListLiteral(s.drop(lv.length), tps))), Formula()))
+                Stream((Seq(ProgramFormula(leftValue), ProgramFormula(ListLiteral(s.drop(lv.length), tps(0)))), Formula()))
               } else Stream.empty
             case _ => Stream.empty
           }) #::: (
             rightValue match {
-              case ListLiteral(rv) =>
+              case ListLiteral(rv, _) =>
                 if (s.endsWith(rv)) {
-                  Stream((Seq(ProgramFormula(ListLiteral(s.take(s.length - rv.length), tps)), ProgramFormula(rightValue)), Formula()))
+                  Stream((Seq(ProgramFormula(ListLiteral(s.take(s.length - rv.length), tps(0))), ProgramFormula(rightValue)), Formula()))
                 } else Stream.empty
               case _ => Stream.empty
             }
@@ -435,6 +765,19 @@ trait Lenses { self: ReverseProgram.type =>
     import StringConcatExtended._
     import Utils._
     val identifier = FreshIdentifier("tmpstringconcat")
+
+    @inline def charType(a: Char): Int =
+      if(a.isUpper) 1 else if(a.isLower) 2 else if(a.isSpaceChar) 5 else if(a == '\n' || a == '\r') 10 else 4 // 4 for punctuation.
+
+    @inline def differentCharType(a: Char, b: Char): Int = {
+      Math.abs(charType(a) - charType(b))
+    }
+
+    @inline def typeJump(a: String, b: String): Int = {
+      (if(a.nonEmpty && b.nonEmpty)
+        differentCharType(a(a.length - 1), b(0))
+      else 0) // We mostly insert into empty strings if available.
+    }
 
     def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       val newOutput = newOutputProgram.expr
@@ -505,10 +848,8 @@ trait Lenses { self: ReverseProgram.type =>
             } else {
               StringLiteral(leftValue_s.substring(0, leftAfter.length))
             }
-            val spaceWeight = (
-                Distances.spaceJump(newLeftAfter, inserted).flatMap(List(1)) ++
-                Distances.spaceJump(inserted, newRightAfter).flatMap(List(1))
-              ).length
+            val spaceWeight =
+                typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
             val overwriteWeight = rightAfter.length - rightValue_s.length
 
             List((((Seq(ProgramFormula(newLeftValue), newInsert)), Formula()), (spaceWeight, overwriteWeight))) /: Log.Right_insert
@@ -532,36 +873,23 @@ trait Lenses { self: ReverseProgram.type =>
             } else {
               StringLiteral(rightValue_s.substring(rightValue_s.length - rightAfter.length))
             }
-            val spaceWeight = (
-                Distances.spaceJump(newLeftAfter, inserted).flatMap(List(1)) ++
-                Distances.spaceJump(inserted, newRightAfter).flatMap(List(1))
-              ).length
+            val spaceWeight = typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
             val overwriteWeight = leftAfter.length - leftValue_s.length
 
             List(((Seq(newInsert, ProgramFormula(newRightValue)), Formula()), (spaceWeight, overwriteWeight))) /: Log.Left_insert
           }
 
-          res.sortWith{ (x, y) => x._2._1 < y._2._1 || (x._2._1 == y._2._1 && x._2._2 < y._2._2)}.map(_._1).toStream
+          res.sortWith{ (x, y) =>
+            if(y._2._2 < 0 && x._2._2 == 0) { // If did not change at one part, should take it first.
+              false
+            } else if(x._2._2 < 0 && y._2._2 == 0) {
+              true
+            } else {
+              // It's a simple insertion. First, try to attach to where the characters are more alike.
+              // Second, if equality, attach where the most characters have been removed.
+              x._2._1 < y._2._1 || (x._2._1 == y._2._1 && x._2._2 < y._2._2)
+            }}.map(_._1).toStream
 
-        case ProgramFormula.StringDelete(leftAfter, rightAfter) =>
-          val StringLiteral(rightValue_s) = rightValue
-          val StringLiteral(leftValue_s) = leftValue
-          // leftValue + rightValue ==> leftAfter + rightAfter
-          Stream((Seq(
-            if(leftValue_s.length > leftAfter.length) {
-              ProgramFormula.StringDelete(
-                StringLiteral(leftAfter),
-                StringLiteral(if(rightValue_s.length < rightAfter.length) rightAfter.substring(0, rightAfter.length - rightValue_s.length) else "")
-              ) /: Log.Left_delete
-            } else ProgramFormula(leftValue)
-            ,
-            if(rightValue_s.length > rightAfter.length) {
-              ProgramFormula.StringDelete(
-                StringLiteral(if(leftValue_s.length < leftAfter.length) leftAfter.substring(leftValue_s.length) else ""),
-                StringLiteral(rightAfter)
-              ) /: Log.Right_delete
-            } else ProgramFormula(rightValue)
-          ), Formula()))
         case ProgramFormula(StringLiteral(s), _) =>
           rightCase(s) append leftCase(s) append {
             defaultCase(false)

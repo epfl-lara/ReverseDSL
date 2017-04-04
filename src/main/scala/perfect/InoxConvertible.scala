@@ -8,6 +8,7 @@ import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
 import inox.InoxProgram
+import perfect.ReverseProgram.ProgramFormula
 
 import scala.collection.immutable.Bag
 import scala.xml.MetaData
@@ -373,4 +374,13 @@ object InoxConvertible {
   def _Bag[A: InoxConvertible](elements: (Expr, Expr)*): Expr = {
     FiniteBag(elements.toSeq, inoxTypeOf[A])
   }
+
+  trait conversions {
+    implicit def toExpr[A : InoxConvertible](e: A): Expr = inoxExprOf[A](e)
+
+    implicit def toProgramFormula(e: Expr): ProgramFormula = ProgramFormula(e)
+
+    implicit def toProgramFormula[A : InoxConvertible](e: A): ProgramFormula = ProgramFormula(e: Expr)
+  }
+  object conversions extends conversions
 }

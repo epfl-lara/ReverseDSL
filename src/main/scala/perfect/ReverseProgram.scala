@@ -51,35 +51,44 @@ object ReverseProgram extends lenses.Lenses {
           case (leftTreeStr@Variable(idLeft, StringType, _)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(idRight, StringType, _))
             if idLeft.name == leftName && idRight.name == rightName
           =>
-            val StringLiteral(leftBefore) = f.formula.known(leftTreeStr.toVal)
-            val StringLiteral(rightBefore) = f.formula.known(rightTreeStr.toVal)
+            val StringLiteral(leftBefore) = f.formula.findConstraintValue(leftTreeStr).getOrElse(return None)
+            val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
             Some((leftBefore, inserted, rightBefore))
           case _ => None
         }
       }
     }
 
-    /** To build and extract a StringDelete specification */
-    object StringDelete {
-      private val leftName = "leftTreeStr"
-      private val rightName = "rightTreeStr"
-      def apply(left: Expr, right: Expr): ProgramFormula = {
-        val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
-        val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
+    object ListInsert {
+      private val leftName = "leftTreeList"
+      private val rightName = "rightTreeList"
+
+      def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr], remaining: Expr/* = BooleanLiteral(true)*/): ProgramFormula = {
+        val leftTreeList  = Variable(FreshIdentifier(leftName,  true), T(Utils.list)(tpe), Set())
+        val rightTreeList = Variable(FreshIdentifier(rightName, true), T(Utils.list)(tpe), Set())
         ProgramFormula(
-          leftTreeStr +& rightTreeStr,
-          leftTreeStr === left && rightTreeStr === right
+          E(Utils.listconcat)(tpe)(E(Utils.listconcat)(tpe)(
+            leftTreeList,
+            ListLiteral(inserted, tpe)),
+            rightTreeList),
+          // tree === E(Utils.listconcat)(tpe)(leftTreeList, rightTreeList)
+          leftTreeList === ListLiteral(leftUnmodified, tpe) && rightTreeList === ListLiteral(rightUnmodified, tpe) &<>& remaining
         )
       }
 
-      def unapply(f: ProgramFormula): Option[(String, String)] = {
+      def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr], Expr)] = {
         f.expr match {
-          case (leftTreeStr@Variable(idLeft, StringType, _)) +& (rightTreeStr@Variable(idRight, StringType, _))
-            if idLeft.name == leftName && idRight.name == rightName
+          case FunctionInvocation(Utils.listconcat, Seq(tpe0), Seq(
+          FunctionInvocation(Utils.listconcat, Seq(tpe1), Seq(
+            leftTreeList@Variable(idLeft, ADTType(Utils.list, Seq(tpe2)), _),
+            ListLiteral(inserted, tpe3))),
+            (rightTreeList@Variable(idRight, ADTType(Utils.list, Seq(tpe4)), _))))
+            if idLeft.name == leftName && idRight.name == rightName && tpe0 == tpe1 && tpe1 == tpe2 && tpe2 == tpe3 && tpe3 == tpe4
           =>
-            val StringLiteral(leftBefore) = f.formula.known(leftTreeStr.toVal)
-            val StringLiteral(rightBefore) = f.formula.known(rightTreeStr.toVal)
-            Some((leftBefore, rightBefore))
+            val ListLiteral(leftBefore, _) = f.formula.findConstraintValue(leftTreeList).getOrElse(return None)
+            val ListLiteral(rightBefore, _) = f.formula.findConstraintValue(rightTreeList).getOrElse(return None)
+            val Formula(remaining) = f.formula.withoutFirstConstraintOn(leftTreeList).withoutFirstConstraintOn(rightTreeList)
+            Some((tpe1, leftBefore, inserted, rightBefore, remaining))
           case _ => None
         }
       }
@@ -219,7 +228,9 @@ object ReverseProgram extends lenses.Lenses {
     }
   }
 
-  case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) { // Can contain middle free variables.
+  case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
+
+    // Can contain middle free variables.
     lazy val varsToAssign = known.keySet ++ (exprOps.variablesOf(unknownConstraints).map(_.toVal))
 
     //val TopLevelAnds(ands) = unknownConstraints
@@ -285,6 +296,20 @@ object ReverseProgram extends lenses.Lenses {
           }
         case _ => None
       }
+    }
+
+    def withoutFirstConstraintOn(v: Variable) = {
+      val f = unknownConstraints match {
+        case TopLevelAnds(ands) =>
+          ands.span{
+            case Equals(mapVar, value) if mapVar == v => false
+            case _ => true
+          } match {
+            case (before, head::after) => and(before ++ after : _*)
+            case (before, Nil) => and(before: _*)
+          }
+      }
+      Formula(f)
     }
 
     /** Finds the value of an element in a map, in the formula */
@@ -563,6 +588,7 @@ object ReverseProgram extends lenses.Lenses {
       Log("@return original function");
       Stream(program.withoutConstraints())
     }
+    Log(s"functionValue ($functionValue) != newOut ($newOut)")
 
     //Log.prefix(s"@return ") :=
     interleave {
@@ -572,8 +598,9 @@ object ReverseProgram extends lenses.Lenses {
             case l: Let => Stream.empty[ProgramFormula] // No need to wrap a let expression, we can always do this later. Indeed,
               //f{val x = A; B} = {val x = A; f(B)}
             case Application(Lambda(_, _), _) => Stream.empty[ProgramFormula] // Same argument
+            case _ if ProgramFormula.ListInsert.unapply(newOutProgram).nonEmpty => Stream.empty[ProgramFormula]
             case _ =>
-              maybeWrap(program, newOut, functionValue) #::: maybeUnwrap(program, newOut, functionValue)
+              (maybeWrap(program, newOut, functionValue) /:: Log.maybe_wrap) #::: (maybeUnwrap(program, newOut, functionValue) /:: Log.maybe_unwrap)
           }
         case StringType if !newOut.isInstanceOf[Variable] && program.canDoWrapping =>
           function match {
@@ -604,8 +631,6 @@ object ReverseProgram extends lenses.Lenses {
               newOutProgram match {
                 case ProgramFormula.StringInsert(left, inserted, right) =>
                   Stream(ProgramFormula(StringLiteral(left + inserted + right)))
-                case ProgramFormula.StringDelete(left, right) =>
-                  Stream(ProgramFormula(StringLiteral(left + right)))
                 case _ =>
                   throw new Exception("Don't know what to do, not a Literal, a Variable, a let, a string insertion or deletion: "+newOut)
               }
@@ -643,8 +668,10 @@ object ReverseProgram extends lenses.Lenses {
             }
           }
         case l: FiniteMap =>
-          if(isValue(l) && newOut.isInstanceOf[FiniteMap]) {
+          if(isValue(l) && (newOut.isInstanceOf[FiniteMap] || newOut.isInstanceOf[Variable])) {
             newOut match {
+              case v: Variable =>
+                Stream(ProgramFormula(newOut))
               /*case v: Variable => // Replacement with the variable newOut, with a maybe clause.
                 // We loose the variable order !
                 val maybes = and(l.pairs.map {
@@ -778,8 +805,6 @@ object ReverseProgram extends lenses.Lenses {
           newOutProgram match {
             case ProgramFormula.StringInsert(left, inserted, right) =>
               Stream(ProgramFormula(v, Formula(v === StringLiteral(left + inserted + right))))
-            case ProgramFormula.StringDelete(left, right) =>
-              Stream(ProgramFormula(v, Formula(v === StringLiteral(left + right))))
             case _ =>
               Stream(ProgramFormula(v, Formula(v === newOut) combineWith newOutFormula))
           }
@@ -806,8 +831,10 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
+          Log("ADT in")
           newOut match {
             case Variable(ProgramFormula.subtree, tpe, s) =>
+              Log("Var subtree")
               val treeVar = Variable(ProgramFormula.tree, tpe, s)
               newOutFormula.findConstraintValue(treeVar) match {
                 case Some(originalTree) =>
@@ -829,8 +856,10 @@ object ReverseProgram extends lenses.Lenses {
                 case None => throw new Exception(s"Could not find value of ${ValDef(ProgramFormula.tree, tpe, s)} in $newOutFormula")
               }
             case v: Variable =>
+              Log("Var")
               Stream(ProgramFormula(v))
             case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
+              Log("ADT 2")
               val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
                 repair(ProgramFormula(aFun, program.formula), newOutProgram.subExpr(aVal))
               }
@@ -841,10 +870,68 @@ object ReverseProgram extends lenses.Lenses {
               } yield {
                 ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
               }
-            case ADT(ADTType(tp2, tpArgs2), args2) => Stream.empty // Wrapping already handled.
+            case ADT(ADTType(tp2, tpArgs2), args2) =>
+              Log("ADT 3")
+              Stream.empty // Wrapping already handled.
 
-            case a => // Another value in the type hierarchy. But Maybe sub-trees are shared !
-              throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
+            case a =>
+              Log("special case")
+              newOutProgram match {
+                case ProgramFormula.ListInsert(tpe, before, inserted, after, remaining) =>
+                  Log("ListInsert")
+                  if(before.length == 0) { // Insertion happens before this element
+                    Log("beforeLength == 0")
+                    // We might delete the elements afterwards.
+                    if(after.length == 0) {
+                      Log("afterLength == 0")
+                      Stream(
+                        ProgramFormula(ListLiteral(inserted, tpe))
+                      )
+                    } else {
+                      val ListLiteral(functionValueList, tpe) = functionValue
+                      if(after.length == functionValueList.length) { // No deletion.
+                        if(after.length > 0) {
+                          for{ pf <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(after.head))
+                               pf2 <- repair(program.subExpr(argsIn(1)), ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail, remaining)) } yield {
+                            ProgramFormula(ListLiteral.concat(
+                              ListLiteral(inserted, tpe),
+                              ListLiteral(List(pf.expr), tpe),
+                              pf2.expr), pf.formula combineWith pf2.formula)
+                          }
+                        } else {
+                          Stream(ProgramFormula(
+                            ListLiteral.concat(
+                              ListLiteral(inserted, tpe),
+                              function
+                            )
+                          ))
+                        }
+                      } else {
+                        assert(after.length < functionValueList.length) // some deletion happened.
+                        val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after, remaining) // Recursive problem if
+                        for{ pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
+                          pf.wrap{ x =>
+                            ListLiteral.concat(
+                              ListLiteral(inserted, tpe),
+                              ListLiteral(List(after.head), tpe),
+                              x
+                            )
+                          }
+                        }
+                      }
+                    }
+                  } else { // before.length > 0
+                    assert(argsIn.length == 2, "supposed that there was an element here, but there was none.")
+                    val updatedOutProgram = ProgramFormula.ListInsert(tpe, before.tail, inserted, after, remaining)
+
+                    for(pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)) yield {
+                      pf.wrap(x => ADT(ADTType(tp, tpArgs), Seq(argsIn(0), x)))
+                    }
+                  }
+                case _ =>
+                  println(newOutProgram)
+                  throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
+              }
           }
 
         case as@ADTSelector(adt, selector) =>
@@ -895,9 +982,8 @@ object ReverseProgram extends lenses.Lenses {
           val newConstraint = and(constraints : _*)
           val newVariablesConstraints = exprOps.variablesOf(newConstraint).map(_.toVal)
 
-          for{ pf <- repair(program.subExpr(map), newOutProgram.subExpr(finiteMapRepair)) } yield {
-            pf.wrap(x => MapApply(x, key)) combineWith Formula(
-              unknownConstraints = newConstraint)
+          for{ pf <- repair(program.subExpr(map), newOutProgram.subExpr(finiteMapRepair) combineWith Formula(newConstraint)) } yield {
+            pf.wrap(x => MapApply(x, key))
           }
 
         case Application(lambdaExpr, arguments) =>
@@ -923,10 +1009,10 @@ object ReverseProgram extends lenses.Lenses {
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
                    isSameBody = (newBody == body)              /: Log.isSameBody
                    args <-
-                     combineArguments(program combineWith newBodyFreshFormula,
+                     combineArguments(program/* combineWith newBodyFreshFormula*/,
                        arguments.zip(freshArgsNames).map { case (arg, v) =>
                       val expected = newBodyFreshFormula.getOrElse(v, argumentValues(freshToOld(v).toVal))
-                      (arg, newOutProgram.subExpr(expected))
+                      (arg, newOutProgram.subExpr(expected)/* combineWith newBodyFreshFormula*/)
                      })
                    (newArguments, newArgumentsFormula) = args
                    newLambda = if (isSameBody) l else Lambda(argNames, newBody)
@@ -1178,6 +1264,14 @@ object ReverseProgram extends lenses.Lenses {
       Log("@return unwrapped")
       return Stream(program.withoutConstraints())
     }
+
+    object StringConcats {
+      def unapply(e: Expr): Some[List[Expr]] = e match {
+        case StringConcat(a, b) => Some(unapply(a).get ++ unapply(b).get)
+        case e => Some(List(e))
+      }
+    }
+
     newOut match {
       case StringLiteral(s) =>
         function match {
@@ -1187,10 +1281,20 @@ object ReverseProgram extends lenses.Lenses {
             functionValue match {
               case StringLiteral(t) =>((
                 if(s.startsWith(t)) {
-                  Stream(ProgramFormula(StringConcat(function, StringLiteral(s.substring(t.length)))))
+                  val StringConcats(atoms) = function
+                  if(atoms.lastOption.exists(x => x.isInstanceOf[StringLiteral])) { // We don't wrap in a new string if the last concatenation is a StringLiteral
+                    Stream.empty
+                  } else {
+                    Stream(ProgramFormula(StringConcat(function, StringLiteral(s.substring(t.length)))))
+                  }
                 } else Stream.empty) #::: (
                 if(s.endsWith(t)) {
-                  Stream(ProgramFormula(StringConcat(StringLiteral(s.substring(0, s.length - t.length)), function)))
+                  val StringConcats(atoms) = function
+                  if(atoms.headOption.exists(x => x.isInstanceOf[StringLiteral])) { // We don't wrap in a new string if the last concatenation is a StringLiteral
+                    Stream.empty
+                  } else {
+                    Stream(ProgramFormula(StringConcat(StringLiteral(s.substring(0, s.length - t.length)), function)))
+                  }
                 } else Stream.empty
                 )) /:: Log.prefix("@return wrapped: ")
               case _ => Stream.empty

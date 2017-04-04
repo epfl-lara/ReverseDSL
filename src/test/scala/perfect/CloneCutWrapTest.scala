@@ -236,21 +236,21 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       )
     )(inoxTypeOf[String])
     // "Hello big  big world"
-    pfun repairFrom ProgramFormula.StringDelete("Hello"," big world") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello",""," big world") matchBody {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello"
         t shouldEqual " big world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    pfun repairFrom ProgramFormula.StringDelete("Hello big ","world") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello big ","","world") matchBody {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello big "
         t shouldEqual "world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    pfun repairFrom ProgramFormula.StringDelete("Hello ", "world") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello ","", "world") matchBody {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello "
         t shouldEqual "world"
@@ -270,7 +270,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       )
     )(inoxTypeOf[String])
     // "Hello big big world"
-    pfun repairFrom ProgramFormula.StringDelete("Hello big"," world") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello big",""," world") matchBody {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello big"
         t shouldEqual " "
@@ -279,7 +279,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         vb shouldEqual b.toVariable
         vc shouldEqual c.toVariable
     }
-    pfun repairFrom ProgramFormula.StringDelete("Hello ","world") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello ","","world") matchBody {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello "
         t shouldEqual ""
@@ -288,7 +288,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         vb shouldEqual b.toVariable
         vc shouldEqual c.toVariable
     }
-    pfun repairFrom ProgramFormula.StringDelete("Hello ","ld") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello ","","ld") matchBody {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello "
         t shouldEqual ""
@@ -304,23 +304,54 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       "Hello big " +& "big " +& "world"
     )(inoxTypeOf[String])
     // "Hello big big world"
-    pfun repairFrom ProgramFormula.StringDelete("Hello big"," world") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello big",""," world") matchBody {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello big"
         t shouldEqual " "
         u shouldEqual "world"
     }
-    pfun repairFrom ProgramFormula.StringDelete("Hello ","world") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello ","","world") matchBody {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual ""
         u shouldEqual "world"
     }
-    pfun repairFrom ProgramFormula.StringDelete("Hello ","ld") matchBody {
+    pfun repairFrom ProgramFormula.StringInsert("Hello ","","ld") matchBody {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual ""
         u shouldEqual "ld"
+    }
+  }
+
+  test("String insert choice") {
+    function(
+      "\n" +& "Marion" +& ","
+    )(inoxTypeOf[String]) repairFrom ProgramFormula.StringInsert("\n", "V", ",") matchBody {
+      case StringLiteral("\n") +& StringLiteral("V") +& StringLiteral(",") =>
+    }
+
+    function(
+      "\n" +& "M" +& "a"
+    )(inoxTypeOf[String]) repairFrom ProgramFormula.StringInsert("\n", "V", "a") matchBody {
+      case StringLiteral("\n") +& StringLiteral("V") +& StringLiteral("a") =>
+    }
+
+    val pfun = function(
+      "(" +& "en" +& ")"
+    )(inoxTypeOf[String])
+    val pfun2 = pfun repairFrom ProgramFormula.StringInsert("(","f",")")
+    pfun2 matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "("
+        t shouldEqual "f"
+        u shouldEqual ")"
+    }
+    pfun2 repairFrom ProgramFormula.StringInsert("(f","r",")") matchBody {
+      case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
+        s shouldEqual "("
+        t shouldEqual "fr"
+        u shouldEqual ")"
     }
   }
 

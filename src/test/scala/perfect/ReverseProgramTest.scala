@@ -526,39 +526,78 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
   test("Reverse mkString") {
     val ap = valdef[String]("a")
-    val pfun = function(
-      FunctionInvocation(Utils.mkString,Seq(),
-        Seq(
-          _List[String]("- Margharita", "- Royal", "- Salami"),
-          StringLiteral("\n")
-        )
-      )
-    )(inoxTypeOf[String])
+    object MkString {
+      def apply(input: Expr, middle: Expr) = function(
+        FunctionInvocation(Utils.mkString,Seq(),
+          Seq(
+            input,
+            middle
+          )
+        ))(inoxTypeOf[String])
+      def unapply(e: Expr): Option[(Expr, Expr)] = e match {
+        case FunctionInvocation(Utils.mkString,Seq(),
+          Seq(input, middle)
+      ) => Some((input, middle))
+        case _ => None
+      }
+    }
 
-    checkProg("- Margharita\n- Royal\n- Salami", pfun)
-    repairProgram(pfun, "- Ham\n- Royal\n- Salami") matchBody {
-      case FunctionInvocation(_, _, Seq(
-      l, StringLiteral("\n")
-      )) =>
-      l shouldEqual _List[String]("- Ham", "- Royal", "- Salami")
+    MkString(List[String]("a","c"), "") repairFrom ProgramFormula.StringInsert("a","b", "c") matchBody {
+      case MkString(l, StringLiteral("b")) =>
+        l shouldEqual _List[String]("a","c")
     }
-    repairProgram(pfun, "- Margharita\n- Royal\n\n- Salami") matchBody {
-      case FunctionInvocation(_, _, Seq(
-      l, StringLiteral("\n")
-      )) =>
-      l shouldEqual _List[String]("- Margharita", "- Royal", "", "- Salami")
+
+    MkString(List[String]("a", "b", "c"), "#") repairFrom ProgramFormula.StringInsert("a#","e#f#q","b#c") matchBody {
+      case MkString(l, StringLiteral("#")) =>
+        l shouldEqual _List[String]("a", "e", "f", "qb", "c")
     }
-    repairProgram(pfun, "- Margharita\n- Royal\n- Ham\n- Salami") matchBody {
-      case FunctionInvocation(_, _, Seq(
-      l, StringLiteral("\n")
-      )) =>
-      l shouldEqual _List[String]("- Margharita", "- Royal", "- Ham", "- Salami")
+
+    MkString(List[String](), "#") repairFrom ProgramFormula.StringInsert("","a#b","") matchBody {
+      case MkString(l, StringLiteral("#")) =>
+        l shouldEqual _List[String]("a","b")
     }
-    repairProgram(pfun, "- Margharita\n- Salami") matchBody {
-      case FunctionInvocation(_, _, Seq(
-      l, StringLiteral("\n")
-      )) =>
-      l shouldEqual  _List[String]("- Margharita", "- Salami")
+
+    MkString(List[String](""), "") repairFrom ProgramFormula.StringInsert("","aloha", "") matchBody {
+      case MkString(l, StringLiteral("")) =>
+        l shouldEqual _List[String]("aloha")
+    }
+
+
+    val pfun = MkString(List("- Margharita", "- Royal", "- Salami"), "\n")
+
+    pfun shouldProduce "- Margharita\n- Royal\n- Salami"
+
+    MkString(List[String](), "") repairFrom ProgramFormula.StringInsert("","aloha", "") matchBody {
+      case MkString(l, StringLiteral("")) =>
+        l shouldEqual _List[String]("aloha")
+    }
+
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n- Royal\n", "\n", "- Salami") matchBody {
+      case MkString(l, StringLiteral("\n")) =>
+        l shouldEqual _List[String]("- Margharita", "- Royal", "", "- Salami")
+    }
+    pfun repairFrom "- Margharita\n- Royal\n- Ham\n- Salami" matchBody {
+      case MkString(l, StringLiteral("\n")) =>
+        l shouldEqual _List[String]("- Margharita", "- Royal", "- Ham", "- Salami")
+    }
+    pfun repairFrom "- Margharita\n- Salami" matchBody {
+      case MkString(l, StringLiteral("\n")) =>
+        l shouldEqual  _List[String]("- Margharita", "- Salami")
+    }
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita", ",", "- Royal\n- Salami") shouldProduce "- Margharita,- Royal,- Salami"
+    pfun repairFrom ProgramFormula.StringInsert("", "  ","- Margharita\n- Royal\n- Salami") shouldProduce "  - Margharita\n- Royal\n- Salami"
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita","s","\n- Royal\n- Salami") shouldProduce "- Margharitas\n- Royal\n- Salami"
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","  ","- Royal\n- Salami") shouldProduce "- Margharita\n  - Royal\n- Salami"
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n- Royal","s","\n- Salami") shouldProduce "- Margharita\n- Royals\n- Salami"
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n- Royal\n","  ","- Salami") shouldProduce "- Margharita\n- Royal\n  - Salami"
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n- Royal\n- Salami","s", "") shouldProduce "- Margharita\n- Royal\n- Salamis"
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita","\n","\n- Royal\n- Salami") shouldProduce "- Margharita\n\n- Royal\n- Salami"
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","\n","- Royal\n- Salami") shouldProduce "- Margharita\n\n- Royal\n- Salami"
+    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","- Sushi\n","- Royal\n- Salami") shouldProduce "- Margharita\n- Sushi\n- Royal\n- Salami"
+
+    pfun repairFrom ProgramFormula.StringInsert("- ","Ham","\n- Royal\n- Salami") matchBody {
+      case MkString(l, StringLiteral("\n")) =>
+        l shouldEqual _List[String]("- Ham", "- Royal", "- Salami")
     }
   }
 

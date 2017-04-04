@@ -21,7 +21,7 @@ class XmlTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import ImplicitTuples._
   import XmlTrees._
-
+/*
   val input: Node = <addrbook>
     <person>
       <name> Masato Takeichi </name>
@@ -594,5 +594,5 @@ class XmlTest extends FunSuite with TestHelpers {
     </addrbook>
 
     pfWithSorting repairFrom newOutInsertionIndex shouldProduce expectedOutInsertionIndex
-  }
+  }*/
 }
