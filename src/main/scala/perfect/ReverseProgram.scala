@@ -213,7 +213,7 @@ object ReverseProgram extends lenses.Lenses {
         case Some(e) => givenValue
         case None => formula.assignments match {
           case Some(f) =>
-            val res = evalWithCache(f(expr))
+            val res = try evalWithCache(f(expr)) catch { case e: Exception => return None }
             givenValue = Some(res)
             givenValue
           case _ => None

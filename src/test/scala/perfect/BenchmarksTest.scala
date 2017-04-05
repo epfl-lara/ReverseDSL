@@ -49,7 +49,7 @@ class BenchmarksTest extends FunSuite with TestHelpers {
         let("language"::StringType, StringLiteral("en"))(language =>
           let("translations"::inoxTypeOf[Map[String, Map[String, String]]], init_translations)(translations =>
             let("tr"::inoxTypeOf[Map[String, String]], MapApply(translations, language))(tr =>
-              StringLiteral("( ") +& language +& StringLiteral(" )\n") +&
+              StringLiteral("(") +& language +& StringLiteral(")\n") +&
                 MapApply(tr, StringLiteral("hello")) +& StringLiteral(" ") +& name +&
                 MapApply(tr, StringLiteral("howareu")) +& StringLiteral("\n\n") +& name +& StringLiteral(", here are the available pizzas:\n") +&
                 FunctionInvocation(
@@ -71,13 +71,16 @@ class BenchmarksTest extends FunSuite with TestHelpers {
     val pfun = function(
       program
     )(inoxTypeOf[String])
-    pfun shouldProduce "( en )\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham"
+    pfun shouldProduce "(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham"
 
-    pfun repairFrom ProgramFormula.StringInsert("( en )\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami","s","\n- Pepperoni\n- Ham") shouldProduce
-      "( fr )\nSalut Marion, comment tu vas ?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salamis\n- Pepperoni\n- Ham"
+    pfun repairFrom ProgramFormula.StringInsert("(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami","s","\n- Pepperoni\n- Ham") shouldProduce
+      "(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salamis\n- Pepperoni\n- Ham"
 
-    pfun repairFrom ProgramFormula.StringInsert("( ","fr"," )\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham") shouldProduce
-      "( fr )\nSalut Marion, comment tu vas ?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham"
+    pfun repairFrom ProgramFormula.StringInsert("(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- ","B","Salami\n- Pepperoni\n- Ham") shouldProduce
+      "(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- BSalami\n- Pepperoni\n- Ham"
+
+    pfun repairFrom ProgramFormula.StringInsert("(","fr",")\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham") shouldProduce
+      "(fr)\nSalut Marion, comment tu vas ?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham"
 
   }
 }

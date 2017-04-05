@@ -177,7 +177,7 @@ object Utils {
       val i = s.take(num).indexWhere(f)
       Log(s"takeFirstTrue result: " + i)
       if(i == -1) s else {
-        s.take(i) #::: Stream(s(i)) #::: s.drop(i+1)
+        s(i) #:: (s.take(i) #::: s.drop(i+1))
       }
     }
     def ifFirst(f: A => Boolean, thenn: Stream[A] => Stream[A]): Stream[A] = {
