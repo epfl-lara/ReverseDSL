@@ -165,11 +165,7 @@ object Utils {
   // Sorting solutions facilities
   implicit class AugmentedStream[A](s: Stream[A]) {
     def sortFirstElements(num: Int, f: A => Int): Stream[A] = {
-      Log(s"sortFirstElement $num")
-      val res =
       s.take(num).sortBy(f) #::: s.drop(num)
-      Log(s"sortFirstElement result: " + res.take(num).toList)
-      res
     }
     /** If finds an element satisfying f within the first num  elements, put it in the front. */
     def takeFirstTrue(num: Int, f: A => Boolean): Stream[A] = {

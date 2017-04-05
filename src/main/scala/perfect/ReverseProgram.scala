@@ -307,7 +307,8 @@ object ReverseProgram extends lenses.Lenses {
     }
 
     def combineWith(other: Formula): Formula = {
-      Formula(unknownConstraints &<>& other.unknownConstraints)
+      val TopLevelAnds(ands) = unknownConstraints &<>& other.unknownConstraints
+      Formula(and(ands.distinct :_*))
     }
 
     override def toString = "[" + unknownConstraints.toString() + "]"
@@ -576,11 +577,11 @@ object ReverseProgram extends lenses.Lenses {
 
     lazy val functionValue = program.functionValue
 
-    if(!newOut.isInstanceOf[Variable] && functionValue == newOut) return {
+    if(!newOut.isInstanceOf[Variable] && !functionValue.isInstanceOf[FiniteMap] && functionValue == newOut) return {
       Log("@return original function");
       Stream(program.withoutConstraints())
     }
-    Log(s"functionValue ($functionValue) != newOut ($newOut)")
+    //Log(s"functionValue ($functionValue) != newOut ($newOut)")
 
     //Log.prefix(s"@return ") :=
     interleave {
@@ -615,7 +616,7 @@ object ReverseProgram extends lenses.Lenses {
             case l: Literal[_] => // Raw replacement
               Stream(newOutProgram)
             case m: MapApply =>
-              repair(program, newOutProgram.subExpr(program.formula.findConstraintVariableOrLiteral(m)))
+              repair(program, newOutProgram.subExpr(newOutProgram.formula.findConstraintVariableOrLiteral(m)))
 
             /*case l@Let(cloned: ValDef, _, _) =>
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
@@ -661,20 +662,23 @@ object ReverseProgram extends lenses.Lenses {
           }
         case l: FiniteMap =>
           if(isValue(l) && (newOut.isInstanceOf[FiniteMap] || newOut.isInstanceOf[Variable])) {
+            def reoderIfCanReorder(fm: FiniteMap) = {
+              if(fm.pairs.forall(x => isValue(x._1))) {
+                val inserted = fm.pairs.filter(x => l.pairs.forall(y => x._1 != y._1))
+                val fmUpdated = FiniteMap(l.pairs.flatMap {
+                  case (key, value) => fm.pairs.collectFirst { case (k, v) if k == key => key -> v }
+                } ++ inserted, fm.default, fm.keyType, fm.valueType)
+                Stream(newOutProgram.subExpr(fmUpdated))
+              } else Stream(newOutProgram)
+            }
             newOut match {
               case v: Variable =>
-                Stream(newOutProgram)
-              /*case v: Variable => // Replacement with the variable newOut, with a maybe clause.
-                // We loose the variable order !
-                val maybes = and(l.pairs.map {
-                  case (key_v, value_v) => E(Utils.maybe)(MapApply(newOut, key_v) === value_v)
-                }: _*)
-
-                Stream(ProgramFormula(newOut, Formula(unknownConstraints=maybes)))
-              */case fm: FiniteMap => // Raw replacement
-                Stream(newOutProgram)
-              /*case l@Let(cloned: ValDef, _, _) =>
-              Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
+                // If v is a variable which has a finiteMap representation, we replace.
+                newOutFormula.findConstraintValue(v) match {
+                  case Some(fm: FiniteMap) => reoderIfCanReorder(fm)
+                  case _ => Stream(newOutProgram)
+                }
+              case fm: FiniteMap => reoderIfCanReorder(fm)
               case _ => throw new Exception("Don't know what to do, not a Literal or a Variable " + newOut)
             }
           } else {
@@ -704,14 +708,20 @@ object ReverseProgram extends lenses.Lenses {
                 }
               case newOut =>
                 val insertedPairs = newOut match {
-                  case v: Variable => program.formula.findConstraintValue(v) match {
-                    case Some(np: FiniteMap) => np.pairs.filter {
-                      case (k, v) => !partEvaledPairs.exists(x => x._1 == k)
+                  case v: Variable =>
+                    Log("replacement by a variable - checking for inserted pairs")
+
+                    newOutFormula.findConstraintValue(v) match {
+                      case Some(np: FiniteMap) =>
+                        Log(s"replacement by a variable - pairs in $np")
+                        np.pairs.filter {
+                          case (k, v) => !partEvaledPairs.exists(x => x._1 == k)
+                        }
+                      case _ => Nil
                     }
-                    case _ => Nil
-                  }
                   case _ => Nil
                 }
+                Log(s"inserted pairs: $insertedPairs")
                 // We output the constraints with the given FiniteMap description.
                 // We repair symbolically on every map's value.
                 val repairs = partEvaledPairs.map{
@@ -1000,7 +1010,7 @@ object ReverseProgram extends lenses.Lenses {
                      combineArguments(program/* combineWith newBodyFreshFormula*/,
                        arguments.zip(freshArgsNames).map { case (arg, v) =>
                       val expected = newBodyFreshFormula.getOrElse(v, argumentValues(freshToOld(v).toVal))
-                      (arg, newOutProgram.subExpr(expected)/* combineWith newBodyFreshFormula*/)
+                      (arg, newOutProgram.subExpr(expected) combineWith newBodyFreshFormula)
                      })
                    (newArguments, newArgumentsFormula) = args
                    newLambda = if (isSameBody) l else Lambda(argNames, newBody)
@@ -1098,7 +1108,7 @@ object ReverseProgram extends lenses.Lenses {
           Log(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")
           Stream.empty
       }
-    } #::: {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOut):\n~>")
+    } #::: {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOutProgram):\n~>")
   }
 
   /** Given a sequence of (arguments expression, expectedValue),

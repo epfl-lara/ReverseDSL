@@ -34,7 +34,10 @@ class BagMapSetTest extends FunSuite with TestHelpers {
       let("tr" :: inoxTypeOf[Map[String, String]],
         _Map[String, String](
           "hello" -> "Bonjour",
-          "howareu" -> "comment tu vas?"
+          "howareu" -> "comment tu vas?",
+          "useless1" -> "useless1",
+          "useless2" -> "useless2",
+          "useless3" -> "useless3"
         )
       ){ trv =>
         MapApply(trv, "hello") +& ", "  +& MapApply(trv, "howareu")
@@ -43,8 +46,13 @@ class BagMapSetTest extends FunSuite with TestHelpers {
 
     checkProg("Bonjour, comment tu vas?", pfun)
     checkProg("Salut, comment tu vas?", repairProgram(pfun, "Salut, comment tu vas?")) matchBody {
-      case Let(t, m, MapApply(t2, StringLiteral("hello")) +& StringLiteral(", ") +& MapApply(t3, StringLiteral("howareu"))) =>
-        exprOfInox[Map[String, String]](m) shouldEqual Map("hello" -> "Salut", "howareu" -> "comment tu vas?")
+      case Let(t, FiniteMap(pairs, default, _, _), MapApply(t2, StringLiteral("hello")) +& StringLiteral(", ") +& MapApply(t3, StringLiteral("howareu"))) =>
+        pairs.toList shouldEqual List[(Expr, Expr)](
+          "hello" -> "Salut",
+          "howareu" -> "comment tu vas?",
+          "useless1" -> "useless1",
+          "useless2" -> "useless2",
+          "useless3" -> "useless3")
     }
   }
 
@@ -54,14 +62,28 @@ class BagMapSetTest extends FunSuite with TestHelpers {
       let("tr" :: inoxTypeOf[Map[String, String]],
         _Map[String, String](
           "hello" -> ("Bonjour " +& firstname),
-          "howareu" -> (", comment tu vas, " +& firstname)
+          "howareu" -> (", comment tu vas, " +& firstname),
+          "useless1" -> "useless1",
+          "useless2" -> "useless2",
+          "useless3" -> "useless3"
         )
       ){ trv => MapApply(trv, "hello") +& MapApply(trv, "howareu") }  }
     )(inoxTypeOf[String])
 
     checkProg("Bonjour Mikael, comment tu vas, Mikael", pfun)
     checkProg("Bonjour Ravi, comment tu vas, Ravi",
-      repairProgram(pfun, "Bonjour Ravi, comment tu vas, Mikael"))
+      repairProgram(pfun, "Bonjour Ravi, comment tu vas, Mikael")) matchBody {
+      case Let(firstNameVal, StringLiteral(name), Let(_, FiniteMap(pairs, default, _, _), _)) =>
+        name shouldEqual "Ravi"
+        val fv = firstNameVal.toVariable
+        pairs.toList shouldEqual List[(Expr, Expr)](
+          "hello" -> ("Bonjour " +& fv),
+          "howareu" -> (", comment tu vas, " +& fv),
+          "useless1" -> "useless1",
+          "useless2" -> "useless2",
+          "useless3" -> "useless3"
+        )
+    }
   }
 
   test("Repair non-existent values") {
@@ -97,6 +119,7 @@ class BagMapSetTest extends FunSuite with TestHelpers {
       }
       )
     )(inoxTypeOf[String])
+    implicit val v = Utils.defaultSymbols
 
     checkProg("Hello en",
       repairProgram(pfun, "Bonjour en"))
@@ -104,20 +127,21 @@ class BagMapSetTest extends FunSuite with TestHelpers {
     checkProg("Bonjour fr", pfun)
     checkProg("Salut fr",
       repairProgram(pfun, "Salut fr")) matchBody {
-      case Let(lang, StringLiteral(l), Let(tr, FiniteMap(
-        Seq(
-        (StringLiteral("fr"), FiniteMap(
-          Seq((StringLiteral("hello"), StringLiteral(hellofr))),
-          _, _, _
-        )), (StringLiteral("en"), FiniteMap(
-        Seq((StringLiteral("hello"), StringLiteral(helloen))),
-        _, _, _
-        ))), _, _, _), MapApply(MapApply(_, langVar1), StringLiteral("hello")) +& StringLiteral(" ") +& langVar2)) =>
-        hellofr shouldEqual "Salut"
-        helloen shouldEqual "Hello"
+      case Let(lang, StringLiteral(l), Let(tr, m, MapApply(MapApply(_, langVar1), StringLiteral("hello")) +& StringLiteral(" ") +& langVar2)) =>
         l shouldEqual "fr"
         langVar1 shouldEqual lang.toVariable
         langVar2 shouldEqual langVar1
+
+        m shouldEqual
+        FiniteMap(
+          Seq(
+            (StringLiteral("fr"), FiniteMap(
+              Seq((StringLiteral("hello"), StringLiteral("Salut"))),
+              Utils.defaultValue(inoxTypeOf[String]), StringType, StringType
+            )), (StringLiteral("en"), FiniteMap(
+              Seq((StringLiteral("hello"), StringLiteral("Hello"))),
+              Utils.defaultValue(inoxTypeOf[String]), StringType, StringType
+            ))), Utils.defaultValue(inoxTypeOf[Map[String, String]]), StringType, inoxTypeOf[Map[String, String]])
     }
   }
   // TODO: Revert MapUpdated.
