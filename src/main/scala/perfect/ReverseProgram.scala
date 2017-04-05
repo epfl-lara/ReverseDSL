@@ -521,55 +521,6 @@ object ReverseProgram extends lenses.Lenses {
     }
   }
 
-  /** Match lambda's bodies to recover the original assignments */
-  def obtainMapping(originalInput: Expr, freeVars: Set[Variable], originalAssignments: Map[ValDef, Expr], output: Expr): Stream[Map[ValDef, Expr]] = {
-    //Log.prefix(s"obtainMapping($originalInput, $freeVars, $originalAssignments, $output) =") :=
-    (originalInput, output) match {
-      case (v: Variable, l) =>
-        if(freeVars(v)) {
-          //Log(s"$v is a free variable")
-          if(!(originalAssignments contains v.toVal) || l == originalAssignments(v.toVal)) {
-            //Log(s"Value unchanged")
-            Stream(Map())
-          } else {
-            //Log(s"Value updated: $l")
-            Stream(Map(v.toVal -> l))
-          }
-        } else Stream(Map())
-      case (Operator(subtrees, _), Operator(subtrees2, _)) =>
-        if(subtrees.length == subtrees2.length) {
-          inox.utils.StreamUtils.cartesianProduct(
-            subtrees.zip(subtrees2).map{ case (a, b) => obtainMapping(a, freeVars, originalAssignments, b)}
-          ).flatMap{ (e: Seq[Map[ValDef, Expr]]) =>
-            def combineAll(remaining: Seq[Map[ValDef, Expr]], current: Map[ValDef, Expr]): Stream[Map[ValDef, Expr]] = {
-              //Log(s"combineAll($remaining, $current)")
-              remaining match {
-              case Seq() =>
-                //Log(s"returning $current")
-                Stream(current)
-              case head +: tail =>
-                val intersection = inox.utils.StreamUtils.cartesianProduct(
-                  (current.keySet intersect head.keySet).toSeq.map{ key =>
-                    if(current(key) != head(key)) {
-                      Stream(key -> current(key), key -> head(key))
-                    } else {
-                      Stream(key -> current(key))
-                    }
-                  } ++ (head.keySet -- current.keys).map{ key => Stream(key -> head(key))}
-                ).map{ _.toMap }
-                //Log(s"intersection = $intersection")
-                if(intersection.nonEmpty) {
-                  // We get all variants from the intersection
-                  intersection.flatMap{ possiblity => combineAll(tail, current ++ possiblity )}
-                } else combineAll(tail, current ++ head)
-              }
-            }
-            combineAll(e, Map())
-          }
-        } else Stream.empty
-    }
-  }
-
   /** Applies the interleaving to a finite sequence of streams. */
   def interleave[T](left: Stream[T])(right: => Stream[T]) : Stream[T] = {
     if (left.isEmpty) right else left.head #:: interleave(right)(left.tail)
@@ -792,12 +743,8 @@ object ReverseProgram extends lenses.Lenses {
 
                 if(freeVarsOfOut.isEmpty) {
                   Stream(newOutProgram)
-                } else
-                for {maybeMapping <- obtainMapping(l, freeVarsOfOut, Map(), lFun)
-                     constraint = and(maybeMapping.toSeq.map { case (k, v) => E(Utils.maybe)(k.toVariable === v) }: _*) /: Log.constraint
-                } yield {
-                  Log("Returning formula")
-                  ProgramFormula(newOut, Formula(unknownConstraints=constraint))
+                } else {
+                  Stream(newOutProgram.withoutConstraints())
                 }
               case v: Variable =>
                 Stream(newOutProgram)

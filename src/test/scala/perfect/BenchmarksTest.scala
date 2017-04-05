@@ -73,14 +73,22 @@ class BenchmarksTest extends FunSuite with TestHelpers {
     )(inoxTypeOf[String])
     pfun shouldProduce "(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham"
 
+    pfun repairFrom ProgramFormula.StringInsert("(en)\n","G"," Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham") shouldProduce
+      "(en)\nG Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham"
+
     pfun repairFrom ProgramFormula.StringInsert("(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami","s","\n- Pepperoni\n- Ham") shouldProduce
       "(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salamis\n- Pepperoni\n- Ham"
 
     pfun repairFrom ProgramFormula.StringInsert("(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- ","B","Salami\n- Pepperoni\n- Ham") shouldProduce
       "(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- BSalami\n- Pepperoni\n- Ham"
 
+    pfun repairFrom ProgramFormula.StringInsert("(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n","*"," Salami\n- Pepperoni\n- Ham") shouldProduce
+      "(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n* Margharita\n* Salami\n* Pepperoni\n* Ham"
+
+    pfun repairFrom ProgramFormula.StringInsert("(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n-"," "," Salami\n- Pepperoni\n- Ham") shouldProduce
+      "(en)\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n-  Margharita\n-  Salami\n-  Pepperoni\n-  Ham"
+
     pfun repairFrom ProgramFormula.StringInsert("(","fr",")\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham") shouldProduce
       "(fr)\nSalut Marion, comment tu vas ?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham"
-
   }
 }
