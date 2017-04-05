@@ -13,6 +13,52 @@ import perfect.ReverseProgram.ProgramFormula
   */
 class BenchmarksTest extends FunSuite with TestHelpers {
   import StringConcatExtended._
+
+  test("Small translation") {
+    val init_translations = FiniteMap(
+      Seq(StringLiteral("en") ->
+        FiniteMap(
+          Seq(StringLiteral("hello") -> StringLiteral("Hi"),
+            StringLiteral("howareu") -> StringLiteral(", how are you doing?")
+          ),
+          StringLiteral("..."),
+          StringType, StringType
+        ),
+        StringLiteral("fr") ->
+          FiniteMap(
+            Seq(StringLiteral("hello") -> StringLiteral("Salut"),
+              StringLiteral("howareu") -> StringLiteral(", comment tu vas ?")
+            ),
+            StringLiteral("..."),
+            StringType, StringType
+          )),
+      FiniteMap(Seq(), StringLiteral("..."), StringType, StringType),
+      StringType,
+      inoxTypeOf[Map[String, String]]
+    )
+
+    var program: Expr = {
+      val l = valdef[String]("l")
+      let("name"::StringType, StringLiteral("Marion"))(name =>
+        let("language"::StringType, StringLiteral("en"))(language =>
+          let("translations"::inoxTypeOf[Map[String, Map[String, String]]], init_translations)(translations =>
+            let("tr"::inoxTypeOf[Map[String, String]], MapApply(translations, language))(tr =>
+              //StringLiteral("(") +& language +& StringLiteral(")\n") +&
+                MapApply(tr, StringLiteral("hello")) +& StringLiteral(" ") +& name
+            )
+          )
+        )
+      )
+    }
+    val pfun = function(
+      program
+    )(inoxTypeOf[String])
+    pfun shouldProduce "Hi Marion"
+
+    pfun repairFrom ProgramFormula.StringInsert("","G"," Marion") shouldProduce "G Marion"
+  }
+
+
   test("Big translation") {
     val init_translations = FiniteMap(
       Seq(StringLiteral("en") ->

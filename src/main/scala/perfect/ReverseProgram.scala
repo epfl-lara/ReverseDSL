@@ -761,41 +761,7 @@ object ReverseProgram extends lenses.Lenses {
               case _ => ???
             }
           }  else { // Closure
-            if(exprOps.variablesOf(newOut) == freeVars) { // Same free variables, we just take the new out.
-              Stream(newOutProgram)
-            } else
-            // We need to determine the values of these free variables. We assume that the lambda kept the same shape.
-            newOut match {
-            case Lambda(vd2, expectedBody) =>
-              val oldToFresh = vd.map{ v =>
-                v -> ValDef(FreshIdentifier(v.id.name, true), v.tpe, v.flags)
-              }.toMap
-              val freshToOld = oldToFresh.map{ case (k, v) => v -> k.toVariable}
-              val freshToValue = vd.map{ v =>
-                oldToFresh(v) -> defaultValue(v.getType)
-              }.toMap
-              val bodyWithFreshVariables = exprOps.replaceFromSymbols(oldToFresh.mapValues(_.toVariable), body)
-              val oldToValue = oldToFresh.mapValues(freshToValue)
-
-              val simplifiedExpectedBody = simplify(exprOps.replaceFromSymbols(oldToValue, expectedBody))
-              for {pf <- repair(ProgramFormula(bodyWithFreshVariables,
-                Formula(freshToValue ++ freeVars.map(fv => fv -> currentValues(fv)).toMap)),
-                  newOutProgram.subExpr(simplifiedExpectedBody))
-              } yield {
-                  val ProgramFormula(newBody, f) = pf
-                  Log(s"Going to test if lambda can be repaired using $newBody, $f, $freshToValue")
-                  val newFreevarAssignments = freeVars.flatMap(fv => f.known.get(fv).map(res => fv -> res)).toMap
-                  val newConstraint = f combineWith Formula(freshToValue)
-                  Log(s"Returning lambda using $newBody, $f, $freshToValue, \n$newFreevarAssignments")
-                  val fullNewBody = exprOps.replaceFromSymbols(freshToOld, newBody)
-
-                  ProgramFormula(Lambda(vd, fullNewBody),
-                    Formula(newFreevarAssignments) combineWith newConstraint) /: Log
-                }
-            case v: Variable =>
-              Stream(ProgramFormula(v))
-            case _ => ???
-            }
+            Stream(newOutProgram)
           }
 
         // Variables are assigned the given value.

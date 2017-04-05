@@ -600,7 +600,7 @@ trait Lenses { self: ReverseProgram.type =>
           return solutions.toStream
 
         case _ =>
-          val StringLiteral(newOut) = newOutputProgram.functionValue
+          val StringLiteral(newOut) = newOutputProgram.getFunctionValue.getOrElse(return Stream.empty)
           val (before, middle, after) = separateModifs(originalInputList, infix, newOut)
           Log(s"Separator($originalInputList, '$infix', '$newOut')=")
           Log(s"($before, $middle, $after)")
