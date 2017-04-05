@@ -150,4 +150,15 @@ object Utils {
         }
     }
   }
+
+  /** Simple function returning true if the given expression is a value. */
+  def isValue(e: Expr): Boolean = e match {
+    case l: Lambda => (exprOps.variablesOf(l.body).map(_.toVal) -- l.args).isEmpty
+    case _: Literal[_] => true
+    case ADT(_, a) => a.forall(isValue _)
+    case FiniteMap(pairs, default, _, _) => pairs.forall(x => isValue(x._1) && isValue(x._2)) && isValue(default)
+    case FiniteBag(elements, _) => elements.forall(x => isValue(x._1) && isValue(x._2))
+    case FiniteSet(elements, _) => elements.forall(isValue _)
+    case _ => false
+  }
 }

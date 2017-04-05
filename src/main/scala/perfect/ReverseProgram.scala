@@ -226,6 +226,9 @@ object ReverseProgram extends lenses.Lenses {
       f.givenKnown = Some(known)
       f
     }
+    def apply(formulas: Seq[Formula]): Formula = {
+      (Formula() /: formulas)(_ combineWith _)
+    }
   }
 
   case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
@@ -241,7 +244,7 @@ object ReverseProgram extends lenses.Lenses {
     lazy val known: Map[ValDef, Expr] = givenKnown.getOrElse{
       val TopLevelAnds(ands) = unknownConstraints
       ands.flatMap {
-        case Equals(v: Variable, e: Expr) if(isValue(e)) => // TODO: Try to remove "isValue"
+        case Equals(v: Variable, e: Expr) if(Utils.isValue(e)) => // TODO: Try to remove "isValue"
           List(v.toVal -> e)
         case _ => Nil
       }.toMap
@@ -1136,18 +1139,6 @@ object ReverseProgram extends lenses.Lenses {
         (ls += l, f1 combineWith f2)
     }
     (lb.toList, f)
-  }
-
-
-  /** Simple function returning true if the given expression is a value. */
-  @inline private def isValue(e: Expr): Boolean = e match {
-    case l: Lambda => (exprOps.variablesOf(l.body).map(_.toVal) -- l.args).isEmpty
-    case _: Literal[_] => true
-    case ADT(_, a) => a.forall(isValue _)
-    case FiniteMap(pairs, default, _, _) => pairs.forall(x => isValue(x._1) && isValue(x._2)) && isValue(default)
-    case FiniteBag(elements, _) => elements.forall(x => isValue(x._1) && isValue(x._2))
-    case FiniteSet(elements, _) => elements.forall(isValue _)
-    case _ => false
   }
 
   /* Example:

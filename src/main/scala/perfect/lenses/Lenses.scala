@@ -109,13 +109,33 @@ trait Lenses { self: ReverseProgram.type =>
   /** Lense-like map, with the possibility of changing the mapping lambda. */
   case object MapReverser extends Reverser {
     import Utils._
+    import StringConcatExtended._
     val identifier = map
+
+    // The first formula is Formula is for the lambda, the second is for the arguments
+    def expand(i: List[Stream[(Either[Expr, (Expr, Lambda)], Formula)]], lambda: Lambda):
+      Stream[(List[Expr], Lambda, Formula, Formula)] = {
+      for{ e <- inox.utils.StreamUtils.cartesianProduct(i)
+           argumentsChanged = e.map{
+             case (Left(e), _) => e
+             case (Right((e, lambda)), _) => e
+           }
+           newLambdas = if(e.view.map(_._1).exists(_.isInstanceOf[Right[_, _]])) {
+             e.collect{ case (Right((expr, lambda: Lambda)), formula) => (lambda, formula) }.toStream
+           } else Stream((lambda, Formula()))
+           (l, lambdaFormula) <- newLambdas
+      } yield {
+        val argFormulas = e.collect{ case (Left(_), f) => f }
+        (argumentsChanged, l, lambdaFormula, Formula(argFormulas))
+      }
+    }
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       Log(s"map.apply($newOutput)")
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
-      val ListLiteral(originalInput, _) = originalArgsValues.head
-      val uniqueUnknownValue = defaultValue(lambda.args.head.getType)
+      val ListLiteral(originalInput, inputType) = originalArgsValues.head
+      val argType = lambda.args.head.getType
+      val uniqueUnknownValue = defaultValue(argType)
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
       val mapr = new MapReverseLike[Expr, Expr, (Expr, Lambda)] {
         override def f = (expr: Expr) => evalWithCache(Application(lambda, Seq(expr)))
@@ -147,8 +167,77 @@ trait Lenses { self: ReverseProgram.type =>
         }
       }
 
-      //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
-      mapr.mapRev(originalInput, ListLiteral.unapply(newOutput.expr).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
+      newOutput match {
+        case ProgramFormula.ListInsert(tpe, before, inserted, after, constraint) =>
+          // Beware, there might be changes in before or after. But at least, we know how the insertion occurred.
+          val (newBeforeAfter: List[Stream[(Either[Expr, (Expr, Lambda)], Formula)]]) =
+              (before.zip(originalInput.take(before.length)) ++
+              after.zip(originalInput.drop(originalInput.length - after.length))).map{
+            case (expr, original) =>
+              if(isValue(expr)) {
+                Stream((Left[Expr, (Expr, Lambda)](original), Formula()))
+              } else {
+                repair(ProgramFormula(Application(lambda, Seq(original))), ProgramFormula(expr, constraint)).map {
+                  case pf@ProgramFormula(Application(lExpr, Seq(expr2)), formula2) =>
+                    val lambda2 = castOrFail[Expr, Lambda](lExpr)
+                    if (lambda2 != lambda && expr2 == original) {
+                      (Right[Expr, (Expr, Lambda)]((expr2, lambda2)), formula2)
+                    } else if (lambda2 != lambda && expr2 != expr) {
+                      throw new Exception(s"Don't know how to invert both the lambda and the value: $lambda2 != $lambda, $expr2 != $expr")
+                    } else {
+                      (Left[Expr, (Expr, Lambda)](expr2), formula2)
+                    }
+                  case e =>
+                    throw new Exception(s"I don't know how to deal with this replacement: $e")
+                }
+              }
+            }
+          assert(inserted.forall{ x => isValue(x)}, s"not all inserted elements were values $inserted")
+
+          // Inserted does not change the lambda normally
+          val newInserted: List[Stream[(Either[Expr, (Expr, Lambda)], Formula)]] = {
+           // We have no choice but to repair the lambda to see what would be the original value for each of the newly added elements.
+            // We set up a way so that we discard changes in the lambda itself.
+            val (Seq(expr), newFormula) = {
+              val unknown = ValDef(FreshIdentifier("unknown"), lambda.args.head.getType)
+              (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> uniqueUnknownValue)))
+            }
+            inserted.map { i =>
+              if(i == StringLiteral("") && tpe == inputType) { // An empty string ltteral was added. First we suppose that it was inserted in the original elements
+                Stream((Left[Expr, (Expr, Lambda)](i), Formula()))
+              } else repair(ProgramFormula(Application(lambda, Seq(expr)), newFormula), ProgramFormula(i)).flatMap {
+                case pf@ProgramFormula(Application(lExpr, Seq(expr2)), formula2) =>
+                  val lambda2 = castOrFail[Expr, Lambda](lExpr)
+                  if (lambda2 != lambda) {
+                    Nil
+                  } else {
+                    formula2.evalPossible(expr2).map(x => (Left(x), Formula()))
+                  }
+              }
+            }
+          }
+
+          for{ newBeforeAfterInsertedUniqueFormula <- expand(newBeforeAfter ++ newInserted, lambda)
+               (newBeforeAfterUnique, newLambda, formulaLambda, formulaArg) = newBeforeAfterInsertedUniqueFormula
+               (newBefore, newAfterInserted) = newBeforeAfterUnique.splitAt(before.length)
+               (newAfter, newInsertedRaw) = newAfterInserted.splitAt(after.length) } yield {
+            // A list insert results in a list insert in the argument.
+            val firstArg = ProgramFormula.ListInsert(
+              argType,
+              newBefore,
+              newInsertedRaw,
+              newAfter,
+              formulaArg.unknownConstraints
+            )
+            val secondArg = ProgramFormula(newLambda, formulaLambda)
+
+            (Seq(firstArg, secondArg), Formula())
+          }
+        case _ =>
+          //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
+          mapr.mapRev(originalInput,
+            ListLiteral.unapply(newOutput.functionValue).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
+      }
     }
 
     // Map definition in inox

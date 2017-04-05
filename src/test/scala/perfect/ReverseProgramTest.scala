@@ -472,26 +472,70 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
   test("Reverse map") {
     val ap = valdef[String]("a")
-    val pfun = function(
-      FunctionInvocation(Utils.map,Seq(inoxTypeOf[String], inoxTypeOf[String]),
-        Seq(
-          _List[String]("Margharita", "Salami", "Royal"),
-          Lambda(Seq(ap), "Pizza " +& ap.toVariable)
+    object Map {
+      def apply(l: List[String], v: Variable => Expr) = function(
+        FunctionInvocation(Utils.map,Seq(inoxTypeOf[String], inoxTypeOf[String]),
+          Seq(
+            l: Expr,
+            \("ap"::inoxTypeOf[String])(av => v(av))
+          )
         )
-      )
-    )(inoxTypeOf[List[String]])
+      )(inoxTypeOf[List[String]])
 
-    checkProg(_List[String]("Pizza Margharita", "Pizza Salami", "Pizza Royal"), pfun)
-    repairProgram(pfun, _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal")) matchBody {
-      case FunctionInvocation(_, _, Seq(list, _)) =>
+      def unapply(e: Expr) = e match {
+        case FunctionInvocation(Utils.map, Seq(_, _),
+          Seq(l,
+      Lambda(Seq(vd), body)
+      )) => Some((l, vd.toVariable, body))
+        case _ => None
+      }
+    }
+
+    import ReverseProgram.ListLiteral
+
+    val pfStr2 = ProgramFormula.StringInsert("", "*", " C")
+    Map(List("A","B","C","D"), av => "- " +& av) repairFrom
+      ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula.unknownConstraints) shouldProduce
+      _List[String]("* A", "* B", "* C", "* D")
+
+    Map(List("A","B","D","E"), av => "- " +& av) repairFrom
+    ProgramFormula.ListInsert(StringType, List("- A", "- B"), List("- C"), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
+    _List[String]("- A", "- B", "- C", "- D", "- E")
+
+    val pfStr = ProgramFormula.StringInsert("- ", "E", "")
+    Map(List("A","B","C","D"), av => "- " +& av) repairFrom
+    ProgramFormula.ListInsert(StringType, List("- A", "- B"), List(), List(pfStr.expr), pfStr.formula.unknownConstraints) shouldProduce
+    _List[String]("- A", "- B", "- E")
+
+    Map(List("A","B","D","E"), av => "- " +& av) repairFrom
+    ProgramFormula.ListInsert(StringType, List("- A", "- B"), List(""), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
+    _List[String]("- A", "- B", "- ", "- D", "- E")
+
+
+    Map(List("A","B","C","D"), av => "- " +& av) repairFrom
+    ProgramFormula.ListInsert(StringType, List("- A", "- B", "- C", "- D"), List(""), List(), BooleanLiteral(true)) shouldProduce
+    _List[String]("- A", "- B", "- C", "- D", "- ")
+
+    Map(List("A","B","C","D"), av => "- " +& av) repairFrom
+    ProgramFormula.ListInsert(StringType, List(), List(""), List("- A", "- B", "- C", "- D"), BooleanLiteral(true)) shouldProduce
+    _List[String]("- ", "- A", "- B", "- C", "- D")
+
+
+    val pfun = Map(List("Margharita", "Salami", "Royal"), av => "Pizza " +& av)
+
+    pfun shouldProduce _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Royal")
+    pfun repairFrom _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal") matchBody {
+      case Map(list, v, body) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Sushi", "Royal")
     }
-    val pfun3 = repairProgram(pfun, _List[String]("The pizza Margharita", "Pizza Salami","Pizza Royal"))
-    checkProg(_List[String]("The pizza Margharita", "The pizza Salami", "The pizza Royal"), pfun3) matchBody {
-      case FunctionInvocation(_, _, Seq(list, Lambda(vds, prefix +& _))) =>
+    pfun repairFrom _List[String]("The pizza Margharita", "Pizza Salami","Pizza Royal") shouldProduce
+    _List[String]("The pizza Margharita", "The pizza Salami", "The pizza Royal") matchBody {
+      case Map(list, vd, prefix +& _) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Royal")
         prefix shouldEqual StringLiteral("The pizza ")
     }
+
+
   }
 
   test("Reverse flatmap") {
