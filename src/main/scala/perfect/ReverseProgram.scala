@@ -31,6 +31,44 @@ object ReverseProgram extends lenses.Lenses {
 
     def apply(e: Expr, f: Expr): ProgramFormula = ProgramFormula(e, Formula(f))
 
+    object TreeWrap {
+      private val treeName = "treeWrap"
+      def apply(tree: Expr, wrapper: Expr => Expr)(implicit symbols: Symbols): ProgramFormula = {
+        val tpe = tree.getType
+        val treeVar = Variable(FreshIdentifier(treeName, true), tpe, Set())
+        ProgramFormula(Application(Lambda(Seq(treeVar.toVal), wrapper(treeVar)), Seq(tree)))
+      }
+      def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, Expr => Expr)] = {
+        pf.expr match {
+          case Application(Lambda(Seq(treeVal), wtree), Seq(original)) if treeVal.id.name == treeName =>
+            Some((original, (vr: Expr) => exprOps.replaceFromSymbols(Map(treeVal -> vr),wtree)))
+          case _ => None
+        }
+      }
+    }
+
+    object TreeUnwrap {
+      private val unwrappedName = "unwrap"
+      def apply(tpe: Type, original: Expr, argsInSequence: List[Identifier]): ProgramFormula = {
+        val unwrappedVar = Variable(FreshIdentifier(unwrappedName, true), tpe, Set())
+        ProgramFormula(unwrappedVar, unwrappedVar === (original /: argsInSequence){ case (e, i) => ADTSelector(e, i)}  )
+      }
+      def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Type, Expr, List[Identifier])] = {
+        pf.expr match {
+          case v@Variable(id, tpe, _) if id.name == unwrappedName =>
+            val adtselectors = pf.formula.findConstraintValue(v).getOrElse(return None)
+            def unbuild(e: Expr): (Type, Expr, List[Identifier]) = e match {
+              case ADTSelector(e, i) =>
+                val (t, res, l) = unbuild(e)
+                (t, res, l :+ i)
+              case res => (tpe, res, Nil)
+            }
+            Some(unbuild(adtselectors))
+          case _ => None
+        }
+      }
+    }
+
     /** To build and extract a StringInsert specification. Works for modifications as well */
     object StringInsert {
       private val leftName = "leftTreeStr"
@@ -560,29 +598,29 @@ object ReverseProgram extends lenses.Lenses {
       Stream(program.withoutConstraints())
     }
 
-    val treeVar = Variable(ProgramFormula.tree, program.expr.getType, Set())
-    if(!function.isInstanceOf[Let] && program.canDoWrapping &&
-      newOutFormula.unknownConstraints != BooleanLiteral(true) &&
-      (exprOps.variablesOf(newOut) contains treeVar)) { // Maybe there is just a wrapping
-
-      newOutFormula.findConstraintValue(treeVar) match {
-        case Some(treeValue) => if(isValue(treeValue)) {
-          Log("@return wrapped around tree: " + newOutProgram);
-          return Stream(ProgramFormula(exprOps.replaceFromSymbols(Map(ValDef(ProgramFormula.tree, program.expr.getType, Set()) ->
-            function
-          ), newOut)))
-        } else {
-          //treeValue is not a simple value, there is some splitting to do to determine the value of the free variables.
-
-          if(exprOps.variablesOf(treeValue).map(_.id) == Set(ProgramFormula.subtree)) {
-            for{ pf <- repair(program, ProgramFormula(treeValue, newOutFormula)) } yield {
-              // This gives a solution assignment for subtree as well as variables on the rhs.
-              ???
-            }
-          }
+    // Accelerators
+    newOutProgram match {
+      case ProgramFormula.TreeWrap(original, wrapper) if program.canDoWrapping =>
+        function match {
+          case l: Let =>
+          case Application(Lambda(_, _), _) =>
+          case _ =>
+            return Stream(ProgramFormula(wrapper(function)))
         }
-        case None =>
-      }
+      case ProgramFormula.TreeUnwrap(tpe, original, Nil) =>
+        return Stream(program.withoutConstraints())
+      case ProgramFormula.TreeUnwrap(tpe, original, head::tail) =>
+        function match {
+          case l@ADT(ADTType(adtid, tps), args) =>
+            symbols.adts(adtid) match {
+              case f: ADTConstructor =>
+                val i = f.selectorID2Index(head)
+                return repair(program.subExpr(args(i)), ProgramFormula.TreeUnwrap(tpe, args(i), tail))
+              case _ =>
+            }
+          case _ =>
+        }
+      case _ =>
     }
 
     lazy val functionValue = program.functionValue
@@ -603,7 +641,7 @@ object ReverseProgram extends lenses.Lenses {
             case Application(Lambda(_, _), _) => Stream.empty[ProgramFormula] // Same argument
             case _ if ProgramFormula.ListInsert.unapply(newOutProgram).nonEmpty => Stream.empty[ProgramFormula]
             case _ =>
-              (maybeWrap(program, newOut, functionValue) /:: Log.maybe_wrap) #::: (maybeUnwrap(program, newOut, functionValue) /:: Log.maybe_unwrap)
+              (maybeWrap(program, newOutProgram, functionValue) /:: Log.maybe_wrap) #::: (maybeUnwrap(program, newOutProgram, functionValue) /:: Log.maybe_unwrap)
           }
         case StringType if !newOut.isInstanceOf[Variable] && program.canDoWrapping =>
           function match {
@@ -622,9 +660,9 @@ object ReverseProgram extends lenses.Lenses {
         case l: Literal[_] =>
           newOut match {
             case v: Variable => // Replacement with the variable newOut, with a maybe clause.
-              Stream(ProgramFormula(newOut))
+              Stream(newOutProgram)
             case l: Literal[_] => // Raw replacement
-              Stream(ProgramFormula(newOut))
+              Stream(newOutProgram)
             case m: MapApply =>
               repair(program, newOutProgram.subExpr(program.formula.findConstraintVariableOrLiteral(m)))
 
@@ -641,7 +679,7 @@ object ReverseProgram extends lenses.Lenses {
         case l: FiniteSet =>
           if(isValue(l) && newOut.isInstanceOf[FiniteSet]) {
             val fs = newOut.asInstanceOf[FiniteSet]
-            Stream(ProgramFormula(newOut))
+            Stream(newOutProgram)
           } else {
             lazy val evaledElements = l.elements.map{ e =>
               (evalWithCache(letm(currentValues) in e), e)}
@@ -674,7 +712,7 @@ object ReverseProgram extends lenses.Lenses {
           if(isValue(l) && (newOut.isInstanceOf[FiniteMap] || newOut.isInstanceOf[Variable])) {
             newOut match {
               case v: Variable =>
-                Stream(ProgramFormula(newOut))
+                Stream(newOutProgram)
               /*case v: Variable => // Replacement with the variable newOut, with a maybe clause.
                 // We loose the variable order !
                 val maybes = and(l.pairs.map {
@@ -683,7 +721,7 @@ object ReverseProgram extends lenses.Lenses {
 
                 Stream(ProgramFormula(newOut, Formula(unknownConstraints=maybes)))
               */case fm: FiniteMap => // Raw replacement
-                Stream(ProgramFormula(newOut))
+                Stream(newOutProgram)
               /*case l@Let(cloned: ValDef, _, _) =>
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
               case _ => throw new Exception("Don't know what to do, not a Literal or a Variable " + newOut)
@@ -753,7 +791,7 @@ object ReverseProgram extends lenses.Lenses {
                 val freeVarsOfOut = exprOps.variablesOf(l)
 
                 if(freeVarsOfOut.isEmpty) {
-                  Stream(ProgramFormula(newOut))
+                  Stream(newOutProgram)
                 } else
                 for {maybeMapping <- obtainMapping(l, freeVarsOfOut, Map(), lFun)
                      constraint = and(maybeMapping.toSeq.map { case (k, v) => E(Utils.maybe)(k.toVariable === v) }: _*) /: Log.constraint
@@ -762,12 +800,12 @@ object ReverseProgram extends lenses.Lenses {
                   ProgramFormula(newOut, Formula(unknownConstraints=constraint))
                 }
               case v: Variable =>
-                Stream(ProgramFormula(newOut))
+                Stream(newOutProgram)
               case _ => ???
             }
           }  else { // Closure
             if(exprOps.variablesOf(newOut) == freeVars) { // Same free variables, we just take the new out.
-              Stream(ProgramFormula(newOut))
+              Stream(newOutProgram)
             } else
             // We need to determine the values of these free variables. We assume that the lambda kept the same shape.
             newOut match {
@@ -1023,7 +1061,7 @@ object ReverseProgram extends lenses.Lenses {
                      case v: Variable => Stream(ProgramFormula(v, (
                        if(isSameBody) Formula() else
                          Formula(Map(v.toVal -> newLambda)))))
-                     case l => repair(ProgramFormula(l, program.formula), newOutProgram.subExpr(newLambda))
+                     case l => repair(ProgramFormula(l, program.formula), newOutProgram.subExpr(newLambda) combineWith newBodyFreshFormula)
                    }
                    ProgramFormula(newAppliee, lambdaRepairFormula) = pfLambda
                    finalApplication = Application(newAppliee, newArguments)           /: Log.prefix("finalApplication")
@@ -1147,7 +1185,8 @@ object ReverseProgram extends lenses.Lenses {
     newOut = Element("div", List(Element("b", List(), List(), List())), List(), List())
     result: Element("div", List(v), List(), List())
   * */
-  private def maybeWrap(program: ProgramFormula, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[ProgramFormula] = {
+  private def maybeWrap(program: ProgramFormula, newOutProgram: ProgramFormula, functionValue: Expr)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
+    val newOut = newOutProgram.getFunctionValue.getOrElse(return Stream.empty)
     val function = program.expr
     if(functionValue == newOut) return Stream.empty[ProgramFormula] // Value returned in maybeUnwrap
 
@@ -1220,7 +1259,8 @@ object ReverseProgram extends lenses.Lenses {
   *  newOut:        Element("span", List(), List(), List())
   *  result:        v  #::   Element("span", List(), List(), List()) #:: Stream.empty
   * */
-  private def maybeUnwrap(program: ProgramFormula, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[ProgramFormula] = {
+  private def maybeUnwrap(program: ProgramFormula, newOutProgram: ProgramFormula, functionValue: Expr)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
+    val newOut = newOutProgram.getFunctionValue.getOrElse(return Stream.empty)
     val function = program.expr
     if(functionValue == newOut) {
       Log("@return unwrapped")
@@ -1236,7 +1276,7 @@ object ReverseProgram extends lenses.Lenses {
             case _ => false
           }(arg)
         }.flatMap{ case (arg, i) =>
-          maybeUnwrap(ProgramFormula(args(i), program.formula), newOut, arg)
+          maybeUnwrap(ProgramFormula(args(i), program.formula), newOutProgram, arg)
         }
 
       case _ => Stream.empty

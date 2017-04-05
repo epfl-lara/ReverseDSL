@@ -493,10 +493,20 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
     import ReverseProgram.ListLiteral
 
+    val pfStr4 = ProgramFormula.StringInsert("- ", "B", "")
+    Map(List("A","","C"), av => "- " +& av) repairFrom
+      ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr4.expr), StringType), List("- C")), pfStr4.formula.unknownConstraints) shouldProduce
+      _List[String]("- A", "- B", "- C")
+
+    val pfStr3 = ProgramFormula.StringInsert("- B", "o", "")
+    Map(List("A","B","C","D"), av => "- " +& av) repairFrom
+      ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3.expr), StringType), List("- C", "- D")), pfStr3.formula.unknownConstraints) shouldProduce
+      _List[String]("- A", "- Bo", "- C", "- D")
+
     val pfStr2 = ProgramFormula.StringInsert("", "*", " C")
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-      ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula.unknownConstraints) shouldProduce
-      _List[String]("* A", "* B", "* C", "* D")
+    ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula.unknownConstraints) shouldProduce
+    _List[String]("* A", "* B", "* C", "* D")
 
     Map(List("A","B","D","E"), av => "- " +& av) repairFrom
     ProgramFormula.ListInsert(StringType, List("- A", "- B"), List("- C"), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
@@ -585,6 +595,9 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
         case _ => None
       }
     }
+
+    MkString(List[String]("a","b","c"), "\n") repairFrom ProgramFormula.StringInsert("a\n","d\n", "b\nc") matchBody {
+      case MkString(l, StringLiteral("\n")) => l shouldEqual _List[String]("a","d", "b", "c") }
 
     MkString(List[String]("a","dc"), "") repairFrom ProgramFormula.StringInsert("a","b", "c") matchBody {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("a","bc") }

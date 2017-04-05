@@ -161,4 +161,31 @@ object Utils {
     case FiniteSet(elements, _) => elements.forall(isValue _)
     case _ => false
   }
+
+  // Sorting solutions facilities
+  implicit class AugmentedStream[A](s: Stream[A]) {
+    def sortFirstElements(num: Int, f: A => Int): Stream[A] = {
+      Log(s"sortFirstElement $num")
+      val res =
+      s.take(num).sortBy(f) #::: s.drop(num)
+      Log(s"sortFirstElement result: " + res.take(num).toList)
+      res
+    }
+    /** If finds an element satisfying f within the first num  elements, put it in the front. */
+    def takeFirstTrue(num: Int, f: A => Boolean): Stream[A] = {
+      Log(s"takeFirstTrue $num")
+      val i = s.take(num).indexWhere(f)
+      Log(s"takeFirstTrue result: " + i)
+      if(i == -1) s else {
+        s.take(i) #::: Stream(s(i)) #::: s.drop(i+1)
+      }
+    }
+    def ifFirst(f: A => Boolean, thenn: Stream[A] => Stream[A]): Stream[A] = {
+      if(s.isEmpty) {
+        s
+      } else if(f(s.head)) {
+        thenn(s)
+      } else s
+    }
+  }
 }

@@ -36,11 +36,8 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     )(inoxTypeOf[Node])
     pfun shouldProduce output
 
-    val tree = valdef[Node](ProgramFormula.tree)
-    val newOut = ProgramFormula(
-      _Node("b", children=_List[Node](tree.toVariable)),
-      tree.toVariable === _Node("i", children=_List[Node](_Node("Hello")))
-    )
+    val newOut = ProgramFormula.TreeWrap(output, v => _Node("b", children=_List[Node](v)))(Utils.defaultSymbols)
+
     pfun repairFrom newOut shouldProduce {
       _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
     } matchBody {
@@ -58,13 +55,12 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     )(inoxTypeOf[Node])
     pfun shouldProduce output
 
-    val tree = valdef[Node](ProgramFormula.tree)
-    val subtree = valdef[Node](ProgramFormula.subtree)
-    val newOut = ProgramFormula(
-      subtree.toVariable,
-      tree.toVariable === _Node("b", children=_List[Node](subtree.toVariable)) &&
-      subtree.toVariable === _Node("i", children=_List[Node](_Node("Hello")))
+    val newOut = ProgramFormula.TreeUnwrap(
+      inoxTypeOf[Node],
+      output,
+      List(Utils.children, Utils.head)
     )
+
     pfun repairFrom newOut shouldProduce {
       _Node("i", children=_List[Node](_Node("Hello")))
     } matchBody {

@@ -112,23 +112,7 @@ trait Lenses { self: ReverseProgram.type =>
     import StringConcatExtended._
     val identifier = map
 
-    // The first formula is Formula is for the lambda, the second is for the arguments
-    def expand(i: List[Stream[(Either[Expr, (Expr, Lambda)], Formula)]], lambda: Lambda):
-      Stream[(List[Expr], Lambda, Formula, Formula)] = {
-      for{ e <- inox.utils.StreamUtils.cartesianProduct(i)
-           argumentsChanged = e.map{
-             case (Left(e), _) => e
-             case (Right((e, lambda)), _) => e
-           }
-           newLambdas = if(e.view.map(_._1).exists(_.isInstanceOf[Right[_, _]])) {
-             e.collect{ case (Right((expr, lambda: Lambda)), formula) => (lambda, formula) }.toStream
-           } else Stream((lambda, Formula()))
-           (l, lambdaFormula) <- newLambdas
-      } yield {
-        val argFormulas = e.collect{ case (Left(_), f) => f }
-        (argumentsChanged, l, lambdaFormula, Formula(argFormulas))
-      }
-    }
+    import Utils.AugmentedStream
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       Log(s"map.apply($newOutput)")
@@ -137,55 +121,59 @@ trait Lenses { self: ReverseProgram.type =>
       val argType = lambda.args.head.getType
       val uniqueUnknownValue = defaultValue(argType)
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
-      val mapr = new MapReverseLike[Expr, Expr, (Expr, Lambda)] {
-        override def f = (expr: Expr) => evalWithCache(Application(lambda, Seq(expr)))
+      val mapr = new MapReverseLike[(Expr, Formula), Expr, ((Expr, Lambda), Formula)] {
+        override def f = (exprF: (Expr, Formula)) => evalWithCache(Application(lambda, Seq(exprF._1)))
 
-        override def fRev = (prevIn: Option[Expr], out: Expr) => {
+        override def fRev = (prevIn: Option[(Expr, Formula)], out: Expr) => {
           Log(s"Map.fRev: $prevIn, $out")
           val (Seq(in), newFormula) =
-            prevIn.map(x => (Seq(x), Formula(Map[ValDef, Expr]()))).getOrElse {
+            prevIn.map(x => (Seq(x._1), x._2)).getOrElse {
               val unknown = ValDef(FreshIdentifier("unknown"),lambda.args.head.getType)
               (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> uniqueUnknownValue)))
             }
           Log(s"in:$in\nnewformula:$newFormula")
           Log.prefix("res=") :=
           repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), newOutput.subExpr(out)).flatMap {
-            case ProgramFormula(Application(_, Seq(in2)), _)
-              if in2 != in => //The argument's values have changed
-              Stream(Left(in2))
-            case ProgramFormula(Application(_, Seq(in2)), f:Formula)
-              if in2 == in && in2.isInstanceOf[Variable] =>
-              // The repair introduced a variable. We evaluate all possible values.
-              // TODO: Alternatively, propagate the constraint on the variable
-              f.evalPossible(in2).map(Left(_))
-            case e@ProgramFormula(Application(lambda2: Lambda, Seq(in2)), f:Formula)
-              if in2 == in && lambda2 != lambda => // The lambda has changed.
-              f.evalPossible(lambda2).map(lambda => Right((in, castOrFail[Expr, Lambda](lambda))))
+            case ProgramFormula(Application(lambda2, Seq(in2)), formula)
+              if lambda2 == lambda => //The argument's values have changed
+              Stream(Left((in2, formula)))
+            case ProgramFormula(Application(lambda2Expr, Seq(in2)), f:Formula) =>
+              val lambda2 = castOrFail[Expr, Lambda](lambda2Expr)
+              Stream(Right(((in, castOrFail[Expr, Lambda](lambda2)), f)))
             case e@ProgramFormula(app, f) =>
-              throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
-          }.filter(_ != Left(uniqueUnknownValue))
+              throw new Exception(s"[Internal error] Don't know how to handle: $e")
+          // We remove those which only return the uniqueUnknownValue
+          // If we modified the lambda, we sort solutions to see if we can change the value.
+          }.
+            filter{case Left((`uniqueUnknownValue`, _)) => false case _ => true}.
+            ifFirst(p => p.isInstanceOf[Right[_, _]], _.takeFirstTrue(3, e =>
+            e match {
+              case l: Left[_, _] => true
+              case l: Right[_, _]  => false
+            }
+          ))
         }
       }
 
       newOutput match {
         case ProgramFormula.ListInsert(tpe, before, inserted, after, constraint) =>
           // Beware, there might be changes in before or after. But at least, we know how the insertion occurred.
-          val (newBeforeAfter: List[Stream[(Either[Expr, (Expr, Lambda)], Formula)]]) =
+          val (newBeforeAfter: List[Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]]) =
               (before.zip(originalInput.take(before.length)) ++
               after.zip(originalInput.drop(originalInput.length - after.length))).map{
             case (expr, original) =>
               if(isValue(expr)) {
-                Stream((Left[Expr, (Expr, Lambda)](original), Formula()))
+                Stream(Left[(Expr, Formula), ((Expr, Lambda), Formula)]((original, Formula())))
               } else {
                 repair(ProgramFormula(Application(lambda, Seq(original))), ProgramFormula(expr, constraint)).map {
                   case pf@ProgramFormula(Application(lExpr, Seq(expr2)), formula2) =>
                     val lambda2 = castOrFail[Expr, Lambda](lExpr)
                     if (lambda2 != lambda && expr2 == original) {
-                      (Right[Expr, (Expr, Lambda)]((expr2, lambda2)), formula2)
+                      Right[(Expr, Formula), ((Expr, Lambda), Formula)](((expr2, lambda2), formula2))
                     } else if (lambda2 != lambda && expr2 != expr) {
                       throw new Exception(s"Don't know how to invert both the lambda and the value: $lambda2 != $lambda, $expr2 != $expr")
                     } else {
-                      (Left[Expr, (Expr, Lambda)](expr2), formula2)
+                      Left[(Expr, Formula), ((Expr, Lambda), Formula)]((expr2, formula2))
                     }
                   case e =>
                     throw new Exception(s"I don't know how to deal with this replacement: $e")
@@ -195,7 +183,7 @@ trait Lenses { self: ReverseProgram.type =>
           assert(inserted.forall{ x => isValue(x)}, s"not all inserted elements were values $inserted")
 
           // Inserted does not change the lambda normally
-          val newInserted: List[Stream[(Either[Expr, (Expr, Lambda)], Formula)]] = {
+          val newInserted: List[Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]] = {
            // We have no choice but to repair the lambda to see what would be the original value for each of the newly added elements.
             // We set up a way so that we discard changes in the lambda itself.
             val (Seq(expr), newFormula) = {
@@ -204,14 +192,14 @@ trait Lenses { self: ReverseProgram.type =>
             }
             inserted.map { i =>
               if(i == StringLiteral("") && tpe == inputType) { // An empty string ltteral was added. First we suppose that it was inserted in the original elements
-                Stream((Left[Expr, (Expr, Lambda)](i), Formula()))
+                Stream(Left[(Expr, Formula), ((Expr, Lambda), Formula)]((i, Formula())))
               } else repair(ProgramFormula(Application(lambda, Seq(expr)), newFormula), ProgramFormula(i)).flatMap {
                 case pf@ProgramFormula(Application(lExpr, Seq(expr2)), formula2) =>
                   val lambda2 = castOrFail[Expr, Lambda](lExpr)
                   if (lambda2 != lambda) {
                     Nil
                   } else {
-                    formula2.evalPossible(expr2).map(x => (Left(x), Formula()))
+                    formula2.evalPossible(expr2).map(x => Left((x, Formula())))
                   }
               }
             }
@@ -235,7 +223,7 @@ trait Lenses { self: ReverseProgram.type =>
           }
         case _ =>
           //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
-          mapr.mapRev(originalInput,
+          mapr.mapRev((originalInput.map(x => (x, Formula()))),
             ListLiteral.unapply(newOutput.functionValue).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
       }
     }
@@ -379,8 +367,10 @@ trait Lenses { self: ReverseProgram.type =>
           }
           Log("(lun,lup,nh,rup,run)="+all)
 
-          assert(notHandledList.map(_.s).mkString.startsWith(leftUpdated), "The repair given was inconsistent with previous function value")
-          assert(notHandledList.map(_.s).mkString.endsWith(rightUpdated), "The repair given was inconsistent with previous function value")
+          //assert(notHandledList.map(_.s).mkString.startsWith(leftUpdated),
+          //  "The repair given was inconsistent with previous function value")
+          //assert(notHandledList.map(_.s).mkString.endsWith(rightUpdated),
+          //  "The repair given was inconsistent with previous function value")
 
           val solutions = collection.mutable.ListBuffer[(Seq[ProgramFormula], Formula)]()
 
@@ -650,16 +640,39 @@ trait Lenses { self: ReverseProgram.type =>
     }
   }
 
-  private def recombineArgumentsLambdas(lambda: Lambda, tpes: Seq[Type])(e: List[Either[Expr, (Expr, Lambda)]]) = {
+  // TODO: Merge these two functions
+  // The first formula is Formula is for the lambda, the second is for the arguments
+  def expand(i: List[Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]], lambda: Lambda):
+  Stream[(List[Expr], Lambda, Formula, Formula)] = {
+    for{ e <- inox.utils.StreamUtils.cartesianProduct(i)
+         argumentsChanged = e.map{
+           case Left((e, _)) => e
+           case Right(((e, lambda), _))=> e
+         }
+         argFormulas = Formula(e.collect{ case Left((_,  f)) => f case Right((_, f)) => f })
+         newLambdas = if(e.view.exists(_.isInstanceOf[Right[_, _]])) {
+           e.collect{ case Right(((expr, lambda: Lambda), formula)) => (lambda, formula) }.toStream
+         } else Stream((lambda, Formula()))
+         (l, lambdaFormula) <- newLambdas
+    } yield {
+      (argumentsChanged, l, lambdaFormula, argFormulas)
+    }
+  }
+
+  private def recombineArgumentsLambdas(lambda: Lambda, tpes: Seq[Type])
+                                       (e: List[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]) = {
     val argumentsChanged = e.map{
-      case Left(e) => e
-      case Right((e, lambda)) => e
+      case Left((e, _)) => e
+      case Right(((e, lambda), _)) => e
     }
     val newLambdas = if(e.exists(_.isInstanceOf[Right[_, _]])) {
-      e.collect{ case Right((expr, lambda: Lambda)) => lambda }.toStream
-    } else Stream(lambda)
-    for(l <- newLambdas) yield {
-      (Seq(ProgramFormula(ListLiteral(argumentsChanged, tpes.head)), ProgramFormula(l)), Formula())
+      e.collect{ case Right(((expr, lambda: Lambda), formula)) => (lambda, formula) }.toStream
+    } else Stream((lambda, Formula()))
+    val argFormula = Formula(e.collect{ case Left((_,  f)) => f case Right((_, f)) => f })
+    for{l <- newLambdas
+        (lExpr, lFormula) = l
+    } yield {
+      (Seq(ProgramFormula(ListLiteral(argumentsChanged, tpes.head), argFormula), ProgramFormula(lExpr, lFormula)), Formula())
     }
   }
 
@@ -673,39 +686,39 @@ trait Lenses { self: ReverseProgram.type =>
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
       val uniqueUnknownValue = defaultValue(lambda.args.head.getType)
 
-      val fmapr = new FlatMapReverseLike[Expr, Expr, (Expr, Lambda)] {
-        def f: Expr => List[Expr] = { (expr: Expr) =>
-          val ListLiteral(l, _) = evalWithCache(Application(lambda, Seq(expr)))
+      val fmapr = new FlatMapReverseLike[(Expr, Formula), Expr, ((Expr, Lambda), Formula)] {
+        def f: ((Expr, Formula)) => List[Expr] = { (exprF: (Expr, Formula)) =>
+          val ListLiteral(l, _) = evalWithCache(Application(lambda, Seq(exprF._1)))
           l
         }
-        def fRev: (Option[Expr], List[Expr]) => Stream[Either[Expr, (Expr, Lambda)]] = { (prevIn, out) =>
+        def fRev: (Option[(Expr, Formula)], List[Expr]) => Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]] = { (prevIn, out) =>
           Log(s"Flatmap.fRev: $prevIn, $out")
           val (Seq(in), newFormula) =
-            prevIn.map(x => (Seq(x), Formula(Map[ValDef, Expr]()))).getOrElse {
+            prevIn.map(x => (Seq(x._1), x._2)).getOrElse {
               val unknown = ValDef(FreshIdentifier("unknown"),lambda.args.head.getType)
               (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> uniqueUnknownValue)))
             }
           Log(s"flatmap in:$in\nnewformula:$newFormula")
           Log.res :=
             repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), newOutput.subExpr(ListLiteral(out, tpes(1)))).flatMap {
-              case ProgramFormula(Application(_, Seq(in2)), _)
+              case ProgramFormula(Application(_, Seq(in2)), f)
                 if in2 != in => //The argument's values have changed
-                Stream(Left(in2))
+                Stream(Left((in2, f)))
               case ProgramFormula(Application(_, Seq(in2)), f:Formula)
                 if in2 == in && in2.isInstanceOf[Variable] =>
                 // The repair introduced a variable. We evaluate all possible values.
                 // TODO: Alternatively, propagate the constraint on the variable
-                f.evalPossible(in2).map(Left(_))
+                Stream(Left((in2, f)))
               case e@ProgramFormula(Application(lambda2: Lambda, Seq(in2)), f:Formula)
                 if in2 == in && lambda2 != lambda => // The lambda has changed.
-                f.evalPossible(lambda2).map(lambda => Right((in, castOrFail[Expr, Lambda](lambda))))
+                Stream(Right((in, castOrFail[Expr, Lambda](lambda2)), f))
               case e@ProgramFormula(app, f) =>
                 throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
-            }.filter(_ != Left(uniqueUnknownValue))
+            }.filter{ case Left((`uniqueUnknownValue`, _)) => false case _ => true}
         }
       }
 
-      fmapr.flatMapRev(originalInput, ListLiteral.unapply(newOutput.expr).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
+      fmapr.flatMapRev(originalInput.map(x => (x, Formula())), ListLiteral.unapply(newOutput.expr).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
     }
 
     // Flatmap definition in inox

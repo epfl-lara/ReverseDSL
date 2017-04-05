@@ -53,10 +53,11 @@ trait TestHelpers extends InoxConvertible.conversions {
     )
   }
 
+  import Utils.AugmentedStream
   private def sortStreamByDistance(s: Stream[PFun], num: Int, init: Expr) = {
-    s.take(num).sortBy((x: PFun) => {
+    s.sortFirstElements(num, (x: PFun) => {
       DistanceExpr.distance(x.getBody, init)// /: Log.prefix(s"distance(${x.getBody}, $init)=")
-    }) #::: s.drop(num)
+    })
   }
 
   /** Returns all the solution, with the first lookInManyFirstSolutions being sorted */
