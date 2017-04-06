@@ -11,6 +11,13 @@ object Log extends Log with Dynamic {
       super.apply(p+s)
     }
   }
+  def time(p: String): Log = new Log {
+    val startTime = System.currentTimeMillis()
+    override def apply(s: Any) = if(activate) {
+      val elapsedTime = System.currentTimeMillis() - startTime
+      super.apply(s"Time: $p in ${elapsedTime}ms")
+    }
+  }
   def selectDynamic(name: String) = prefix(name.replaceAll("_", " ") + ": ")
 }
 
@@ -21,7 +28,9 @@ trait Log {
     apply(s)
     s
   }
-  def /:[A](s: A): A = this.=:(s)
+  def /:[A](s: A): A = {
+    this.=:(s)
+  }
   def /::[A](s: Stream[A]): Stream[A] = {
     s.zipWithIndex.map{ case(x, i) =>
       this.apply(s"Partial solution #${i+1}\n"+x)

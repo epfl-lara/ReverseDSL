@@ -207,12 +207,15 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
     // Recursively, once for example D and E hold, add it.
     // (~A || ~B || ~C) && (~D || ~E) &&  (F || G)  && maxSat(A, B, C, D, E, F, G)
     // and so on...
-    val solver = prog.getSolver.getNewSolver
+    Log(System.currentTimeMillis())
+    val solver = Log.time("Get new solver") := prog.getSolver.getNewSolver
     Log("solving " + and(e._1 ++ e._2 : _*))
-    solver.assertCnstr(and(e._1 ++ e._2 : _*))
+    Log.time("Assert constraint") := solver.assertCnstr(and(e._1 ++ e._2 : _*))
     //Log("#2")
-    solver.check(SolverResponses.Model) match {
+
+    (Log.time("Check answer") := solver.check(SolverResponses.Model)) match {
       case SatWithModel(model) =>
+        Log(System.currentTimeMillis())
         Log("One solution !")
         val updatedStream = es.filter{ x =>  !x._2.toSet.subsetOf(maybePart.toSet)}
 

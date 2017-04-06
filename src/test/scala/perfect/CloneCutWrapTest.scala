@@ -14,6 +14,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import XmlTrees._
   import StringConcatExtended._
+  import ProgramFormula.{StringInsert, ListInsert, TreeWrap, TreeUnwrap}
 
   test("Formula assignment") {
     val va = variable[String]("a")
@@ -29,72 +30,69 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
   test("Wrap") {
     val output = _Node("i", children=_List[Node](_Node("Hello")))
-    val pfun = function(
-      let("ad" :: inoxTypeOf[String], "Hello"){ av =>
+    val pfun =
+      let("ad" :: String, "Hello"){ av =>
         _Node("i", children=_List[Node](_Node(av)))
       }
-    )(inoxTypeOf[Node])
     pfun shouldProduce output
 
-    val newOut = ProgramFormula.TreeWrap(output, v => _Node("b", children=_List[Node](v)))(Utils.defaultSymbols)
+    val newOut = TreeWrap(output, v => _Node("b", children=_List[Node](v)))(Utils.defaultSymbols)
 
     pfun repairFrom newOut shouldProduce {
       _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
-    } matchBody {
+    } match {
       case Let(ad, StringLiteral("Hello"), e) =>
         exprOps.variablesOf(e) should contain(ad.toVariable)
     }
   }
 
-  test("Unwrap") {
+  /*test("Unwrap") {
     val output = _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
-    val pfun = function(
-      let("ad" :: inoxTypeOf[String], "Hello"){ av =>
+    val pfun =
+      let("ad" :: String, "Hello"){ av =>
         _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node(av)))))
       }
-    )(inoxTypeOf[Node])
     pfun shouldProduce output
 
-    val newOut = ProgramFormula.TreeUnwrap(
-      inoxTypeOf[Node],
+    val newOut = TreeUnwrap(
+      Node,
       output,
       List(Utils.children, Utils.head)
     )
 
     pfun repairFrom newOut shouldProduce {
       _Node("i", children=_List[Node](_Node("Hello")))
-    } matchBody {
+    } match {
       case Let(ad, StringLiteral("Hello"), e) =>
         exprOps.variablesOf(e) should contain(ad.toVariable)
     }
-  }
+  }*/
 
   test("String insert") {
-    val pfun = function(
-      let("a"::StringType, "Hello ")(av =>
-        let("b"::StringType, " world")(bv =>
+    val pfun =
+      let("a"::String, "Hello ")(av =>
+        let("b"::String, " world")(bv =>
           av +& bv
         )
       )
-    )(inoxTypeOf[String])
 
-    pfun repairFrom ProgramFormula.StringInsert("Hello", " big", "  world") matchBody {
+    pfun repairFrom StringInsert("Hello", " big", "  world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello big "
         t shouldEqual " world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello  ", "big ", "world") matchBody {
+    pfun repairFrom StringInsert("Hello  ", "big ", "world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello "
         t shouldEqual " big world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    val expectedOut4 = ProgramFormula.StringInsert("Hello ", "big", " world")
+    val expectedOut4 = StringInsert("Hello ", "big", " world")
     val pfun4_l = repairProgramList(pfun, expectedOut4, 2).take(2).toList
-    pfun4_l.map(_.getBody).map{
+    pfun4_l.map{
       case Let(a, StringLiteral("Hello big"), Let(b, StringLiteral(" world"), va +& vb)) =>
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
@@ -107,7 +105,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("Nested string insert") {
-    val pfun = function(
+    val pfun =
       let("a"::StringType, "Hello ")(av =>
         let("b"::StringType, "big ")(bv =>
           let("c"::StringType, "world")(cv =>
@@ -115,9 +113,8 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
           )
         )
       )
-    )(inoxTypeOf[String])
 
-    pfun repairFrom ProgramFormula.StringInsert("Hello big", " big", " world") matchBody {
+    pfun repairFrom StringInsert("Hello big", " big", " world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello "
         t shouldEqual "big big "
@@ -126,7 +123,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         vb shouldEqual b.toVariable
         vc shouldEqual c.toVariable
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello"," big"," big world") matchBody {
+    pfun repairFrom StringInsert("Hello"," big"," big world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello big "
         t shouldEqual "big "
@@ -138,17 +135,15 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("Nested string insert direct") {
-    val pfun = function(
-      "Hello " +& "big " +& "world"
-    )(inoxTypeOf[String])
+    val pfun = "Hello " +& "big " +& "world"
 
-    pfun repairFrom ProgramFormula.StringInsert("Hello big", " big", " world") matchBody {
+    pfun repairFrom StringInsert("Hello big", " big", " world") match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual "big big "
         u shouldEqual "world"
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello"," big"," big world") matchBody {
+    pfun repairFrom StringInsert("Hello"," big"," big world") match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello big "
         t shouldEqual "big "
@@ -157,31 +152,27 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("String insert direct test space weight") {
-    val pfun = function(
-      "Hello " +& "world"
-    )(inoxTypeOf[String])
+    val pfun = "Hello " +& "world"
 
-    pfun repairFrom ProgramFormula.StringInsert("Hello ", " ", "world") matchBody {
+    pfun repairFrom StringInsert("Hello ", " ", "world") match {
       case StringLiteral(s) +& StringLiteral(t) =>
         s shouldEqual "Hello  "
         t shouldEqual "world"
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello ", "big", "world") matchBody {
+    pfun repairFrom StringInsert("Hello ", "big", "world") match {
       case StringLiteral(s) +& StringLiteral(t) =>
         s shouldEqual "Hello "
         t shouldEqual "bigworld"
     }
 
-    val pfun2 = function(
-      "Hello" +& " world"
-    )(inoxTypeOf[String])
+    val pfun2 = "Hello" +& " world"
 
-    pfun2 repairFrom ProgramFormula.StringInsert("Hello", " ", " world") matchBody {
+    pfun2 repairFrom StringInsert("Hello", " ", " world") match {
       case StringLiteral(s) +& StringLiteral(t) =>
         s shouldEqual "Hello"
         t shouldEqual "  world"
     }
-    pfun2 repairFrom ProgramFormula.StringInsert("Hello", "big", " world") matchBody {
+    pfun2 repairFrom StringInsert("Hello", "big", " world") match {
       case StringLiteral(s) +& StringLiteral(t) =>
         s shouldEqual "Hellobig"
         t shouldEqual " world"
@@ -189,32 +180,30 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("Nested string modification direct") {
-    val pfun = function(
-      "Hello " +& "big " +& "world"
-    )(inoxTypeOf[String])
+    val pfun = "Hello " +& "big " +& "world"
 
-    pfun repairFrom ProgramFormula.StringInsert("Hello big ","change","") matchBody {
+    pfun repairFrom StringInsert("Hello big ","change","") match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual "big "
         u shouldEqual "change"
     }
 
-    pfun repairFrom ProgramFormula.StringInsert("","Good afternoon ","big world") matchBody {
+    pfun repairFrom StringInsert("","Good afternoon ","big world") match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Good afternoon "
         t shouldEqual "big "
         u shouldEqual "world"
     }
 
-    pfun repairFrom ProgramFormula.StringInsert("Hello ","great"," world") matchBody {
+    pfun repairFrom StringInsert("Hello ","great"," world") match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual "great "
         u shouldEqual "world"
     }
 
-    repairProgramList(pfun, ProgramFormula.StringInsert("Hello", ", amazing", " world"), 2).take(2).toList.map(x => x.getBody match {
+    repairProgramList(pfun, StringInsert("Hello", ", amazing", " world"), 2).take(2).toList.map(x => x match {
       case StringLiteral("Hello, amazing") +& StringLiteral(" ") +& StringLiteral("world") =>
         1
       case StringLiteral("Hello") +& StringLiteral(", amazing ") +& StringLiteral("world") =>
@@ -224,29 +213,28 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("String delete") {
-    val pfun = function(
+    val pfun =
       let("a"::StringType, "Hello big ")(av =>
         let("b"::StringType, " big world")(bv =>
           av +& bv
         )
       )
-    )(inoxTypeOf[String])
     // "Hello big  big world"
-    pfun repairFrom ProgramFormula.StringInsert("Hello",""," big world") matchBody {
+    pfun repairFrom StringInsert("Hello",""," big world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello"
         t shouldEqual " big world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello big ","","world") matchBody {
+    pfun repairFrom StringInsert("Hello big ","","world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello big "
         t shouldEqual "world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello ","", "world") matchBody {
+    pfun repairFrom StringInsert("Hello ","", "world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello "
         t shouldEqual "world"
@@ -256,7 +244,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("Nested string delete") {
-    val pfun = function(
+    val pfun =
       let("a"::StringType, "Hello big ")(av =>
         let("b"::StringType, "big ")(bv =>
           let("c"::StringType, "world")(cv =>
@@ -264,9 +252,8 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
           )
         )
       )
-    )(inoxTypeOf[String])
     // "Hello big big world"
-    pfun repairFrom ProgramFormula.StringInsert("Hello big",""," world") matchBody {
+    pfun repairFrom StringInsert("Hello big",""," world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello big"
         t shouldEqual " "
@@ -275,7 +262,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         vb shouldEqual b.toVariable
         vc shouldEqual c.toVariable
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello ","","world") matchBody {
+    pfun repairFrom StringInsert("Hello ","","world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello "
         t shouldEqual ""
@@ -284,7 +271,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         vb shouldEqual b.toVariable
         vc shouldEqual c.toVariable
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello ","","ld") matchBody {
+    pfun repairFrom StringInsert("Hello ","","ld") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello "
         t shouldEqual ""
@@ -296,23 +283,21 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("Nested string delete direct") {
-    val pfun = function(
-      "Hello big " +& "big " +& "world"
-    )(inoxTypeOf[String])
+    val pfun = "Hello big " +& "big " +& "world"
     // "Hello big big world"
-    pfun repairFrom ProgramFormula.StringInsert("Hello big",""," world") matchBody {
+    pfun repairFrom StringInsert("Hello big",""," world") match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello big"
         t shouldEqual " "
         u shouldEqual "world"
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello ","","world") matchBody {
+    pfun repairFrom StringInsert("Hello ","","world") match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual ""
         u shouldEqual "world"
     }
-    pfun repairFrom ProgramFormula.StringInsert("Hello ","","ld") matchBody {
+    pfun repairFrom StringInsert("Hello ","","ld") match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual ""
@@ -321,61 +306,29 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("String insert choice") {
-    function(
-      "\n" +& "Marion" +& ","
-    )(inoxTypeOf[String]) repairFrom ProgramFormula.StringInsert("\n", "V", ",") matchBody {
+    "\n" +& "Marion" +& "," repairFrom StringInsert("\n", "V", ",") match {
       case StringLiteral("\n") +& StringLiteral("V") +& StringLiteral(",") =>
     }
 
-    function(
-      "\n" +& "M" +& "a"
-    )(inoxTypeOf[String]) repairFrom ProgramFormula.StringInsert("\n", "V", "a") matchBody {
+    "\n" +& "M" +& "a" repairFrom StringInsert("\n", "V", "a") match {
       case StringLiteral("\n") +& StringLiteral("V") +& StringLiteral("a") =>
     }
 
-    val pfun = function(
-      "(" +& "en" +& ")"
-    )(inoxTypeOf[String])
-    val pfun2 = pfun repairFrom ProgramFormula.StringInsert("(","f",")")
-    pfun2 matchBody {
+    val pfun = "(" +& "en" +& ")"
+    val pfun2 = pfun repairFrom StringInsert("(","f",")")
+    pfun2 match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "("
         t shouldEqual "f"
         u shouldEqual ")"
     }
-    pfun2 repairFrom ProgramFormula.StringInsert("(f","r",")") matchBody {
+    pfun2 repairFrom StringInsert("(f","r",")") match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "("
         t shouldEqual "fr"
         u shouldEqual ")"
     }
   }
-
-  /*test("Split / Clone and paste") {
-    val output: Expr = "Hello big beautiful world"
-    val pfun = function(
-      let("a"::StringType, "Hello big ")(av =>
-        let("b"::StringType, "beautiful world")(bv =>
-          av +& bv
-        )
-      )
-    )(inoxTypeOf[String])
-
-    pfun shouldProduce output
-
-    val tree = variable[String](ProgramFormula.tree)
-    val subtree = variable[String](ProgramFormula.subtree)
-    val newOut = ProgramFormula(
-      tree +& "! It is really " +& subtree  +& ".",
-      tree === "Hello " +& subtree +& " world" &&
-      subtree === "big beautiful"
-    )
-
-    val pfun2 = pfun repairFrom newOut shouldProduce
-      "Hello big beautiful world! It is really big beautiful."
-    pfun2 repairFrom "Hello big and beautiful world! It is really big beautiful." shouldProduce
-                     "Hello big and beautiful world! It is really big and beautiful."
-  }*/
 
   test("Clone") {
 

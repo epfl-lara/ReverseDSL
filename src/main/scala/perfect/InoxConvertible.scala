@@ -13,10 +13,13 @@ import perfect.ReverseProgram.ProgramFormula
 import scala.collection.immutable.Bag
 import scala.xml.MetaData
 
+
+trait ToInoxTypeConvertible {
+  def getType: Type
+}
 /** A type which can be converted to inox types, and whose expressions can be obtained from inox expressions */
-trait InoxConvertible[A] { self =>
+trait InoxConvertible[A] extends ToInoxTypeConvertible { self =>
   type theType = A
-  def getType: inox.trees.dsl.trees.Type
   def recoverFrom(e: Expr): A
   def produce(a: theType): Expr
 }
@@ -381,6 +384,43 @@ object InoxConvertible {
     implicit def toProgramFormula(e: Expr): ProgramFormula = ProgramFormula(e)
 
     implicit def toProgramFormula[A : InoxConvertible](e: A): ProgramFormula = ProgramFormula(e: Expr)
+
+    object TMap {
+      def apply[A: InoxConvertible, B: InoxConvertible] = new ToInoxTypeConvertible {
+        def ::(name: String): ValDef = valdef[Map[A, B]](name)
+        def getType = inoxTypeOf[Map[A, B]]
+      }
+    }
+    object TSet {
+      def apply[A: InoxConvertible] = new ToInoxTypeConvertible {
+        def ::(name: String): ValDef = valdef[Set[A]](name)
+        def getType = inoxTypeOf[Set[A]]
+      }
+    }
+    object TBag {
+      def apply[A: InoxConvertible] = new ToInoxTypeConvertible {
+        def ::(name: String): ValDef = valdef[Bag[A]](name)
+        def getType = inoxTypeOf[Bag[A]]
+      }
+    }
+    object TList {
+      def apply[A: InoxConvertible] = new ToInoxTypeConvertible {
+        def ::(name: String): ValDef = valdef[List[A]](name)
+        def getType = inoxTypeOf[List[A]]
+      }
+    }
+    implicit def toInoxTypeConvertible(t: ToInoxTypeConvertible): Type = t.getType
+    implicit def stringToType(t: String.type): Type = StringType
+    implicit def stringToType(t: Int.type): Type = Int32Type
+    object String {
+      def ::(a: String) = ValDef(FreshIdentifier(a), String, Set())
+    }
+    object Int {
+      def ::(a: String) = ValDef(FreshIdentifier(a), Int, Set())
+    }
+    object TNode extends ToInoxTypeConvertible {
+      def getType = inoxTypeOf[XmlTrees.Node]
+    }
   }
   object conversions extends conversions
 }

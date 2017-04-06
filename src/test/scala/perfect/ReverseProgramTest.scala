@@ -22,36 +22,34 @@ import scala.reflect.runtime.universe.TypeTag
 class ReverseProgramTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import StringConcatExtended._
+  import perfect.ReverseProgram.ProgramFormula
+  import ProgramFormula.{StringInsert, ListInsert}
 
   val build = variable[String => Element]("build")
-  val v = variable[String]("v")
   val vText = variable[String]("text")
 
   test("Create a program from scratch") {
     val out = Element("div", WebElement(TextNode("Hello world"))::Nil)
     checkProg(out, generateProgram(out))
   }
-  import perfect.ReverseProgram.ProgramFormula
 
   test("Change a constant output to another") {
     val out  = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val out2 = Element("pre", WebElement(TextNode("Hello code"))::Nil)
-    val (prog, fun) = ReverseProgram.putPf(ProgramFormula(out), None).head
-    checkProg(out2, ReverseProgram.putPf(ProgramFormula(out2), Some((prog, fun))).head)
+    val pfun = ReverseProgram.put(out, None).head
+    checkProg(out2, ReverseProgram.put(out2, Some(pfun)).head)
   }
 
   test("Variable assigment keeps the shape") {
     val expected1 = "Hello world"
     val expected2 = "We are the children"
 
-    val pfun = function(
-      let(vText.toVal, "Hello world")(v => v)
-    )(inoxTypeOf[String])
+    val pfun = let(vText.toVal, "Hello world")(v => v)
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case l@Let(vd, expr, body) =>
-        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $vd in the given let-expression: $l")
     }
   }
 
@@ -59,15 +57,14 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("pre", WebElement(TextNode("Hello world"))::Nil)
 
-    val pfun = function(
+    val pfun = 
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
-      ))(inoxTypeOf[Element])
-    checkProg(expected1, pfun)
+      )
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case l@Let(vd, expr, body) =>
-        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $vd in the given let-expression: $l")
     }
   }
 
@@ -75,15 +72,15 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
 
-    val pfun = function(
+    val pfun = 
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
-      ))(inoxTypeOf[Element])
+      )
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case l@Let(vd, expr, body) =>
-        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $vd in the given let-expression: $l")
     }
   }
 
@@ -94,18 +91,18 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil, WebAttribute("class", "bgfont")::Nil)
     val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil, WebAttribute("class", "bgfontbig")::Nil)
 
-    val pfun = function(
+    val pfun = 
       let(text.toVal, "Hello world")(v =>
         let(attr.toVal, _WebAttribute("class", "bgfont"))(a =>
           _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](a), _List[WebStyle]())
         )
-      ))(inoxTypeOf[Element])
+      )
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case l@Let(vd, expr, l2@Let(vd2, expr2, body)) =>
-        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
-        if(!isVarIn(vd2.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $vd in the given let-expression: $l")
+        if(!isVarIn(vd2.id, body)) fail(s"There was no use of the variable $vd in the given let-expression: $l")
     }
   }
 
@@ -115,10 +112,10 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val out2bis      = Element("div", WebElement(TextNode("red"))::Nil, Nil, WebStyle("color", "blue")::Nil)
     val expected2 = Element("div", WebElement(TextNode("blue"))::Nil, Nil, WebStyle("color", "blue")::Nil)
 
-    val pfun = function(
+    val pfun = 
       let(vText.toVal, StringLiteral("red"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle](_WebStyle("color", v)))
-      ))(inoxTypeOf[Element])
+      )
     checkProg(initial, pfun)
     pfun repairFrom out2 shouldProduce expected2
     pfun repairFrom out2bis shouldProduce expected2
@@ -129,32 +126,32 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
 
-    val pfun = function(
+    val pfun = 
       let(vText.toVal, StringLiteral("Hello world"))(v =>
         _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]())
-      ))(inoxTypeOf[Element])
+      )
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case l@Let(vd, expr, body) =>
-        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $v in the given let-expression: $l")
+        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $vd in the given let-expression: $l")
     }
   }
 
-  val lambda = Lambda(Seq(v.toVal),
+  val lambda = \("v"::String)(v =>
     _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]()))
 
   for((pfun, msg) <- Seq(
-    (function(Application(lambda, Seq("Hello world")))(inoxTypeOf[Element]),
+    (Application(lambda, Seq("Hello world")),
       "change an applied lambda's argument"),
-    (function(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))))(inoxTypeOf[Element]),
+    (let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))),
       "Change a variable lambda's argument")
   )) test(msg) {
       val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
       val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
       checkProg(expected1, pfun)
       val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-      pfun2 matchBody {
+      pfun2 match {
         case Let(_, _, Application(_, Seq(StringLiteral(s)))) if msg == "Change a variable lambda's argument"
           => s shouldEqual "We are the children"
         case Application(_, Seq(StringLiteral(s))) if msg == "change an applied lambda's argument"
@@ -163,16 +160,16 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     }
 
   for((pfun, msg) <- Seq(
-    (function(Application(lambda, Seq("Hello world")))(inoxTypeOf[Element]),
+    (Application(lambda, Seq("Hello world")),
       "Change an applied lambda's shape by wrapping an element"),
-    (function(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))))(inoxTypeOf[Element]),
+    (let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))),
       "Change a variable lambda's shape by wrapping an element")
   )) test(msg) {
       val expected1 = Element("div", WebElement(TextNode("Hello world")) :: Nil)
       val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world")) :: Nil)) :: Nil)
       checkProg(expected1, pfun)
       val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-      pfun2 matchBody {
+      pfun2 match {
         case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
           if msg == "Change a variable lambda's shape by wrapping an element"
         => if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
@@ -182,48 +179,48 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       }
     }
 
-  val lambda2 = Lambda(Seq(v.toVal),
+  val lambda2 = \("v"::String)(v =>
     _Element("div", _List[WebElement](_WebElement(_Element("b", _List[WebElement](_WebElement(_TextNode(v))),
       _List[WebAttribute](), _List[WebStyle]()))), _List[WebAttribute](), _List[WebStyle]()))
 
   for((pfun, msg) <- Seq(
-    (function(Application(lambda2, Seq("Hello world")))(inoxTypeOf[Element]),
+    (Application(lambda2, Seq("Hello world")),
       "Change an applied lambda's shape by unwrapping an element"),
-    (function(let(build.toVal, lambda2)(b => Application(b, Seq("Hello world"))))(inoxTypeOf[Element]),
+    (let(build.toVal, lambda2)(b => Application(b, Seq("Hello world"))),
       "Change a variable lambda's shape by unwrapping an element")
   )) test(msg) {
     val expected1 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
     val expected2 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
         if msg == "Change a variable lambda's shape by unwrapping an element"
-      => if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+      => if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
       case Application(newLambda@Lambda(Seq(v2), body), _)
         if msg == "Change an applied lambda's shape by unwrapping an element"
-      => if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+      => if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
     }
   }
 
   for((pfun, msg) <- Seq(
-    (function(Application(lambda, Seq("Hello world")))(inoxTypeOf[Element]),
+    (Application(lambda, Seq("Hello world")),
       "Change an applied lambda's shape by inserting a constant element"),
-    (function(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))))(inoxTypeOf[Element]),
+    (let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))),
       "Change a variable lambda's shape by inserting a constant element")
   ))  test(msg) {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(Element("br"))::WebElement(TextNode("Hello world"))::Nil)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
         if msg == "Change a variable lambda's shape by inserting a constant element"
       =>
-        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
       case Application(newLambda@Lambda(Seq(v2), body), _)
         if msg == "Change an applied lambda's shape by inserting a constant element"
       =>
-        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
     }
   }
 
@@ -232,13 +229,13 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected2 = Element("div", WebElement(TextNode("We are the children"))::WebElement(TextNode("Hello world"))::Nil)
     val expected2bis = Element("div", WebElement(TextNode("Hello world"))::WebElement(TextNode("We are the children"))::Nil)
     val expected3 = Element("div", WebElement(TextNode("We are the children"))::WebElement(TextNode("We are the children"))::Nil)
-    val lambda = Lambda(Seq(v.toVal),
+    val lambda = \("v"::String)(v =>
       _Element("div", _List[WebElement](_WebElement(_TextNode(v)),_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]()))
 
-    val pfun = function(
+    val pfun = 
       let(build.toVal, lambda)(b =>
         Application(b, Seq("Hello world"))
-      ))(inoxTypeOf[Element])
+      )
 
     checkProg(expected1, pfun)
     pfun repairFrom expected2 shouldProduce expected3
@@ -251,20 +248,20 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected2 = Element("div", WebElement(TextNode("Changed parameter"))::WebElement(TextNode("Hello world"))::Nil)
 
     val closureParameter = valdef[String]("closure")
-    val lambda = Lambda(Seq(v.toVal),
+    val lambda = \("v"::String)(v =>
       _Element("div", _List[WebElement](_WebElement(_TextNode(closureParameter.toVariable)),_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]()))
 
-    val pfun = function(
+    val pfun = 
       let(closureParameter, "Closure parameter")(cp =>
         Application(lambda, Seq("Hello world"))
-      ))(inoxTypeOf[Element])
+      )
 
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case funBody@Let(_, StringLiteral(s), Application(newLambda@Lambda(Seq(v2), body), Seq(StringLiteral(_))))
       => //Log(funBody)
-        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v in the given lambda: $newLambda")
+        if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
         s shouldEqual "Changed parameter"
     }
   }
@@ -274,21 +271,21 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val expected3 = "Hello bigworld"
     val expected4 = "Hello    world"
 
-    val pfun = function("Hello " +& "world")(inoxTypeOf[String])
+    val pfun = "Hello " +& "world"
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
     val pfun3 = checkProg(expected3, repairProgram(pfun, expected3, 3))
     val pfun4 = checkProg(expected4, repairProgram(pfun, expected4, 3))
 
-    pfun2 matchBody { case StringLiteral(s) +& StringLiteral(t) =>
+    pfun2 match { case StringLiteral(s) +& StringLiteral(t) =>
       s shouldEqual "Hello "
       t shouldEqual "buddy"
     }
-    pfun3 matchBody { case StringLiteral(s) +& StringLiteral(t) =>
+    pfun3 match { case StringLiteral(s) +& StringLiteral(t) =>
       s shouldEqual "Hello "
       t shouldEqual "bigworld"
     }
-    pfun4 matchBody { case StringLiteral(s) +& StringLiteral(t) =>
+    pfun4 match { case StringLiteral(s) +& StringLiteral(t) =>
       (s, t) shouldEqual ("Hello    ", "world")
     }
   }
@@ -299,14 +296,14 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
     val ap = valdef[String]("a")
 
-    val pfun = function(
+    val pfun = 
       let(ap, "Hello ")(av =>
         av +& "world"
-      ))(inoxTypeOf[String])
+      )
 
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case funBody@Let(v1, StringLiteral(s), body@StringConcat(_, StringLiteral(t)))
       =>
         if(!isVarIn(v1.id, body)) fail(s"There was no variable $v1 in the given final expression: $funBody")
@@ -326,11 +323,10 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       WebElement(Element("b", WebElement(TextNode("Mikael"))::Nil)),
         WebElement(Element("b", WebElement(TextNode("Mikael"))::Nil))))
 
-    val pfun = function(
+    val pfun = 
       let(m, _TextNode("Mikael"))( mv =>
         _Element("div", _List[WebElement](_WebElement(mv), _WebElement(mv)), _List[WebAttribute](), _List[WebStyle]())
       )
-    )(inoxTypeOf[Element])
     println(givenOut: Expr)
 
     checkProg(normlOut, pfun)
@@ -346,16 +342,16 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val ap = valdef[String]("a")
     val bp = valdef[String]("b")
 
-    val pfun = function(
+    val pfun = 
       let(ap, "Hello ")(av =>
       let(bp, "world")(bv =>
         av +& bv
       )
-      ))(inoxTypeOf[String])
+      )
 
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 matchBody {
+    pfun2 match {
       case funBody@Let(v1, StringLiteral(s), Let(v2, StringLiteral(t), body@StringConcat(_, _)))
       =>
         if(!isVarIn(v1.id, body)) fail(s"There was no variable $v1 in the given final expression: $funBody")
@@ -369,18 +365,18 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val ap = valdef[String]("a")
     val bp = valdef[String]("b")
 
-    val pfun = function(
+    val pfun = 
       let(ap, "Mikael")(av =>
         let(bp, " ")(bv =>
           av +& bv +& av
         )
-      ))(inoxTypeOf[String])
+      )
 
     /*checkProg("Hi Hi",   repairProgram(pfun, "Hi Hi"))
     checkProg("Mikael Mikael", pfun)
     checkProg("Hi Hi",   repairProgram(pfun, "Mikael Hi", 2))
     checkProg("Hi Hi",   repairProgram(pfun, "Hi Mikael", 2))*/
-    checkProg("Mikael   Mikael", repairProgram(pfun, "Mikael   Mikael", 4)) matchBody {
+    checkProg("Mikael   Mikael", repairProgram(pfun, "Mikael   Mikael", 4)) match {
       case Let(_, StringLiteral(s), Let(_, StringLiteral(t), _)) =>
         s shouldEqual "Mikael"
         t shouldEqual "   "
@@ -390,14 +386,14 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   test("Propose the change between changing a variable and assing a new string") {
     val ap = valdef[String]("a")
 
-    val pfun = function(
+    val pfun = 
       let(ap, "Mikael")(av =>
           av +& " is nice, " +& av
-      ))(inoxTypeOf[String])
+      )
     //checkProg("Mikael is nice, Mikael", pfun)
     val s_pfun2 = repairProgramList(pfun, "Mikael is nice, Mikael is clever", 3)
     //checkProg("Mikael is clever is nice, Mikael is clever", s_pfun2.head)
-    checkProg("Mikael is nice, Mikael is clever", s_pfun2.tail.head) matchBody {
+    checkProg("Mikael is nice, Mikael is clever", s_pfun2.tail.head) match {
       case Let(p, StringLiteral(s), _) =>
         s shouldEqual "Mikael"
     }
@@ -406,22 +402,17 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
 
   test("Reverse curried string arguments") {
-    val ap = valdef[String]("a")
-    val bp = valdef[String]("b")
-
-    val pfun = function(
+    val pfun = 
       Application(
         Application(
-        Lambda(Seq(ap),
-          Lambda(Seq(bp),
-            ap.toVariable +& ":" +& bp.toVariable
+        \("a"::String)(av =>
+          \("b"::String)(bv =>
+            av +& ":" +& bv
           )
         ), Seq("Winner")), Seq("Mikael"))
-      )(inoxTypeOf[String])
-
-    Log(pfun.getBody)
+    
     checkProg("Winner:Mikael", pfun)
-    checkProg("Winner:Viktor",   repairProgram(pfun, "Winner:Viktor")) matchBody {
+    checkProg("Winner:Viktor",   repairProgram(pfun, "Winner:Viktor")) match {
       case Application(Application(_, Seq(StringLiteral(s))), Seq(StringLiteral(t))) =>
         s shouldEqual "Winner"
         t shouldEqual "Viktor"
@@ -430,38 +421,30 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
 
   test("Reverse filter") {
-    val ap = valdef[Int]("a")
-    val pfun = function(
-      FunctionInvocation(Utils.filter,Seq(inoxTypeOf[Int]),
-        Seq(
-          _List[Int](0, 1, 2, 6, 5, 5, 8),
-          Lambda(Seq(ap), Modulo(ap.toVariable, 2) === 0)
-        )
+    val pfun = 
+      E(Utils.filter)(Int)(
+        _List[Int](0, 1, 2, 6, 5, 5, 8),
+        \("a"::Int)( av =>  Modulo(av, 2) === 0)
       )
-    )(inoxTypeOf[List[Int]])
 
     checkProg(_List[Int](0, 2, 6, 8), pfun)
-    repairProgram(pfun, _List[Int](0, 2, 10, 6, 8)) matchBody {
+    repairProgram(pfun, _List[Int](0, 2, 10, 6, 8)) match {
       case FunctionInvocation(_, _, Seq(list, _)) =>
         list shouldEqual _List[Int](0, 1, 2, 10, 6, 5, 5, 8)
     }
   }
 
   test("Reverse filter with variable arguments") {
-    val ap = valdef[Int]("a")
     val input = valdef[List[Int]]("input")
     val f = valdef[Int => Boolean]("f")
-    val pfun = function(
+    val pfun = 
       let(input, _List[Int](0, 1, 2, 6, 5, 5, 8))(inputv =>
-      let(f, Lambda(Seq(ap), Modulo(ap.toVariable, 2) === 0))(fv =>
-        FunctionInvocation(Utils.filter,Seq(inoxTypeOf[Int]),
-          Seq(inputv, fv)
-        )
+      let(f, \("a"::Int)(av => Modulo(av, 2) === 0))(fv =>
+        E(Utils.filter)(Int)(inputv, fv)
       ))
-    )(inoxTypeOf[List[Int]])
 
     checkProg(_List[Int](0, 2, 6, 8), pfun)
-    repairProgram(pfun, _List[Int](0, 2, 10, 6, 8)) matchBody {
+    repairProgram(pfun, _List[Int](0, 2, 10, 6, 8)) match {
       case Let(input2, input2expr, Let(f2, f2expr, FunctionInvocation(_, _, Seq(arg1, arg2)))) =>
         arg1 shouldEqual input2.toVariable
         arg2 shouldEqual f2.toVariable
@@ -473,73 +456,67 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   test("Reverse map") {
     val ap = valdef[String]("a")
     object Map {
-      def apply(l: List[String], v: Variable => Expr) = function(
-        FunctionInvocation(Utils.map,Seq(inoxTypeOf[String], inoxTypeOf[String]),
-          Seq(
-            l: Expr,
-            \("ap"::inoxTypeOf[String])(av => v(av))
-          )
+      def apply(l: List[String], v: Variable => Expr) = 
+        E(Utils.map)(String, String)(
+          l: Expr, \("ap"::String)(av => v(av))
         )
-      )(inoxTypeOf[List[String]])
 
       def unapply(e: Expr) = e match {
         case FunctionInvocation(Utils.map, Seq(_, _),
-          Seq(l,
-      Lambda(Seq(vd), body)
-      )) => Some((l, vd.toVariable, body))
+          Seq(l, Lambda(Seq(vd), body))) => Some((l, vd.toVariable, body))
         case _ => None
       }
     }
 
     import ReverseProgram.ListLiteral
 
-    val pfStr4 = ProgramFormula.StringInsert("- ", "B", "")
+    val pfStr4 = StringInsert("- ", "B", "")
     Map(List("A","","C"), av => "- " +& av) repairFrom
       ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr4.expr), StringType), List("- C")), pfStr4.formula.unknownConstraints) shouldProduce
       _List[String]("- A", "- B", "- C")
 
-    val pfStr3 = ProgramFormula.StringInsert("- B", "o", "")
+    val pfStr3 = StringInsert("- B", "o", "")
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
       ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3.expr), StringType), List("- C", "- D")), pfStr3.formula.unknownConstraints) shouldProduce
       _List[String]("- A", "- Bo", "- C", "- D")
 
-    val pfStr2 = ProgramFormula.StringInsert("", "*", " C")
+    val pfStr2 = StringInsert("", "*", " C")
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-    ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula.unknownConstraints) shouldProduce
+      ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula.unknownConstraints) shouldProduce
     _List[String]("* A", "* B", "* C", "* D")
 
     Map(List("A","B","D","E"), av => "- " +& av) repairFrom
-    ProgramFormula.ListInsert(StringType, List("- A", "- B"), List("- C"), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
+      ListInsert(StringType, List("- A", "- B"), List("- C"), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
     _List[String]("- A", "- B", "- C", "- D", "- E")
 
-    val pfStr = ProgramFormula.StringInsert("- ", "E", "")
+    val pfStr = StringInsert("- ", "E", "")
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-    ProgramFormula.ListInsert(StringType, List("- A", "- B"), List(), List(pfStr.expr), pfStr.formula.unknownConstraints) shouldProduce
+      ListInsert(StringType, List("- A", "- B"), List(), List(pfStr.expr), pfStr.formula.unknownConstraints) shouldProduce
     _List[String]("- A", "- B", "- E")
 
     Map(List("A","B","D","E"), av => "- " +& av) repairFrom
-    ProgramFormula.ListInsert(StringType, List("- A", "- B"), List(""), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
+      ListInsert(StringType, List("- A", "- B"), List(""), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
     _List[String]("- A", "- B", "- ", "- D", "- E")
 
 
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-    ProgramFormula.ListInsert(StringType, List("- A", "- B", "- C", "- D"), List(""), List(), BooleanLiteral(true)) shouldProduce
+      ListInsert(StringType, List("- A", "- B", "- C", "- D"), List(""), List(), BooleanLiteral(true)) shouldProduce
     _List[String]("- A", "- B", "- C", "- D", "- ")
 
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-    ProgramFormula.ListInsert(StringType, List(), List(""), List("- A", "- B", "- C", "- D"), BooleanLiteral(true)) shouldProduce
+      ListInsert(StringType, List(), List(""), List("- A", "- B", "- C", "- D"), BooleanLiteral(true)) shouldProduce
     _List[String]("- ", "- A", "- B", "- C", "- D")
 
 
     val pfun = Map(List("Margharita", "Salami", "Royal"), av => "Pizza " +& av)
 
     pfun shouldProduce _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Royal")
-    pfun repairFrom _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal") matchBody {
+    pfun repairFrom _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal") match {
       case Map(list, v, body) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Sushi", "Royal")
     }
     pfun repairFrom _List[String]("The pizza Margharita", "Pizza Salami","Pizza Royal") shouldProduce
-    _List[String]("The pizza Margharita", "The pizza Salami", "The pizza Royal") matchBody {
+    _List[String]("The pizza Margharita", "The pizza Salami", "The pizza Royal") match {
       case Map(list, vd, prefix +& _) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Royal")
         prefix shouldEqual StringLiteral("The pizza ")
@@ -549,19 +526,15 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   }
 
   test("Reverse flatmap") {
-    val ap = valdef[String]("a")
-    val pfun = function(
-      FunctionInvocation(Utils.flatmap,Seq(inoxTypeOf[String], inoxTypeOf[String]),
-        Seq(
+    val pfun = 
+      E(Utils.flatmap)(String, String)(
           _List[String]("Margharita", "Royal", "Salami"),
-          Lambda(Seq(ap), if_(ap.toVariable === StringLiteral("Royal")) {
-            _List[String](ap.toVariable)
+          \("a"::String)(av => if_(av === StringLiteral("Royal")) {
+            _List[String](av)
           } else_ {
-            _List[String](ap.toVariable, StringConcat(ap.toVariable, " with mushrooms"))
+            _List[String](av, av +& " with mushrooms")
           })
-        )
       )
-    )(inoxTypeOf[List[String]])
 
     checkProg(_List[String]("Margharita", "Margharita with mushrooms", "Royal", "Salami", "Salami with mushrooms"), pfun)
     repairProgram(pfun, _List[String]("Margharita", "Sushi with mushrooms", "Royal", "Salami", "Salami with mushrooms")) shouldProduce
@@ -572,7 +545,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
                         _List[String]("Margharita", "Margharita with mushrooms", "Royalty", "Royalty with mushrooms", "Salami", "Salami with mushrooms")
 
     repairProgram(pfun, _List[String]("Margharita", "Margharita with mushrooms", "Royal", "Jambon", "Jambon with mushrooms", "Salami", "Salami with mushrooms")) shouldProduce
-      _List[String]("Margharita", "Margharita with mushrooms", "Royal", "Jambon", "Jambon with mushrooms", "Salami", "Salami with mushrooms") matchBody {
+      _List[String]("Margharita", "Margharita with mushrooms", "Royal", "Jambon", "Jambon with mushrooms", "Salami", "Salami with mushrooms") match {
       case FunctionInvocation(_, _, Seq(arg, lambda)) =>
         arg shouldEqual _List[String]("Margharita", "Royal", "Jambon", "Salami")
     }
@@ -581,13 +554,13 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   test("Reverse mkString") {
     val ap = valdef[String]("a")
     object MkString {
-      def apply(input: Expr, middle: Expr) = function(
+      def apply(input: Expr, middle: Expr) = 
         FunctionInvocation(Utils.mkString,Seq(),
           Seq(
             input,
             middle
           )
-        ))(inoxTypeOf[String])
+        )
       def unapply(e: Expr): Option[(Expr, Expr)] = e match {
         case FunctionInvocation(Utils.mkString,Seq(),
           Seq(input, middle)
@@ -596,67 +569,67 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       }
     }
 
-    MkString(List[String]("a","b","c"), "\n") repairFrom ProgramFormula.StringInsert("a\n","d\n", "b\nc") matchBody {
+    MkString(List[String]("a","b","c"), "\n") repairFrom StringInsert("a\n","d\n", "b\nc") match {
       case MkString(l, StringLiteral("\n")) => l shouldEqual _List[String]("a","d", "b", "c") }
 
-    MkString(List[String]("a","dc"), "") repairFrom ProgramFormula.StringInsert("a","b", "c") matchBody {
+    MkString(List[String]("a","dc"), "") repairFrom StringInsert("a","b", "c") match {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("a","bc") }
 
-    MkString(List[String]("dc"), "") repairFrom ProgramFormula.StringInsert("","kp", "c") matchBody {
+    MkString(List[String]("dc"), "") repairFrom StringInsert("","kp", "c") match {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("kpc") }
 
-   /* MkString(List[String]("abc","def","gh"), "") repairFrom ProgramFormula.StringInsert("ab","#","efgh") matchBody {
+   /* MkString(List[String]("abc","def","gh"), "") repairFrom StringInsert("ab","#","efgh") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("ab","ef","gh") }*/
 
-    MkString(List[String]("c","ob","d"), "?#") repairFrom ProgramFormula.StringInsert("c?#o","m?#k", "d") matchBody {
+    MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","m?#k", "d") match {
       case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","om","kd") }
 
-    MkString(List[String]("c","ob","d"), "?#") repairFrom ProgramFormula.StringInsert("c?#o","k", "d") matchBody {
+    MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","k", "d") match {
       case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","okd") }
 
-    MkString(List[String]("c","ob","d"), "?#") repairFrom ProgramFormula.StringInsert("c?#o","k?#", "d") matchBody {
+    MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","k?#", "d") match {
       case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","ok", "d") }
 
-    MkString(List[String]("c","d"), "?#") repairFrom ProgramFormula.StringInsert("c?",":", "#d") matchBody {
+    MkString(List[String]("c","d"), "?#") repairFrom StringInsert("c?",":", "#d") match {
       case MkString(l, StringLiteral("?:#")) => l shouldEqual _List[String]("c","d") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("","m#k", "#e") matchBody {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("","m#k", "#e") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("m","k","e") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c#","m#k", "#e") matchBody {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c#","m#k", "#e") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("c","m","k","e") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c","m#k", "e") matchBody {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","m#k", "e") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("cm","ke") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c","m#k#", "e") matchBody {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","m#k#", "e") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("cm","k","e") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c","#m#k", "e") matchBody {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","#m#k", "e") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("c","m","ke") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom ProgramFormula.StringInsert("c","#m#k#", "e") matchBody {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","#m#k#", "e") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("c","m","k","e") }
 
-    MkString(List[String]("c"), "#") repairFrom ProgramFormula.StringInsert("c","k#d", "") matchBody {
+    MkString(List[String]("c"), "#") repairFrom StringInsert("c","k#d", "") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("ck","d") }
 
-    MkString(List[String]("c"), "") repairFrom ProgramFormula.StringInsert("","kp", "c") matchBody {
+    MkString(List[String]("c"), "") repairFrom StringInsert("","kp", "c") match {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("kpc") }
 
-    MkString(List[String]("a","c", "d"), "#") repairFrom ProgramFormula.StringInsert("a","b", "d") matchBody {
+    MkString(List[String]("a","c", "d"), "#") repairFrom StringInsert("a","b", "d") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("abd") }
 
-    MkString(List[String]("a","c"), "") repairFrom ProgramFormula.StringInsert("a","b", "c") matchBody {
+    MkString(List[String]("a","c"), "") repairFrom StringInsert("a","b", "c") match {
       case MkString(l, StringLiteral("b")) => l shouldEqual _List[String]("a","c") }
 
-    MkString(List[String]("a", "b", "c"), "#") repairFrom ProgramFormula.StringInsert("a#","e#f#q","b#c") matchBody {
+    MkString(List[String]("a", "b", "c"), "#") repairFrom StringInsert("a#","e#f#q","b#c") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("a", "e", "f", "qb", "c") }
 
-    MkString(List[String](), "#") repairFrom ProgramFormula.StringInsert("","a#b","") matchBody {
+    MkString(List[String](), "#") repairFrom StringInsert("","a#b","") match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("a","b") }
 
-    MkString(List[String](""), "") repairFrom ProgramFormula.StringInsert("","aloha", "") matchBody {
+    MkString(List[String](""), "") repairFrom StringInsert("","aloha", "") match {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("aloha") }
 
 
@@ -667,53 +640,51 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
 
 
-    MkString(List[String](), "") repairFrom ProgramFormula.StringInsert("","aloha", "") matchBody {
+    MkString(List[String](), "") repairFrom StringInsert("","aloha", "") match {
       case MkString(l, StringLiteral("")) =>
         l shouldEqual _List[String]("aloha")
     }
 
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n- Royal\n", "\n", "- Salami") matchBody {
+    pfun repairFrom StringInsert("- Margharita\n- Royal\n", "\n", "- Salami") match {
       case MkString(l, StringLiteral("\n")) =>
         l shouldEqual _List[String]("- Margharita", "- Royal", "", "- Salami")
     }
-    pfun repairFrom "- Margharita\n- Royal\n- Ham\n- Salami" matchBody {
+    pfun repairFrom "- Margharita\n- Royal\n- Ham\n- Salami" match {
       case MkString(l, StringLiteral("\n")) =>
         l shouldEqual _List[String]("- Margharita", "- Royal", "- Ham", "- Salami")
     }
-    pfun repairFrom "- Margharita\n- Salami" matchBody {
+    pfun repairFrom "- Margharita\n- Salami" match {
       case MkString(l, StringLiteral("\n")) =>
         l shouldEqual  _List[String]("- Margharita", "- Salami")
     }
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita", ",", "- Royal\n- Salami") shouldProduce "- Margharita,- Royal,- Salami"
-    pfun repairFrom ProgramFormula.StringInsert("", "  ","- Margharita\n- Royal\n- Salami") shouldProduce "  - Margharita\n- Royal\n- Salami"
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita","s","\n- Royal\n- Salami") shouldProduce "- Margharitas\n- Royal\n- Salami"
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","  ","- Royal\n- Salami") shouldProduce "- Margharita\n  - Royal\n- Salami"
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n- Royal","s","\n- Salami") shouldProduce "- Margharita\n- Royals\n- Salami"
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n- Royal\n","  ","- Salami") shouldProduce "- Margharita\n- Royal\n  - Salami"
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n- Royal\n- Salami","s", "") shouldProduce "- Margharita\n- Royal\n- Salamis"
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita","\n","\n- Royal\n- Salami") shouldProduce "- Margharita\n\n- Royal\n- Salami"
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","\n","- Royal\n- Salami") shouldProduce "- Margharita\n\n- Royal\n- Salami"
-    pfun repairFrom ProgramFormula.StringInsert("- Margharita\n","- Sushi\n","- Royal\n- Salami") shouldProduce "- Margharita\n- Sushi\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita", ",", "- Royal\n- Salami") shouldProduce "- Margharita,- Royal,- Salami"
+    pfun repairFrom StringInsert("", "  ","- Margharita\n- Royal\n- Salami") shouldProduce "  - Margharita\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita","s","\n- Royal\n- Salami") shouldProduce "- Margharitas\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n","  ","- Royal\n- Salami") shouldProduce "- Margharita\n  - Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n- Royal","s","\n- Salami") shouldProduce "- Margharita\n- Royals\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n- Royal\n","  ","- Salami") shouldProduce "- Margharita\n- Royal\n  - Salami"
+    pfun repairFrom StringInsert("- Margharita\n- Royal\n- Salami","s", "") shouldProduce "- Margharita\n- Royal\n- Salamis"
+    pfun repairFrom StringInsert("- Margharita","\n","\n- Royal\n- Salami") shouldProduce "- Margharita\n\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n","\n","- Royal\n- Salami") shouldProduce "- Margharita\n\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n","- Sushi\n","- Royal\n- Salami") shouldProduce "- Margharita\n- Sushi\n- Royal\n- Salami"
 
-    pfun repairFrom ProgramFormula.StringInsert("- ","Ham","\n- Royal\n- Salami") matchBody {
+    pfun repairFrom StringInsert("- ","Ham","\n- Royal\n- Salami") match {
       case MkString(l, StringLiteral("\n")) =>
         l shouldEqual _List[String]("- Ham", "- Royal", "- Salami")
     }
   }
 
   test("Reverse list concatenation") {
-    val pfun = function(
-      FunctionInvocation(Utils.listconcat, Seq(inoxTypeOf[String]),
-      Seq(
+    val pfun = 
+      E(Utils.listconcat)(String)(
         _List[String]("Margharita", "Salami"),
         _List[String]("Sudjuk")
-      ))
-    )(inoxTypeOf[List[String]])
+      )
 
     checkProg(_List[String]("Margharita", "Salami", "Sudjuk"), pfun)
     val s_pfun2 = repairProgramList(pfun, _List[String]("Margharita", "Salami", "Salmon", "Sudjuk"), 2).take(2)
     s_pfun2.map{ pfun2 =>
-      pfun2.getBody match {
+      pfun2 match {
         case FunctionInvocation(_, _, Seq(a, b)) =>
           (a, b)
       }
@@ -722,13 +693,13 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       (_List[String]("Margharita", "Salami"), _List[String]("Salmon", "Sudjuk"))
     )
 
-    repairProgram(pfun, _List[String]("Margharita", "Salmon", "Salami", "Sudjuk")) matchBody {
+    repairProgram(pfun, _List[String]("Margharita", "Salmon", "Salami", "Sudjuk")) match {
       case FunctionInvocation(_, _, Seq(a, b)) =>
         a shouldEqual _List[String]("Margharita", "Salmon", "Salami")
         b shouldEqual _List[String]("Sudjuk")
     }
 
-    repairProgram(pfun, _List[String]("Margharita", "Salami", "Sudjuk", "Salmon")) matchBody {
+    repairProgram(pfun, _List[String]("Margharita", "Salami", "Sudjuk", "Salmon")) match {
       case FunctionInvocation(_, _, Seq(a, b)) =>
         a shouldEqual _List[String]("Margharita", "Salami")
         b shouldEqual _List[String]("Sudjuk", "Salmon")
@@ -737,14 +708,13 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
   test("Tuple select repair") {
     import ImplicitTuples._
-    val pfun = function(
+    val pfun = 
       ADTSelector(
         ADT(T(tuple2)(StringType, StringType),
           Seq(inoxExprOf[String]("Hello"), inoxExprOf[String]("world"))), _1)
-    )(inoxTypeOf[String])
 
     checkProg("Hello", pfun)
-    checkProg("Dear", repairProgram(pfun, "Dear")) matchBody {
+    checkProg("Dear", repairProgram(pfun, "Dear")) match {
       case ADTSelector(ADT(_, Seq(StringLiteral(s), StringLiteral(t))), `_1`) =>
         s shouldEqual "Dear"
         t shouldEqual "world"
@@ -753,14 +723,13 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
   test("Tuple select repair preserving input programs") {
     import ImplicitTuples._
-    val pfun = function(
+    val pfun = 
       ADTSelector(
         ADT(T(tuple2)(StringType, StringType),
           Seq("Hello" +& ", ", "world")), _1)
-    )(inoxTypeOf[String])
 
     checkProg("Hello, ", pfun)
-    checkProg("Hello! ", repairProgram(pfun, "Hello! ")) matchBody {
+    checkProg("Hello! ", repairProgram(pfun, "Hello! ")) match {
       case ADTSelector(ADT(_,
         Seq(StringLiteral(s) +& StringLiteral(t), StringLiteral(w))), `_1`) =>
         s shouldEqual "Hello"
@@ -773,28 +742,26 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     import ImplicitTuples._
     val tp = T(tuple2)(StringType, StringType)
     val a = ValDef(FreshIdentifier("a"), tp)
-    val pfun = function(
+    val pfun = 
       let(a, ADT(tp, Seq("Mikael", " ")))(av =>
         //StringConcat(StringConcat(ADTSelector(av, _1), ADTSelector(av, _2)), ADTSelector(av, _1))
         (ADTSelector(av, _1) +& ADTSelector(av, _2)) +& ADTSelector(av, _1)
       )
-    )(inoxTypeOf[String])
 
     checkProg("Mikael Mikael", pfun)
+    checkProg("Mar Mar", repairProgram(pfun, "Mar Mar"))
     checkProg("Mar Mar", repairProgram(pfun, "Mikael Mar"))
     checkProg("Mar Mar", repairProgram(pfun, "Mar Mikael"))
-    checkProg("Mar Mar", repairProgram(pfun, "Mar Mar"))
   }
 
   test("Tuple conflict") {
     import ImplicitTuples._
     val tp = T(tuple2)(StringType, StringType)
     val a = ValDef(FreshIdentifier("a"), tp)
-    val pfun = function(
+    val pfun = 
       let("a":: StringType, "Hello")(av =>
         ADT(tp, Seq(av, av))
       )
-    )(inoxTypeOf[(String, String)])
 
     checkProg(("Hello", "Hello"), pfun)
     checkProg(("World", "World"), repairProgram(pfun, ("Hello", "World")))
@@ -805,11 +772,10 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   }
 
   test("If-then-else") {
-    val pfun = function(
+    val pfun = 
       let("a" :: StringType, "Hello")(av =>
         if_(av === "Hello") { av } else_ { av +& " !" }
       )
-    )(inoxTypeOf[String])
     checkProg("Hello", pfun)
     checkProg("Mikael !", repairProgram(pfun, "Mikael"))
   }
@@ -824,64 +790,5 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
      How to be faster btw?
     */
-
-  /*
-    test("Clone-and-paste simple") {
-       val ap = valdef[String]("a")
-
-      val pfun = function("Hello world,")(inoxTypeOf[String])
-      val clonedBody = let(ap, "world")(av =>
-        "Hello " +& av +& "," +& av
-      )
-      val pfun2 = repairProgram(pfun, clonedBody)
-      pfun2 matchBody { case v => v shouldEqual clonedBody }
-    }
-
-
-    test("Clone-and-paste the left part with an existing variable") {
-      val ap = valdef[String]("a")
-      val bp = valdef[String]("b")
-
-      val initBody = let(ap, "world")(av =>
-        "Hello " +& av
-      )
-      val clonedBody = let(bp, "Hello")(bv =>
-        bv +& " world" +& bv
-      )
-      val pfun = function(initBody)(inoxTypeOf[String])
-      val pfun2 = repairProgram(pfun, clonedBody)
-      checkProg("Hello worldHello", pfun2)
-      val pfun3 = repairProgram(pfun2, "Hi worldHello")
-      checkProg("Hi worldHi", pfun2)
-
-      pfun3 matchBody {
-        case funBody@Let(v1, StringLiteral(s), Let(v2, StringLiteral(t), body@StringConcat(_, _))) =>
-          s shouldEqual "Hi"
-          t shouldEqual "world"
-      }
-    }
-
-    test("Clone-and-paste overlapping another variable") {
-      val ap = valdef[String]("a")
-      val bp = valdef[String]("b")
-
-      val initBody = let(ap, "big world")(av =>
-        "Hello " +& av
-      )
-      val clonedBody = let(bp, "Hello big")(bv =>
-        bv +& " world" +& bv
-      )
-      val pfun = function(initBody)(inoxTypeOf[String])
-      val pfun2 = repairProgram(pfun, clonedBody)
-      checkProg("Hello big worldHello big", pfun2)
-      val pfun3 = repairProgram(pfun2, "Hi big worldHello big")
-      checkProg("Hi big worldHi big", pfun2)
-
-      pfun3 matchBody {
-        case funBody@Let(v1, StringLiteral(s), Let(v2, StringLiteral(t), body@StringConcat(_, _))) =>
-          s shouldEqual "Hi big"
-          t shouldEqual " world"
-      }
-    }*/
 
 }

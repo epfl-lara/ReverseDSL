@@ -26,24 +26,9 @@ trait TestHelpers extends InoxConvertible.conversions {
 
   type PFun = (InoxProgram, Identifier)
 
-  implicit class Obtainable(pf: (inox.InoxProgram, Identifier)) {
-    @inline private def matchFunDef(test: FunDef => Unit) = pf._1.symbols.functions.get(pf._2) match {
-      case Some(funDef) => test(funDef)
-      case None => fail(s"There was no such function ${pf._2} in program:\n${pf._1}")
-    }
-    def matchBody(test: PartialFunction[Expr,Unit]) = matchFunDef{ funDef =>
-      val body = funDef.fullBody
-      if(test.isDefinedAt(body)) {
-        test(body)
-      } else {
-        fail(s"Unexpected shape:\n$body")
-      }
-    }
-    def getBody: Expr = {
-      pf._1.symbols.functions.get(pf._2).map(_.fullBody).getOrElse(throw new Exception(s"Non-existent function in program $pf"))
-    }
-    def repairFrom(e: ProgramFormula) = repairProgram(pf, e)
-    def shouldProduce(e: Expr) = checkProg(e, pf)
+  implicit class Obtainable(body: Expr) {
+    def repairFrom(e: ProgramFormula) = repairProgram(body, e)
+    def shouldProduce(e: Expr) = checkProg(e, body)
   }
 
   private def mkProg(funDef: FunDef) = {
@@ -54,57 +39,59 @@ trait TestHelpers extends InoxConvertible.conversions {
   }
 
   import Utils.AugmentedStream
-  private def sortStreamByDistance(s: Stream[PFun], num: Int, init: Expr) = {
-    s.sortFirstElements(num, (x: PFun) => {
-      DistanceExpr.distance(x.getBody, init)// /: Log.prefix(s"distance(${x.getBody}, $init)=")
+  private def sortStreamByDistance(s: Stream[Expr], num: Int, init: Expr) = {
+    s.sortFirstElements(num, (x: Expr) => {
+      DistanceExpr.distance(x, init)// /: Log.prefix(s"distance(${x.getBody}, $init)=")
     })
   }
 
   /** Returns all the solution, with the first lookInManyFirstSolutions being sorted */
-  def repairProgramList(pf: PFun, expected2: ProgramFormula, lookInManyFirstSolutions: Int): Stream[PFun] = {
-    val progfuns2 = ReverseProgram.putPf(expected2, Some(pf)).toStream
+  def repairProgramList(pf: Expr, expected2: ProgramFormula, lookInManyFirstSolutions: Int): Stream[Expr] = {
+    val progfuns2 = ReverseProgram.put(expected2, Some(pf))
     progfuns2.lengthCompare(0) should be > 0
-    val initialValue = pf.getBody
+    val initialValue = pf
     val sorted = sortStreamByDistance(progfuns2, lookInManyFirstSolutions, initialValue)
     if(Log.activate) {
       sorted.take(lookInManyFirstSolutions).toList.zipWithIndex.foreach { case (sol, i) =>
-        Log(s"Solution $i:" + sol.getBody)
+        Log(s"Solution $i:" + sol)
       }
     }
     sorted
   }
 
-  def repairProgram(pf: PFun, expected2: ProgramFormula, lookInManyFirstSolutions: Int = 1): PFun = {
+  def repairProgram(pf: Expr, expected2: ProgramFormula, lookInManyFirstSolutions: Int = 1): Expr = {
     val res =
     repairProgramList(pf, expected2, lookInManyFirstSolutions).head
-    println("### repair:\n" + pf.getBody+"\n###by outputing: " + expected2 + " gives:\n" + res.getBody + "\n###")
+    println("### repair:\n" + pf +"\n###by outputing: " + expected2 + " gives:\n" + res + "\n###")
     res
   }
 
-  def generateProgram[A: InoxConvertible](expected2: A) = {
-    val progfuns2 = ReverseProgram.putPf(ProgramFormula(expected2), None)
+  def generateProgram(expected2: Expr): Expr = {
+    val progfuns2 = ReverseProgram.put(ProgramFormula(expected2), None)
     progfuns2.toStream.lengthCompare(1) should be >= 0
     progfuns2.head
   }
 
-  def eval(prog: InoxProgram, funDefId: Identifier): Expr = {
-    ReverseProgram.LambdaPreservingEvaluator(prog).eval(FunctionInvocation(funDefId, Seq(), Seq())) match {
+  def eval(e: Expr): Expr = {
+    val symbols = Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs)
+
+    val funDef = mkFunDef(main)()(_ => (Seq(), e.getType(symbols), _ => e))
+    (mkProg(funDef), funDef.id)
+
+    val prog = InoxProgram(
+      ReverseProgram.context,
+      funDef::ReverseProgram.funDefs, allConstructors
+    )
+
+    ReverseProgram.LambdaPreservingEvaluator(prog).eval(FunctionInvocation(main, Seq(), Seq())) match {
       case EvaluationResults.Successful(e) => e
-      case m => fail(s"Error while evaluating ${(prog, funDefId).getBody}: $m")
+      case m => fail(s"Error while evaluating ${e}: $m")
     }
   }
-  def eval(pfun: PFun): Expr = {
-    eval(pfun._1, pfun._2)
-  }
 
-  def checkProg(expected1: Expr, prog: InoxProgram, funDefId: Identifier): (InoxProgram, Identifier) = {
-   // ReverseProgram.evalWithCache((prog, funDefId).getBody)(new collection.mutable.HashMap, prog.symbols)
-    eval(prog, funDefId) shouldEqual expected1
-    (prog, funDefId)
-  }
-
-  def checkProg(expected1: Expr, progfun: (InoxProgram, Identifier)): (InoxProgram, Identifier) = {
-    checkProg(expected1, progfun._1, progfun._2)
+  def checkProg(expected1: Expr, program: Expr): Expr = {
+    eval(program) shouldEqual expected1
+    program
   }
 
   protected def isVarIn(id: Identifier, body: inox.trees.Expr) = {
@@ -115,10 +102,5 @@ trait TestHelpers extends InoxConvertible.conversions {
   }
 
   val main = FreshIdentifier("main")
-
-  protected def function(body: Expr)(returnType: Type): PFun = {
-    val funDef = mkFunDef(main)()(_ => (Seq(), returnType, _ => body))
-    (mkProg(funDef), funDef.id)
-  }
 }
 

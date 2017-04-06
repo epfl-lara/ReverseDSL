@@ -30,8 +30,8 @@ class BagMapSetTest extends FunSuite with TestHelpers {
   }
 
   test("Revert the use of a map") {
-    val pfun = function(
-      let("tr" :: inoxTypeOf[Map[String, String]],
+    val pfun =
+      let("tr" :: TMap[String, String],
         _Map[String, String](
           "hello" -> "Bonjour",
           "howareu" -> "comment tu vas?",
@@ -42,10 +42,9 @@ class BagMapSetTest extends FunSuite with TestHelpers {
       ){ trv =>
         MapApply(trv, "hello") +& ", "  +& MapApply(trv, "howareu")
       }
-    )(inoxTypeOf[String])
 
     checkProg("Bonjour, comment tu vas?", pfun)
-    checkProg("Salut, comment tu vas?", repairProgram(pfun, "Salut, comment tu vas?")) matchBody {
+    checkProg("Salut, comment tu vas?", repairProgram(pfun, "Salut, comment tu vas?")) match {
       case Let(t, FiniteMap(pairs, default, _, _), MapApply(t2, StringLiteral("hello")) +& StringLiteral(", ") +& MapApply(t3, StringLiteral("howareu"))) =>
         pairs.toList shouldEqual List[(Expr, Expr)](
           "hello" -> "Salut",
@@ -57,9 +56,9 @@ class BagMapSetTest extends FunSuite with TestHelpers {
   }
 
   test("Revert the use of a double variable and a map") {
-    val pfun = function(
-      let("firstname" :: inoxTypeOf[String], "Mikael"){ firstname =>
-      let("tr" :: inoxTypeOf[Map[String, String]],
+    val pfun = 
+      let("firstname" :: String, "Mikael"){ firstname =>
+      let("tr" :: TMap[String, String],
         _Map[String, String](
           "hello" -> ("Bonjour " +& firstname),
           "howareu" -> (", comment tu vas, " +& firstname),
@@ -68,11 +67,10 @@ class BagMapSetTest extends FunSuite with TestHelpers {
           "useless3" -> "useless3"
         )
       ){ trv => MapApply(trv, "hello") +& MapApply(trv, "howareu") }  }
-    )(inoxTypeOf[String])
 
     checkProg("Bonjour Mikael, comment tu vas, Mikael", pfun)
     checkProg("Bonjour Ravi, comment tu vas, Ravi",
-      repairProgram(pfun, "Bonjour Ravi, comment tu vas, Mikael")) matchBody {
+      repairProgram(pfun, "Bonjour Ravi, comment tu vas, Mikael")) match {
       case Let(firstNameVal, StringLiteral(name), Let(_, FiniteMap(pairs, default, _, _), _)) =>
         name shouldEqual "Ravi"
         val fv = firstNameVal.toVariable
@@ -87,18 +85,18 @@ class BagMapSetTest extends FunSuite with TestHelpers {
   }
 
   test("Repair non-existent values") {
-    val pfun = function(
-      let("tr" :: inoxTypeOf[Map[String, String]],
+    val pfun = 
+      let("tr" :: TMap[String, String],
         _Map[String, String](
           "hello" -> ("Hello " +& "World"),
           "howareu" -> (", comment tu vas" +& "???")
         )
       ){ trv => MapApply(trv, "newkey") }
-    )(inoxTypeOf[String])
 
-    checkProg(Utils.defaultValue(inoxTypeOf[String])(Utils.defaultSymbols), pfun)
+
+    checkProg(Utils.defaultValue(String)(Utils.defaultSymbols), pfun)
     checkProg("New world",
-      repairProgram(pfun, "New world")) matchBody {
+      repairProgram(pfun, "New world")) match {
       case Let(tr, FiniteMap(pairs, _, _, _), MapApply(_, StringLiteral("newkey"))) =>
         pairs should contain((StringLiteral("newkey"), StringLiteral("New world")))
         pairs should contain((StringLiteral("hello"), "Hello " +& "World"))
@@ -107,18 +105,17 @@ class BagMapSetTest extends FunSuite with TestHelpers {
   }
 
   test("Repair double map indirection") {
-    val pfun = function(
+    val pfun =
       let("lang" :: StringType, "fr")(lang =>
-      let("tr" :: inoxTypeOf[Map[String, Map[String, String]]],
-        _Map[String, Map[String, String]](
-          "fr" -> _Map[String, String]("hello" -> "Bonjour"),
-          "en" -> _Map[String, String]("hello" -> "Hello")
-        )
-      ){ trv =>
-        MapApply(MapApply(trv, lang), "hello") +& " " +& lang
-      }
+        let("tr" :: TMap[String, Map[String, String]],
+          _Map[String, Map[String, String]](
+            "fr" -> _Map[String, String]("hello" -> "Bonjour"),
+            "en" -> _Map[String, String]("hello" -> "Hello")
+          )
+        ){ trv =>
+          MapApply(MapApply(trv, lang), "hello") +& " " +& lang
+        }
       )
-    )(inoxTypeOf[String])
     implicit val v = Utils.defaultSymbols
 
     checkProg("Hello en",
@@ -126,7 +123,7 @@ class BagMapSetTest extends FunSuite with TestHelpers {
 
     checkProg("Bonjour fr", pfun)
     checkProg("Salut fr",
-      repairProgram(pfun, "Salut fr")) matchBody {
+      repairProgram(pfun, "Salut fr")) match {
       case Let(lang, StringLiteral(l), Let(tr, m, MapApply(MapApply(_, langVar1), StringLiteral("hello")) +& StringLiteral(" ") +& langVar2)) =>
         l shouldEqual "fr"
         langVar1 shouldEqual lang.toVariable
@@ -137,11 +134,11 @@ class BagMapSetTest extends FunSuite with TestHelpers {
           Seq(
             (StringLiteral("fr"), FiniteMap(
               Seq((StringLiteral("hello"), StringLiteral("Salut"))),
-              Utils.defaultValue(inoxTypeOf[String]), StringType, StringType
+              Utils.defaultValue(String), StringType, StringType
             )), (StringLiteral("en"), FiniteMap(
               Seq((StringLiteral("hello"), StringLiteral("Hello"))),
-              Utils.defaultValue(inoxTypeOf[String]), StringType, StringType
-            ))), Utils.defaultValue(inoxTypeOf[Map[String, String]]), StringType, inoxTypeOf[Map[String, String]])
+              Utils.defaultValue(String), StringType, StringType
+            ))), Utils.defaultValue(TMap[String, String]), StringType, TMap[String, String])
     }
   }
   // TODO: Revert MapUpdated.
@@ -151,19 +148,18 @@ class BagMapSetTest extends FunSuite with TestHelpers {
   }
 
   test("Revert SetAdd") {
-    val pfun = function(
-      let("flags" :: inoxTypeOf[Set[String]],
+    val pfun =
+      let("flags" :: TSet[String],
         _Set[String](
           "cvc4", "z3"
         )
       ){ flags =>
-        let("oflags" :: inoxTypeOf[String],
+        let("oflags" :: String,
           "debug"
         ){ oflags =>
           SetAdd(flags, oflags)
         }
       }
-    )(inoxTypeOf[Set[String]])
 
     checkProg(_Set[String]("cvc4", "debug",  "z3"), pfun)
     checkProg(_Set[String]("cvc4", "debug",  "vampire", "z3"),

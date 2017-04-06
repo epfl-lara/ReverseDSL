@@ -879,13 +879,11 @@ trait Lenses { self: ReverseProgram.type =>
         val right = ValDef(FreshIdentifier("r", true), StringType, Set())
         Log(s"String default case: ${left.id} + ${right.id} == $newOutput:")
 
-        val newConstraint = (newOutput === FunctionInvocation(identifier, tps, Seq(left.toVariable, right.toVariable))
-        &<>& (if(addMaybes)
+        val newConstraint = newOutput === left.toVariable +& right.toVariable &<>& (if(addMaybes)
           E(maybe)(left.toVariable === leftValue) && E(maybe)(right.toVariable === rightValue)
         else BooleanLiteral(true)
         ) // Maybe use what is below for faster convergence?
         //            (if(addMaybes) not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
-          )
         val newVarsInConstraint = exprOps.variablesOf(newConstraint).map(_.toVal)
         val f = Formula(unknownConstraints = newConstraint)
 
