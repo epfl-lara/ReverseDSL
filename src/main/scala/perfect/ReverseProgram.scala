@@ -161,7 +161,7 @@ object ReverseProgram extends lenses.Lenses {
             return Stream(ProgramFormula(wrapper(function)))
         }
       case ProgramFormula.TreeUnwrap(tpe, original, Nil) =>
-        return Stream(program.withoutConstraints())
+        return Stream(program.assignmentsAsOriginals())
       case ProgramFormula.TreeUnwrap(tpe, original, head::tail) =>
         function match {
           case l@ADT(ADTType(adtid, tps), args) =>
@@ -185,8 +185,7 @@ object ReverseProgram extends lenses.Lenses {
     //Log(s"functionValue ($functionValue) != newOut ($newOut)")
 
     //Log.prefix(s"@return ") :=
-    interleave {
-      function.getType match {
+    def maybeWrappedSolutions = function.getType match {
         case a: ADTType if !newOut.isInstanceOf[Variable] =>
           function match {
             case l: Let => Stream.empty[ProgramFormula] // No need to wrap a let expression, we can always do this later. Indeed,
@@ -207,7 +206,7 @@ object ReverseProgram extends lenses.Lenses {
           }
         case _ => Stream.empty[ProgramFormula]
       }
-    } {
+    def originalSolutions =
       function match {
         // Values (including lambdas) should be immediately replaced by the new value
         case l: Literal[_] =>
@@ -223,7 +222,7 @@ object ReverseProgram extends lenses.Lenses {
               Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
             case _ =>
               newOutProgram match {
-                case ProgramFormula.StringInsert(left, inserted, right) =>
+                case ProgramFormula.StringInsert(left, inserted, right, direction) =>
                   Stream(ProgramFormula(StringLiteral(left + inserted + right)))
                 case _ =>
                   throw new Exception("Don't know what to do, not a Literal, a Variable, a let, a string insertion or deletion: "+newOut)
@@ -350,7 +349,7 @@ object ReverseProgram extends lenses.Lenses {
         // Variables are assigned the given value.
         case v@Variable(id, tpe, flags) =>
           newOutProgram match {
-            case ProgramFormula.StringInsert(left, inserted, right) =>
+            case ProgramFormula.StringInsert(left, inserted, right, direction) =>
               Stream(ProgramFormula(v, Formula(v === StringLiteral(left + inserted + right))))
             case _ =>
               Stream(ProgramFormula(v, Formula(v === newOut) combineWith newOutFormula))
@@ -432,31 +431,8 @@ object ReverseProgram extends lenses.Lenses {
               }
             case ProgramFormula(newOut, newOutFormula) =>
               newOut match {
-                case Variable(ProgramFormula.subtree, tpe, s) =>
-                  Log("Var subtree")
-                  val treeVar = Variable(ProgramFormula.tree, tpe, s)
-                  newOutFormula.findConstraintValue(treeVar) match {
-                    case Some(originalTree) =>
-                      originalTree match {
-                        case Variable(vid, _, _) if vid == ProgramFormula.subtree => // End of it, no change to make.
-                          return Stream(program.withoutConstraints())
-                        case ADT(adtType2@ADTType(tp2, tpArgs2), argsIn2) =>
-                          if (adtType != adtType2) throw new Exception(s"Not the same type $adtType != $adtType2")
-                          val i = argsIn2.indexWhere(argIn => exprOps.exists {
-                            case k if k == Variable(ProgramFormula.subtree, tpe, s) => true
-                            case _ => false
-                          }(argIn))
-                          if (i == -1) throw new Exception(s"Could not find subtree in: $originalTree")
-
-                          repair(program.subExpr(argsIn(i)),
-                            ProgramFormula(newOut, treeVar === argsIn2(i)))
-                        case _ => throw new Exception(s"Not an ADT or the subtree: $originalTree")
-                      }
-                    case None => throw new Exception(s"Could not find value of ${ValDef(ProgramFormula.tree, tpe, s)} in $newOutFormula")
-                  }
                 case v: Variable =>
-                  Log("Var")
-                  Stream(ProgramFormula(v))
+                  Stream(newOutProgram)
                 case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
                   Log("ADT 2")
                   val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
@@ -655,7 +631,20 @@ object ReverseProgram extends lenses.Lenses {
           Log(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")
           Stream.empty
       }
-    } #::: {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOutProgram):\n~>")
+
+    (if(program.isWrappingLowPriority) {
+      interleave {
+        originalSolutions
+      } {
+        maybeWrappedSolutions
+      }
+    } else {
+      interleave {
+        maybeWrappedSolutions
+      } {
+        originalSolutions
+      }
+    }) #::: {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOutProgram):\n~>")
   }
 
   /** Given a sequence of (arguments expression, expectedValue),
@@ -771,7 +760,7 @@ object ReverseProgram extends lenses.Lenses {
     val function = program.expr
     if(functionValue == newOut) {
       Log("@return unwrapped")
-      return Stream(program.withoutConstraints())
+      return Stream(program.assignmentsAsOriginals())
     }
 
     (function, functionValue) match {
@@ -800,7 +789,7 @@ object ReverseProgram extends lenses.Lenses {
     val function = program.expr
     if(functionValue == newOut) {
       Log("@return unwrapped")
-      return Stream(program.withoutConstraints())
+      return Stream(program.assignmentsAsOriginals())
     }
 
     object StringConcats {

@@ -75,27 +75,25 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         )
       )
 
-    val expectedOut4 = StringInsert("Hello ", "big", " world")
-    val pfun4_l = repairProgramList(pfun, expectedOut4, 2).take(2).toList
-    pfun4_l.map{
+    pfun repairFrom StringInsert("Hello ", "big", " world", StringInsert.InsertToLeft) match {
       case Let(a, StringLiteral("Hello big"), Let(b, StringLiteral(" world"), va +& vb)) =>
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
-        1
+    }
+    pfun repairFrom StringInsert("Hello ", "big", " world", StringInsert.InsertToRight) match {
       case Let(a, StringLiteral("Hello "), Let(b, StringLiteral("big world"), va +& vb)) =>
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
-        2
-    }.sum shouldEqual 3
+    }
 
-    pfun repairFrom StringInsert("Hello", " big", "  world") match {
+    pfun repairFrom StringInsert("Hello", " big", "  world", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello big "
         t shouldEqual " world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    pfun repairFrom StringInsert("Hello  ", "big ", "world") match {
+    pfun repairFrom StringInsert("Hello  ", "big ", "world", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello "
         t shouldEqual " big world"
@@ -114,7 +112,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         )
       )
 
-    pfun repairFrom StringInsert("Hello big", " big", " world") match {
+    pfun repairFrom StringInsert("Hello big", " big", " world", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello "
         t shouldEqual "big big "
@@ -123,7 +121,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         vb shouldEqual b.toVariable
         vc shouldEqual c.toVariable
     }
-    pfun repairFrom StringInsert("Hello"," big"," big world") match {
+    pfun repairFrom StringInsert("Hello"," big"," big world", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello big "
         t shouldEqual "big "
@@ -137,13 +135,13 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("Nested string insert direct") {
     val pfun = "Hello " +& "big " +& "world"
 
-    pfun repairFrom StringInsert("Hello big", " big", " world") match {
+    pfun repairFrom StringInsert("Hello big", " big", " world", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual "big big "
         u shouldEqual "world"
     }
-    pfun repairFrom StringInsert("Hello"," big"," big world") match {
+    pfun repairFrom StringInsert("Hello"," big"," big world", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello big "
         t shouldEqual "big "
@@ -154,12 +152,22 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("String insert direct test space weight") {
     val pfun = "Hello " +& "world"
 
-    pfun repairFrom StringInsert("Hello ", " ", "world") match {
+    pfun repairFrom StringInsert("Hello ", " ", "world", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) =>
         s shouldEqual "Hello  "
         t shouldEqual "world"
     }
-    pfun repairFrom StringInsert("Hello ", "big", "world") match {
+    pfun repairFrom StringInsert("Hello ", " ", "world", StringInsert.InsertToRight) match {
+      case StringLiteral(s) +& StringLiteral(t) =>
+        s shouldEqual "Hello "
+        t shouldEqual " world"
+    }
+    pfun repairFrom StringInsert("Hello ", "big", "world", StringInsert.InsertAutomatic) match {
+      case StringLiteral(s) +& StringLiteral(t) =>
+        s shouldEqual "Hello "
+        t shouldEqual "bigworld"
+    }
+    pfun repairFrom StringInsert("Hello ", "big", "world", StringInsert.InsertToLeft) match {
       case StringLiteral(s) +& StringLiteral(t) =>
         s shouldEqual "Hello "
         t shouldEqual "bigworld"
@@ -167,43 +175,53 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
 
     val pfun2 = "Hello" +& " world"
 
-    pfun2 repairFrom StringInsert("Hello", " ", " world") match {
+    pfun2 repairFrom StringInsert("Hello", " ", " world", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) =>
         s shouldEqual "Hello"
         t shouldEqual "  world"
     }
-    pfun2 repairFrom StringInsert("Hello", "big", " world") match {
+    pfun2 repairFrom StringInsert("Hello", " ", " world", StringInsert.InsertToLeft) match {
+      case StringLiteral(s) +& StringLiteral(t) =>
+        s shouldEqual "Hello "
+        t shouldEqual " world"
+    }
+    pfun2 repairFrom StringInsert("Hello", "big", " world", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) =>
         s shouldEqual "Hellobig"
         t shouldEqual " world"
+    }
+    pfun2 repairFrom StringInsert("Hello", "big", " world", StringInsert.InsertToRight) match {
+      case StringLiteral(s) +& StringLiteral(t) =>
+        s shouldEqual "Hello"
+        t shouldEqual "big world"
     }
   }
 
   test("Nested string modification direct") {
     val pfun = "Hello " +& "big " +& "world"
 
-    pfun repairFrom StringInsert("Hello big ","change","") match {
+    pfun repairFrom StringInsert("Hello big ","change","", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual "big "
         u shouldEqual "change"
     }
 
-    pfun repairFrom StringInsert("","Good afternoon ","big world") match {
+    pfun repairFrom StringInsert("","Good afternoon ","big world", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Good afternoon "
         t shouldEqual "big "
         u shouldEqual "world"
     }
 
-    pfun repairFrom StringInsert("Hello ","great"," world") match {
+    pfun repairFrom StringInsert("Hello ","great"," world", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual "great "
         u shouldEqual "world"
     }
 
-    repairProgramList(pfun, StringInsert("Hello", ", amazing", " world"), 2).take(2).toList.map(x => x match {
+    repairProgramList(pfun, StringInsert("Hello", ", amazing", " world", StringInsert.InsertAutomatic), 2).take(2).toList.map(x => x match {
       case StringLiteral("Hello, amazing") +& StringLiteral(" ") +& StringLiteral("world") =>
         1
       case StringLiteral("Hello") +& StringLiteral(", amazing ") +& StringLiteral("world") =>
@@ -220,21 +238,21 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         )
       )
     // "Hello big  big world"
-    pfun repairFrom StringInsert("Hello",""," big world") match {
+    pfun repairFrom StringInsert("Hello",""," big world", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello"
         t shouldEqual " big world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    pfun repairFrom StringInsert("Hello big ","","world") match {
+    pfun repairFrom StringInsert("Hello big ","","world", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello big "
         t shouldEqual "world"
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    pfun repairFrom StringInsert("Hello ","", "world") match {
+    pfun repairFrom StringInsert("Hello ","", "world", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello "
         t shouldEqual "world"
@@ -253,7 +271,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         )
       )
     // "Hello big big world"
-    pfun repairFrom StringInsert("Hello big",""," world") match {
+    pfun repairFrom StringInsert("Hello big",""," world", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello big"
         t shouldEqual " "
@@ -262,7 +280,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         vb shouldEqual b.toVariable
         vc shouldEqual c.toVariable
     }
-    pfun repairFrom StringInsert("Hello ","","world") match {
+    pfun repairFrom StringInsert("Hello ","","world", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello "
         t shouldEqual ""
@@ -271,7 +289,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         vb shouldEqual b.toVariable
         vc shouldEqual c.toVariable
     }
-    pfun repairFrom StringInsert("Hello ","","ld") match {
+    pfun repairFrom StringInsert("Hello ","","ld", StringInsert.InsertAutomatic) match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), Let(c, StringLiteral(u), va +& vb +& vc))) =>
         s shouldEqual "Hello "
         t shouldEqual ""
@@ -285,19 +303,19 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("Nested string delete direct") {
     val pfun = "Hello big " +& "big " +& "world"
     // "Hello big big world"
-    pfun repairFrom StringInsert("Hello big",""," world") match {
+    pfun repairFrom StringInsert("Hello big",""," world", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello big"
         t shouldEqual " "
         u shouldEqual "world"
     }
-    pfun repairFrom StringInsert("Hello ","","world") match {
+    pfun repairFrom StringInsert("Hello ","","world", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual ""
         u shouldEqual "world"
     }
-    pfun repairFrom StringInsert("Hello ","","ld") match {
+    pfun repairFrom StringInsert("Hello ","","ld", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "Hello "
         t shouldEqual ""
@@ -306,23 +324,23 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("String insert choice") {
-    "\n" +& "Marion" +& "," repairFrom StringInsert("\n", "V", ",") match {
+    "\n" +& "Marion" +& "," repairFrom StringInsert("\n", "V", ",", StringInsert.InsertAutomatic) match {
       case StringLiteral("\n") +& StringLiteral("V") +& StringLiteral(",") =>
     }
 
-    "\n" +& "M" +& "a" repairFrom StringInsert("\n", "V", "a") match {
+    "\n" +& "M" +& "a" repairFrom StringInsert("\n", "V", "a", StringInsert.InsertAutomatic) match {
       case StringLiteral("\n") +& StringLiteral("V") +& StringLiteral("a") =>
     }
 
     val pfun = "(" +& "en" +& ")"
-    val pfun2 = pfun repairFrom StringInsert("(","f",")")
+    val pfun2 = pfun repairFrom StringInsert("(","f",")", StringInsert.InsertAutomatic)
     pfun2 match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "("
         t shouldEqual "f"
         u shouldEqual ")"
     }
-    pfun2 repairFrom StringInsert("(f","r",")") match {
+    pfun2 repairFrom StringInsert("(f","r",")", StringInsert.InsertAutomatic) match {
       case StringLiteral(s) +& StringLiteral(t) +& StringLiteral(u) =>
         s shouldEqual "("
         t shouldEqual "fr"

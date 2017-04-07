@@ -12,12 +12,6 @@ import perfect.StringConcatExtended._
 object ProgramFormula {
   import Utils._
   import InoxConvertible._
-  // Contains the original value of the program to repair.
-  val tree = FreshIdentifier("tree") // Serves as a placeholder to identify where the tree was inserted.
-
-  // For semantic unwrap
-  val subtree = FreshIdentifier("subtree")
-
   // For semantic insert for string
   // ProgramFormula(leftTreeStr +& "The Insertion" +& rightTreeStr,
   //   tree == leftTreeStr +& rightTreeStr && leftTreeStr == "String to the left && rightTreeStr = "String to the right"
@@ -63,28 +57,60 @@ object ProgramFormula {
   }
 
   /** To build and extract a StringInsert specification. Works for modifications as well */
-  object StringInsert {
+  object StringInsert extends Enumeration {
     private val leftName = "leftTreeStr"
     private val rightName = "rightTreeStr"
+    type InsertDirection = Value
+    val InsertToLeft, InsertToRight, InsertAutomatic = Value
 
-    def apply(left: Expr, s: Expr, right: Expr): ProgramFormula = {
+    /** Need a preference to attach to left or right. If not specified, will try to infer it from the expressions
+      * @param left The untouched string to the left of the insertion (may have removals)
+      * @param s The newly inserted string
+      * @param right The untouched string to the right of the insertion (may have removals)
+      * @param direction -1 if the insertion should be inserted to left, 1 to right, 0 if automatically guessed.
+      **/
+    def apply(left: String, s: String, right: String, direction: InsertDirection): ProgramFormula = {
       val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
       val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
-      ProgramFormula(
-        leftTreeStr +& s +& rightTreeStr,
-        // tree === leftTreeStr +& rightTreeStr && (if not modificaiton)
-        leftTreeStr === left && rightTreeStr === right
-      )
+      val rDirection = if(direction != InsertAutomatic) direction else {
+        val leftJump = ReverseProgram.StringConcatReverser.typeJump(left, s)
+        val rightJump = ReverseProgram.StringConcatReverser.typeJump(s, right)
+        if(leftJump < rightJump) {
+          InsertToLeft
+        } else {
+          InsertToRight
+        }
+      }
+
+      rDirection match {
+        case InsertToLeft =>
+          ProgramFormula(
+            StringLiteral(left) +& StringLiteral(s) +& rightTreeStr,
+            // tree === leftTreeStr +& rightTreeStr && (if not modificaiton)
+            rightTreeStr === StringLiteral(right)
+          )
+        case InsertToRight =>
+          ProgramFormula(
+            leftTreeStr +& StringLiteral(s) +& StringLiteral(right),
+            leftTreeStr === StringLiteral(left)
+          )
+
+      }
+
     }
 
-    def unapply(f: ProgramFormula): Option[(String, String, String)] = {
+    def unapply(f: ProgramFormula): Option[(String, String, String, InsertDirection)] = {
       f.expr match {
-        case (leftTreeStr@Variable(idLeft, StringType, _)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(idRight, StringType, _))
-          if idLeft.name == leftName && idRight.name == rightName
+        case (StringLiteral(leftBefore)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(idRight, StringType, _))
+          if idRight.name == rightName
+        =>
+          val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
+          Some((leftBefore, inserted, rightBefore, InsertToLeft))
+        case (leftTreeStr@Variable(idLeft, StringType, _)) +& StringLiteral(inserted) +& StringLiteral(rightBefore)
+          if idLeft.name == leftName
         =>
           val StringLiteral(leftBefore) = f.formula.findConstraintValue(leftTreeStr).getOrElse(return None)
-          val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
-          Some((leftBefore, inserted, rightBefore))
+          Some((leftBefore, inserted, rightBefore, InsertToRight))
         case _ => None
       }
     }
@@ -185,7 +211,7 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
   lazy val freeVars: Set[ValDef] = exprOps.variablesOf(expr).map(_.toVal)
   lazy val unchanged: Set[ValDef] = freeVars -- formula.varsToAssign
 
-  override def toString = expr.toString + s" [$formula]" + (if(canDoWrapping) " (wrapping enabled)" else "")
+  override def toString = expr.toString + s" [$formula]" + (if(canDoWrapping) " (wrapping enabled)" else "") + (if(isWrappingLowPriority) " (avoid wrap)" else "")
   var canDoWrapping = false
 
   def wrappingEnabled: this.type = {
@@ -246,14 +272,21 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
     ProgramFormula(newProgram, formula)
   }
 
-  /** Replaces the expression with another, for defining sub-problems mostly. */
-  def subExpr(f: Expr): ProgramFormula = {
-    ProgramFormula(f, formula)
+  var isWrappingLowPriority: Boolean = false
+
+  def wrappingLowPriority(b: Boolean = true): this.type = {
+    isWrappingLowPriority = true
+    this
   }
 
-  def withoutConstraints(): ProgramFormula = {
-    ProgramFormula(expr)
+  /** Replaces the expression with another, for defining sub-problems mostly. */
+  def subExpr(f: Expr): ProgramFormula = {
+    ProgramFormula(f, formula).wrappingLowPriority(isWrappingLowPriority)
   }
+
+  /*def withoutConstraints(): ProgramFormula = {
+    ProgramFormula(expr)
+  }*/
 
   /** Returns the original assignments marked as original
     * Require known to be set. */
@@ -263,6 +296,6 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
 
   /** Augment this expr with the given formula */
   def combineWith(f: Formula): ProgramFormula = {
-    ProgramFormula(expr, formula combineWith f)
+    ProgramFormula(expr, formula combineWith f).wrappingLowPriority(isWrappingLowPriority)
   }
 }
