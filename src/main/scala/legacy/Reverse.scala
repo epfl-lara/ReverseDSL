@@ -85,8 +85,8 @@ object StringAppendReverse extends ((String, String) &~> String) {
       case None =>
         StringConcat(i.getField(_1), i.getField(_2)) === o
       case Some((a, b)) =>
-          StringConcat(i.getField(_1), E(b)) === o && E(Utils.maybe)(i.getField(_2) === E(b)) ||
-          StringConcat(E(a), i.getField(_2)) === o && E(Utils.maybe)(i.getField(_1) === E(a)) ||
+          StringConcat(i.getField(_1), E(b)) === o && E(Utils.original)(i.getField(_2) === E(b)) ||
+          StringConcat(E(a), i.getField(_2)) === o && E(Utils.original)(i.getField(_1) === E(a)) ||
           StringConcat(i.getField(_1), i.getField(_2)) === o
     }
     Constraint[(String, String)](expr)
@@ -106,8 +106,8 @@ object StringAppendReverse extends ((String, String) &~> String) {
       case None =>
         StringConcat(i.getField(_1), i.getField(_2)) === o
       case Some((a, b)) =>
-        StringConcat(i.getField(_1), E(b)) === o && E(Utils.maybe)(i.getField(_2) === E(b)) ||
-          StringConcat(E(a), i.getField(_2)) === o && E(Utils.maybe)(i.getField(_1) === E(a)) ||
+        StringConcat(i.getField(_1), E(b)) === o && E(Utils.original)(i.getField(_2) === E(b)) ||
+          StringConcat(E(a), i.getField(_2)) === o && E(Utils.original)(i.getField(_1) === E(a)) ||
           StringConcat(i.getField(_1), i.getField(_2)) === o
     }
     Constraint[(String, String)](expr)
@@ -126,7 +126,7 @@ object IntPlusReverse extends ((Int, Int) &~> Int) {
       case None =>
         i.getField(_1) + i.getField(_2) === o
       case Some((a, b)) =>
-        (i.getField(_1) + i.getField(_2) === o) && E(Utils.maybe)(i.getField(_1) === E(a)) && E(Utils.maybe)(i.getField(_2) === E(b))
+        (i.getField(_1) + i.getField(_2) === o) && E(Utils.original)(i.getField(_1) === E(a)) && E(Utils.original)(i.getField(_2) === E(b))
     }
     Constraint[(Int, Int)](expr)
   }

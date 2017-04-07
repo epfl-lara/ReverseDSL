@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 class ReverseProgramTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import StringConcatExtended._
-  import perfect.ReverseProgram.ProgramFormula
+  import perfect.ProgramFormula
   import ProgramFormula.{StringInsert, ListInsert}
 
   val build = variable[String => Element]("build")
@@ -456,73 +456,71 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   test("Reverse map") {
     val ap = valdef[String]("a")
     object Map {
-      def apply(l: List[String], v: Variable => Expr) = 
-        E(Utils.map)(String, String)(
-          l: Expr, \("ap"::String)(av => v(av))
-        )
+      def apply(l: List[String], v: Variable => Expr) =
+      E(Utils.map)(String, String)(
+      l: Expr, \("ap"::String)(av => v(av))
+      )
 
       def unapply(e: Expr) = e match {
         case FunctionInvocation(Utils.map, Seq(_, _),
-          Seq(l, Lambda(Seq(vd), body))) => Some((l, vd.toVariable, body))
+      Seq(l, Lambda(Seq(vd), body))) => Some((l, vd.toVariable, body))
         case _ => None
       }
     }
-
-    import ReverseProgram.ListLiteral
-
-    val pfStr4 = StringInsert("- ", "B", "")
-    Map(List("A","","C"), av => "- " +& av) repairFrom
-      ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr4.expr), StringType), List("- C")), pfStr4.formula.unknownConstraints) shouldProduce
-      _List[String]("- A", "- B", "- C")
-
-    val pfStr3 = StringInsert("- B", "o", "")
-    Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-      ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3.expr), StringType), List("- C", "- D")), pfStr3.formula.unknownConstraints) shouldProduce
-      _List[String]("- A", "- Bo", "- C", "- D")
+    val pfun = Map(List("Margharita", "Salami", "Royal"), av => "Pizza " +& av)
+    pfun shouldProduce
+       _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Royal") repairFrom
+       _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal") match {
+      case Map(list, v, body) =>
+        list shouldEqual _List[String]("Margharita", "Salami", "Sushi", "Royal")
+    }
 
     val pfStr2 = StringInsert("", "*", " C")
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-      ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula.unknownConstraints) shouldProduce
+    ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula.unknownConstraints) shouldProduce
     _List[String]("* A", "* B", "* C", "* D")
 
+
     Map(List("A","B","D","E"), av => "- " +& av) repairFrom
-      ListInsert(StringType, List("- A", "- B"), List("- C"), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
+    ListInsert(StringType, List("- A", "- B"), List("- C"), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
     _List[String]("- A", "- B", "- C", "- D", "- E")
+
+    val pfStr4 = StringInsert("- ", "B", "")
+    Map(List("A","","C"), av => "- " +& av) repairFrom
+    ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr4.expr), StringType), List("- C")), pfStr4.formula.unknownConstraints) shouldProduce
+    _List[String]("- A", "- B", "- C")
+
+    val pfStr3 = StringInsert("- B", "o", "")
+    Map(List("A","B","C","D"), av => "- " +& av) repairFrom
+    ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3.expr), StringType), List("- C", "- D")), pfStr3.formula.unknownConstraints) shouldProduce
+    _List[String]("- A", "- Bo", "- C", "- D")
+
+
 
     val pfStr = StringInsert("- ", "E", "")
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-      ListInsert(StringType, List("- A", "- B"), List(), List(pfStr.expr), pfStr.formula.unknownConstraints) shouldProduce
+    ListInsert(StringType, List("- A", "- B"), List(), List(pfStr.expr), pfStr.formula.unknownConstraints) shouldProduce
     _List[String]("- A", "- B", "- E")
 
     Map(List("A","B","D","E"), av => "- " +& av) repairFrom
-      ListInsert(StringType, List("- A", "- B"), List(""), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
+    ListInsert(StringType, List("- A", "- B"), List(""), List("- D", "- E"), BooleanLiteral(true)) shouldProduce
     _List[String]("- A", "- B", "- ", "- D", "- E")
 
 
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-      ListInsert(StringType, List("- A", "- B", "- C", "- D"), List(""), List(), BooleanLiteral(true)) shouldProduce
+    ListInsert(StringType, List("- A", "- B", "- C", "- D"), List(""), List(), BooleanLiteral(true)) shouldProduce
     _List[String]("- A", "- B", "- C", "- D", "- ")
 
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-      ListInsert(StringType, List(), List(""), List("- A", "- B", "- C", "- D"), BooleanLiteral(true)) shouldProduce
+    ListInsert(StringType, List(), List(""), List("- A", "- B", "- C", "- D"), BooleanLiteral(true)) shouldProduce
     _List[String]("- ", "- A", "- B", "- C", "- D")
 
-
-    val pfun = Map(List("Margharita", "Salami", "Royal"), av => "Pizza " +& av)
-
-    pfun shouldProduce _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Royal")
-    pfun repairFrom _List[String]("Pizza Margharita", "Pizza Salami", "Pizza Sushi", "Pizza Royal") match {
-      case Map(list, v, body) =>
-        list shouldEqual _List[String]("Margharita", "Salami", "Sushi", "Royal")
-    }
     pfun repairFrom _List[String]("The pizza Margharita", "Pizza Salami","Pizza Royal") shouldProduce
-    _List[String]("The pizza Margharita", "The pizza Salami", "The pizza Royal") match {
+      _List[String]("The pizza Margharita", "The pizza Salami", "The pizza Royal") match {
       case Map(list, vd, prefix +& _) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Royal")
         prefix shouldEqual StringLiteral("The pizza ")
     }
-
-
   }
 
   test("Reverse flatmap") {
@@ -537,10 +535,10 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       )
 
     checkProg(_List[String]("Margharita", "Margharita with mushrooms", "Royal", "Salami", "Salami with mushrooms"), pfun)
-    repairProgram(pfun, _List[String]("Margharita", "Sushi with mushrooms", "Royal", "Salami", "Salami with mushrooms")) shouldProduce
-                        _List[String]("Sushi",      "Sushi with mushrooms", "Royal", "Salami", "Salami with mushrooms")
     repairProgram(pfun, _List[String]("Margharita", "Margharita with champignons", "Royal", "Salami", "Salami with mushrooms")) shouldProduce
-                        _List[String]("Margharita", "Margharita with champignons", "Royal", "Salami", "Salami with champignons")
+      _List[String]("Margharita", "Margharita with champignons", "Royal", "Salami", "Salami with champignons")
+    repairProgram(pfun, _List[String]("Margharita", "Sushi with mushrooms", "Royal", "Salami", "Salami with mushrooms")) shouldProduce
+      _List[String]("Sushi",      "Sushi with mushrooms", "Royal", "Salami", "Salami with mushrooms")
     repairProgram(pfun, _List[String]("Margharita", "Margharita with mushrooms", "Royalty", "Salami", "Salami with mushrooms")) shouldProduce
                         _List[String]("Margharita", "Margharita with mushrooms", "Royalty", "Royalty with mushrooms", "Salami", "Salami with mushrooms")
 
@@ -708,10 +706,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
   test("Tuple select repair") {
     import ImplicitTuples._
-    val pfun = 
-      ADTSelector(
-        ADT(T(tuple2)(StringType, StringType),
-          Seq(inoxExprOf[String]("Hello"), inoxExprOf[String]("world"))), _1)
+    val pfun =
+      _Tuple2(String, String)("Hello", "world").getField(_1)
 
     checkProg("Hello", pfun)
     checkProg("Dear", repairProgram(pfun, "Dear")) match {
@@ -724,9 +720,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   test("Tuple select repair preserving input programs") {
     import ImplicitTuples._
     val pfun = 
-      ADTSelector(
-        ADT(T(tuple2)(StringType, StringType),
-          Seq("Hello" +& ", ", "world")), _1)
+      _Tuple2(String, String)("Hello" +& ", ", "world").getField(_1)
 
     checkProg("Hello, ", pfun)
     checkProg("Hello! ", repairProgram(pfun, "Hello! ")) match {
@@ -743,7 +737,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     val tp = T(tuple2)(StringType, StringType)
     val a = ValDef(FreshIdentifier("a"), tp)
     val pfun = 
-      let(a, ADT(tp, Seq("Mikael", " ")))(av =>
+      let(a, _Tuple2(String, String)("Mikael", " "))(av =>
         //StringConcat(StringConcat(ADTSelector(av, _1), ADTSelector(av, _2)), ADTSelector(av, _1))
         (ADTSelector(av, _1) +& ADTSelector(av, _2)) +& ADTSelector(av, _1)
       )

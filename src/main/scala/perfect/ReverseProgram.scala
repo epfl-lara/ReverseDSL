@@ -17,408 +17,9 @@ object ReverseProgram extends lenses.Lenses {
   type OutExpr = Expr
   type Cache = HashMap[Expr, Expr]
 
-  object ProgramFormula {
-    import inox.trees.dsl._
-    // Contains the original value of the program to repair.
-    val tree = FreshIdentifier("tree") // Serves as a placeholder to identify where the tree was inserted.
-    
-    // For semantic unwrap
-    val subtree = FreshIdentifier("subtree")
-    
-    // For semantic insert for string
-    // ProgramFormula(leftTreeStr +& "The Insertion" +& rightTreeStr,
-    //   tree == leftTreeStr +& rightTreeStr && leftTreeStr == "String to the left && rightTreeStr = "String to the right"
-
-    def apply(e: Expr, f: Expr): ProgramFormula = ProgramFormula(e, Formula(f))
-
-    object TreeWrap {
-      private val treeName = "treeWrap"
-      def apply(tree: Expr, wrapper: Expr => Expr)(implicit symbols: Symbols): ProgramFormula = {
-        val tpe = tree.getType
-        val treeVar = Variable(FreshIdentifier(treeName, true), tpe, Set())
-        ProgramFormula(Application(Lambda(Seq(treeVar.toVal), wrapper(treeVar)), Seq(tree)))
-      }
-      def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, Expr => Expr)] = {
-        pf.expr match {
-          case Application(Lambda(Seq(treeVal), wtree), Seq(original)) if treeVal.id.name == treeName =>
-            Some((original, (vr: Expr) => exprOps.replaceFromSymbols(Map(treeVal -> vr),wtree)))
-          case _ => None
-        }
-      }
-    }
-
-    object TreeUnwrap {
-      private val unwrappedName = "unwrap"
-      def apply(tpe: Type, original: Expr, argsInSequence: List[Identifier]): ProgramFormula = {
-        val unwrappedVar = Variable(FreshIdentifier(unwrappedName, true), tpe, Set())
-        ProgramFormula(unwrappedVar, unwrappedVar === (original /: argsInSequence){ case (e, i) => ADTSelector(e, i)}  )
-      }
-      def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Type, Expr, List[Identifier])] = {
-        pf.expr match {
-          case v@Variable(id, tpe, _) if id.name == unwrappedName =>
-            val adtselectors = pf.formula.findConstraintValue(v).getOrElse(return None)
-            def unbuild(e: Expr): (Type, Expr, List[Identifier]) = e match {
-              case ADTSelector(e, i) =>
-                val (t, res, l) = unbuild(e)
-                (t, res, l :+ i)
-              case res => (tpe, res, Nil)
-            }
-            Some(unbuild(adtselectors))
-          case _ => None
-        }
-      }
-    }
-
-    /** To build and extract a StringInsert specification. Works for modifications as well */
-    object StringInsert {
-      private val leftName = "leftTreeStr"
-      private val rightName = "rightTreeStr"
-
-      def apply(left: Expr, s: Expr, right: Expr): ProgramFormula = {
-         val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
-        val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
-        ProgramFormula(
-          leftTreeStr +& s +& rightTreeStr,
-          // tree === leftTreeStr +& rightTreeStr && (if not modificaiton)
-          leftTreeStr === left && rightTreeStr === right
-        )
-      }
-
-      def unapply(f: ProgramFormula): Option[(String, String, String)] = {
-        f.expr match {
-          case (leftTreeStr@Variable(idLeft, StringType, _)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(idRight, StringType, _))
-            if idLeft.name == leftName && idRight.name == rightName
-          =>
-            val StringLiteral(leftBefore) = f.formula.findConstraintValue(leftTreeStr).getOrElse(return None)
-            val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
-            Some((leftBefore, inserted, rightBefore))
-          case _ => None
-        }
-      }
-    }
-
-    object ListInsert {
-      private val leftName = "leftTreeList"
-      private val rightName = "rightTreeList"
-
-      def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr], remaining: Expr/* = BooleanLiteral(true)*/): ProgramFormula = {
-        val leftTreeList  = Variable(FreshIdentifier(leftName,  true), T(Utils.list)(tpe), Set())
-        val rightTreeList = Variable(FreshIdentifier(rightName, true), T(Utils.list)(tpe), Set())
-        ProgramFormula(
-          E(Utils.listconcat)(tpe)(E(Utils.listconcat)(tpe)(
-            leftTreeList,
-            ListLiteral(inserted, tpe)),
-            rightTreeList),
-          // tree === E(Utils.listconcat)(tpe)(leftTreeList, rightTreeList)
-          leftTreeList === ListLiteral(leftUnmodified, tpe) && rightTreeList === ListLiteral(rightUnmodified, tpe) &<>& remaining
-        )
-      }
-
-      def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr], Expr)] = {
-        f.expr match {
-          case FunctionInvocation(Utils.listconcat, Seq(tpe0), Seq(
-          FunctionInvocation(Utils.listconcat, Seq(tpe1), Seq(
-            leftTreeList@Variable(idLeft, ADTType(Utils.list, Seq(tpe2)), _),
-            ListLiteral(inserted, tpe3))),
-            (rightTreeList@Variable(idRight, ADTType(Utils.list, Seq(tpe4)), _))))
-            if idLeft.name == leftName && idRight.name == rightName && tpe0 == tpe1 && tpe1 == tpe2 && tpe2 == tpe3 && tpe3 == tpe4
-          =>
-            val ListLiteral(leftBefore, _) = f.formula.findConstraintValue(leftTreeList).getOrElse(return None)
-            val ListLiteral(rightBefore, _) = f.formula.findConstraintValue(rightTreeList).getOrElse(return None)
-            val Formula(remaining) = f.formula.withoutFirstConstraintOn(leftTreeList).withoutFirstConstraintOn(rightTreeList)
-            Some((tpe1, leftBefore, inserted, rightBefore, remaining))
-          case _ => None
-        }
-      }
-    }
-
-    // Used to extract clone and paste expressions, when paste is to the right of the clone.
-    object CloneAndPasteRight {
-      val cloneName = "clone"
-      val pasteName = "paste"
-
-      def apply(beforeCloneValue: Expr, cloneValue: Expr, betweenClonePasteValue: Expr, afterPasteValue: Expr): ProgramFormula = {
-        val clone = Variable(FreshIdentifier(cloneName, true), StringType, Set())
-        val paste = Variable(FreshIdentifier(pasteName, true), StringType, Set())
-
-        ProgramFormula(
-          beforeCloneValue +& clone +& betweenClonePasteValue +& paste +& afterPasteValue,
-          clone === cloneValue && paste === clone
-        )
-      }
-
-      def unapply(pf: ProgramFormula): Option[(String, String, String, String)] = {
-        pf.expr match {
-          case StringLiteral(bcvalue) +& (clone@Variable(id, _, _)) +& StringLiteral(bcpvalue) +& (paste@Variable(id2, _, _)) +& StringLiteral(apvalue)
-            if id.name == cloneName && id2.name == pasteName =>
-            val StringLiteral(cloneValue) = pf.formula.known(clone.toVal)
-            Some((bcvalue, cloneValue, bcpvalue, apvalue))
-          case _ => None
-        }
-      }
-    }
-
-    // Used to extract clone and paste expressions, when paste is to the left of the clone.
-    object CloneAndPasteLeft {
-      val cloneName = "clone"
-      val pasteName = "paste"
-
-      def apply(beforePasteValue: Expr, betweenPasteCloneValue: Expr, cloneValue: Expr, afterCloneValue: Expr): ProgramFormula = {
-        val clone = Variable(FreshIdentifier(cloneName, true), StringType, Set())
-        val paste = Variable(FreshIdentifier(pasteName, true), StringType, Set())
-
-        ProgramFormula(
-          beforePasteValue +& paste +& betweenPasteCloneValue +& clone +& afterCloneValue,
-          clone === cloneValue && paste === clone
-        )
-      }
-
-      def unapply(pf: ProgramFormula): Option[(String, String, String, String)] = {
-        pf.expr match {
-          case StringLiteral(bpvalue) +& (paste@Variable(id2, _, _)) +& StringLiteral(bpcvalue) +& (clone@Variable(id, _, _)) +& StringLiteral(acvalue)
-            if id.name == cloneName && id2.name == pasteName =>
-            val StringLiteral(cloneValue) = pf.formula.known(clone.toVal)
-            Some((bpvalue, bpcvalue, cloneValue, acvalue))
-          case _ => None
-        }
-      }
-    }
-  }
-
-  case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
-    lazy val freeVars: Set[ValDef] = exprOps.variablesOf(expr).map(_.toVal)
-    lazy val unchanged: Set[ValDef] = freeVars -- formula.varsToAssign
-
-    override def toString = expr.toString + s" [$formula]" + (if(canDoWrapping) " (wrapping enabled)" else "")
-    var canDoWrapping = false
-
-    def wrappingEnabled: this.type = {
-      this.canDoWrapping = true
-      this
-    }
-
-    def withComputedValue(e: Expr): this.type = {
-      givenValue = Some(e)
-      this
-    }
-
-    // Can be set-up externally to bypass the computation of the function value.
-    // Must be set before a call to functionValue using .withComputedValue
-    private var givenValue: Option[Expr] = None
-
-    lazy val bodyDefinition: Option[Expr] = formula.assignments.map(f => f(expr))
-
-    def getFunctionValue(implicit cache: Cache, symbols: Symbols): Option[Expr] = {
-      givenValue match {
-        case Some(e) => givenValue
-        case None => formula.assignments match {
-          case Some(f) =>
-            val res = try evalWithCache(f(expr)) catch { case e: Exception => return None }
-            givenValue = Some(res)
-            givenValue
-          case _ => None
-        }
-      }
-    }
-
-    def functionValue(implicit cache: Cache, symbols: Symbols): Expr = {
-      givenValue match {
-        case Some(e) => e
-        case None =>
-          val res =
-          if((freeVars -- formula.known.keySet).isEmpty) {
-            evalWithCache(letm(formula.known) in expr)
-          } else {
-            throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known (only ${formula.known.keySet} are).\n$this")
-          }
-          givenValue = Some(res)
-          res
-      }
-    }
-
-    /** Uses the result of a programFormula by wrapping the expression */
-    def wrap(f: Expr => Expr): ProgramFormula = {
-      val newProgram = f(expr)
-      ProgramFormula(newProgram, formula)
-    }
-
-    /** Replaces the expression with another, for defining sub-problems mostly. */
-    def subExpr(f: Expr): ProgramFormula = {
-      ProgramFormula(f, formula)
-    }
-
-    def withoutConstraints(): ProgramFormula = {
-      ProgramFormula(expr)
-    }
-
-    /** Augment this expr with the given formula */
-    def combineWith(f: Formula): ProgramFormula = {
-      ProgramFormula(expr, formula combineWith f)
-    }
-  }
-
-  object Formula {
-    /** A deterministic constructor for Formula */
-    def apply(known: Map[ValDef, Expr]): Formula = {
-      val f = Formula(and(known.toSeq.map(x => x._1.toVariable === x._2): _*))
-      f.givenKnown = Some(known)
-      f
-    }
-    def apply(formulas: Seq[Formula]): Formula = {
-      (Formula() /: formulas)(_ combineWith _)
-    }
-  }
-
-  case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
-
-    // Can contain middle free variables.
-    lazy val varsToAssign = known.keySet ++ (exprOps.variablesOf(unknownConstraints).map(_.toVal))
-
-    //val TopLevelAnds(ands) = unknownConstraints
-    //assert(ands.forall(x => !x.isInstanceOf[Lambda]))
-
-    private var givenKnown: Option[Map[ValDef, Expr]] = None
-
-    lazy val known: Map[ValDef, Expr] = givenKnown.getOrElse{
-      val TopLevelAnds(ands) = unknownConstraints
-      ands.flatMap {
-        case Equals(v: Variable, e: Expr) if(Utils.isValue(e)) => // TODO: Try to remove "isValue"
-          List(v.toVal -> e)
-        case _ => Nil
-      }.toMap
-    }
-
-    /** If the constraints are complete, i.e. all variables can be defined, then we can generate a let-wrapper. */
-    lazy val assignments: Option[Expr => Expr] = {
-      def rec(constraints: List[Expr], seen: Set[Variable]): Option[Expr => Expr] = {
-        if(constraints == Nil) Some(x => x) else {
-          constraints.collectFirst[(Expr => Expr, Variable, Equals)]{
-            case equ@Equals(v: Variable, e: Expr) if (exprOps.variablesOf(e) -- seen).isEmpty =>
-              ((x: Expr) => Let(v.toVal, e, x), v, equ)
-            case equ@Equals(e: Expr, v: Variable) if (exprOps.variablesOf(e) -- seen).isEmpty =>
-              ((x: Expr) => Let(v.toVal, e, x), v, equ)
-          }.flatMap{ fve => rec(constraints.filter(x => x != fve._3), seen + fve._2).map(
-              (g: Expr => Expr) => ((x: Expr) => fve._1(g(x))))
-          }
-        }
-      }
-      val TopLevelAnds(ands) = unknownConstraints
-      rec(ands.toList.filter(x => x != BooleanLiteral(true)), Set())
-    }
-
-    def combineWith(other: Formula): Formula = {
-      val TopLevelAnds(ands) = unknownConstraints &<>& other.unknownConstraints
-      Formula(and(ands.distinct :_*))
-    }
-
-    override def toString = "[" + unknownConstraints.toString() + "]"
-    private lazy val unknownConstraintsVars: Set[ValDef] = exprOps.variablesOf(unknownConstraints).map(_.toVal)
-
-    /** Returns an expression equal to the value of vd*/
-    def getOrElse(vd: ValDef, e: =>Expr): Expr = {
-      known.getOrElse(vd, {
-        if(varsToAssign(vd)) {
-          vd.toVariable
-        } else e // The expression is unchanged, we return the original expression
-      })
-    }
-
-    /** Finds the 'value' of a variable in the lhs of a constraint*/
-    def findConstraintValue(v: Variable): Option[Expr] = {
-      unknownConstraints match {
-        case TopLevelAnds(ands) =>
-          ands.collectFirst[Expr] {
-            case Equals(mapVar, value)
-              if mapVar == v => value
-          }.orElse{
-            ands.collectFirst[Expr] {
-              case FunctionInvocation(Utils.maybe, _, Seq(
-              Equals(mapVar, value))) if mapVar == v => value
-            }
-          }
-        case _ => None
-      }
-    }
-
-    def withoutFirstConstraintOn(v: Variable) = {
-      val f = unknownConstraints match {
-        case TopLevelAnds(ands) =>
-          ands.span{
-            case Equals(mapVar, value) if mapVar == v => false
-            case _ => true
-          } match {
-            case (before, head::after) => and(before ++ after : _*)
-            case (before, Nil) => and(before: _*)
-          }
-      }
-      Formula(f)
-    }
-
-    /** Finds the value of an element in a map, in the formula */
-    def findConstraintVariableOrLiteral(m: MapApply): Expr = m match {
-      case MapApply(v: Variable, key) =>
-        findConstraintValue(v) match {
-          case Some(FiniteMap(pairs, _, _, _)) =>
-            pairs.find(_._1 == key).map(_._2).getOrElse{
-              throw new Exception(s"Could not find key/value $v -> $key in "+unknownConstraints)
-            }
-          case _ =>
-            throw new Exception(s"Could not find key/value $v -> $key in "+unknownConstraints)
-        }
-      case MapApply(v: MapApply, k) =>
-        findConstraintVariableOrLiteral(MapApply(findConstraintVariableOrLiteral(v), k))
-      case _ => throw new Exception(s"Not a well formed MapApply: $m")
-    }
-
-    // The assignments and the formula containing the other expressions.
-    def determinizeAll(freeVariables: Seq[ValDef] = varsToAssign.toSeq)(implicit symbols: Symbols): Stream[Map[ValDef, Expr]] = {
-
-      Log(s"Trying to get all solutions for $varsToAssign of \n" + this)
-      //val freeVariables = varsToAssign.toSeq
-
-      unknownConstraints match {
-        case BooleanLiteral(true) => Stream(freeVariables.map(fv => fv -> known(fv)).toMap)
-        case BooleanLiteral(false) => Stream.empty
-        case _ =>
-          val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
-          //println(s"input is of type ${input.getType}")
-          val constraint = InoxConstraint(input === tupleWrap(freeVariables.map(_.toVariable)) && unknownConstraints && and(known.toSeq.map{ case (k, v) => k.toVariable === v} : _*))
-          Log(s"Solving for $constraint")
-          constraint.toStreamOfInoxExpr(input).map {
-            case Tuple(args) => freeVariables.zip(args).map{ case (fv: ValDef, expr: Expr) => fv -> expr }.toMap
-            case e if freeVariables.length == 1 =>
-              Map(freeVariables.head -> e)
-            case e =>
-              Log("other solution : " + e)
-              Map[ValDef, Expr]()
-          }
-      }
-    }
-
-    /* Force the evaluation of the constraints to evaluate an expression*/
-    def evalPossible(e: Expr)(implicit cache: Cache, symbols: Symbols): Stream[Expr] = {
-      for(assignment <- determinizeAll()) yield {
-        evalWithCache(letm(known ++ assignment) in e)
-      }
-    }
-  }
-
   import Utils._
   import InoxConvertible._
   lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
-
-  /** Automatic simplification of EXPR1 && EXPR2 if one is true.*/
-  implicit class BooleanSimplification(f: Expr) {
-    @inline def &<>&(other: Expr): Expr = other match {
-      case BooleanLiteral(true) => f
-      case BooleanLiteral(false) => other
-      case _ => f match {
-        case BooleanLiteral(true) => other
-        case BooleanLiteral(false) => f
-        case _ => f && other
-      }
-    }
-  }
 
   /** Returns the stream b if a is empty, else only a. */
   def ifEmpty[A](a: Stream[A])(b: =>Stream[A]): Stream[A] = {
@@ -514,7 +115,7 @@ object ReverseProgram extends lenses.Lenses {
     }
   }
 
-  private case class letm(v: Map[ValDef, Expr]) {
+  case class letm(v: Map[ValDef, Expr]) {
     @inline def in(res: Expr) = {
       (res /: v) {
         case (res, (key, value)) => let(key, value)(_ => res)
@@ -547,7 +148,7 @@ object ReverseProgram extends lenses.Lenses {
     val stackLevel = Thread.currentThread().getStackTrace.length
     Log(s"\n@repair$stackLevel(\n  $program\n, $newOutProgram)")
     if(function == newOut) return { Log("@return original without constraints");
-      Stream(program.withoutConstraints())
+      Stream(program.assignmentsAsOriginals())
     }
 
     // Accelerators
@@ -579,7 +180,7 @@ object ReverseProgram extends lenses.Lenses {
 
     if(!newOut.isInstanceOf[Variable] && !functionValue.isInstanceOf[FiniteMap] && functionValue == newOut) return {
       Log("@return original function");
-      Stream(program.withoutConstraints())
+      Stream(program.assignmentsAsOriginals())
     }
     //Log(s"functionValue ($functionValue) != newOut ($newOut)")
 
@@ -612,7 +213,7 @@ object ReverseProgram extends lenses.Lenses {
         case l: Literal[_] =>
           newOut match {
             case v: Variable => // Replacement with the variable newOut, with a maybe clause.
-              Stream(newOutProgram)
+              Stream(newOutProgram combineWith Formula(E(original)(v === l)))
             case l: Literal[_] => // Raw replacement
               Stream(newOutProgram)
             case m: MapApply =>
@@ -628,42 +229,40 @@ object ReverseProgram extends lenses.Lenses {
                   throw new Exception("Don't know what to do, not a Literal, a Variable, a let, a string insertion or deletion: "+newOut)
               }
           }
-        case l: FiniteSet =>
-          if(isValue(l) && newOut.isInstanceOf[FiniteSet]) {
-            val fs = newOut.asInstanceOf[FiniteSet]
-            Stream(newOutProgram)
+        case l: FiniteSet => // TODO: Need some rewriting to keep the variable's order.
+          lazy val evaledElements = l.elements.map{ e =>
+            (evalWithCache(letm(currentValues) in e), e)}
+          def insertElementsIfNeeded(fs: FiniteSet) = {
+            val expectedElements = fs.elements.toSet
+            val newElements = evaledElements.filter{
+              case (v, e) => expectedElements contains v
+            }.map(_._2) ++ expectedElements.filter(x =>
+              !evaledElements.exists(_._1 == x))
+            Stream(newOutProgram.subExpr(FiniteSet(newElements, fs.base)))
+          }
+
+          if(isValue(l) && (newOut.isInstanceOf[FiniteSet] || newOut.isInstanceOf[Variable])) { // We shuold keep the same order if possible.
+            optVar(newOut).flatMap(newOutFormula.findConstraintValue).getOrElse(newOut) match {
+              case fs: FiniteSet =>
+                insertElementsIfNeeded(fs)
+              case _ =>
+                Stream(newOutProgram)
+            }
           } else {
-            lazy val evaledElements = l.elements.map{ e =>
-              (evalWithCache(letm(currentValues) in e), e)}
-            newOut match {
+            optVar(newOut).flatMap(newOutFormula.findConstraintValue).getOrElse(newOut) match {
               case fs: FiniteSet =>
                 // Since there is no order, there is no point repairing expressions,
                 // only adding new ones and deleting old ones.
-                val expectedElements = fs.elements.toSet
-                val newElements = evaledElements.filter{
-                  case (v, e) => expectedElements contains v
-                }.map(_._2) ++ expectedElements.filter(x =>
-                  !evaledElements.exists(_._1 == x))
-                Stream(ProgramFormula(FiniteSet(newElements, fs.base)))
+                insertElementsIfNeeded(fs)
+
               case newOut => // Maybe it has a formula ?
-                val insertedElements = newOut match {
-                  case v: Variable => program.formula.findConstraintValue(v) match {
-                    case Some(fs: FiniteSet) =>
-                      fs.elements.filter{ e =>
-                        !evaledElements.exists(_._1 == e)
-                      }
-                    case _ => Nil
-                  }
-                  case _ => Nil
-                }
-                Stream(ProgramFormula(
-                  FiniteSet(l.elements ++ insertedElements, l.base)))
+                Stream(newOutProgram)
             }
           }
         case l: FiniteMap =>
           if(isValue(l) && (newOut.isInstanceOf[FiniteMap] || newOut.isInstanceOf[Variable])) {
             def reoderIfCanReorder(fm: FiniteMap) = {
-              if(fm.pairs.forall(x => isValue(x._1))) {
+              if(fm.pairs.forall(x => isValue(x._1))) { // Check that all the keys are values.
                 val inserted = fm.pairs.filter(x => l.pairs.forall(y => x._1 != y._1))
                 val fmUpdated = FiniteMap(l.pairs.flatMap {
                   case (key, value) => fm.pairs.collectFirst { case (k, v) if k == key => key -> v }
@@ -671,42 +270,43 @@ object ReverseProgram extends lenses.Lenses {
                 Stream(newOutProgram.subExpr(fmUpdated))
               } else Stream(newOutProgram)
             }
-            newOut match {
-              case v: Variable =>
-                // If v is a variable which has a finiteMap representation, we replace.
-                newOutFormula.findConstraintValue(v) match {
-                  case Some(fm: FiniteMap) => reoderIfCanReorder(fm)
-                  case _ => Stream(newOutProgram)
-                }
+            optVar(newOut).flatMap(newOutFormula.findConstraintValue).getOrElse(newOut) match {
               case fm: FiniteMap => reoderIfCanReorder(fm)
-              case _ => throw new Exception("Don't know what to do, not a Literal or a Variable " + newOut)
+              case newOut => Stream(newOutProgram)
             }
           } else {
             // Check for changed keys, removals and additions.
             lazy val partEvaledPairs = l.pairs.map{ case (key, value) =>
               (evalWithCache(letm(currentValues) in key), (key, value, evalWithCache(letm(currentValues) in value)))
             }
-            newOut match {
-              case fm: FiniteMap => // Raw replacement
-                val (newFiniteMapKV) = (ListBuffer[Stream[(Expr, ProgramFormula)]]() /: partEvaledPairs) {
-                  case (lb, (key_v, (key, value, value_v))) =>
-                    if(!fm.pairs.exists(_._1 == key_v)) {
-                      lb
-                    } else {
-                      val i = fm.pairs.lastIndexWhere(_._1 == key_v)
-                      val newValue = fm.pairs(i)._2
-                      lb += repair(program.subExpr(value), newOutProgram.subExpr(newValue)).map(pf => (key, pf))
-                    }
-                }.toList
-                for {solution <- inox.utils.StreamUtils.cartesianProduct(newFiniteMapKV)
-                     (mapKeys, mapValuesFormula) = solution.unzip
-                     mapValues = mapValuesFormula.map(_.expr)
-                     mapFormula = mapValuesFormula.map(_.formula)
-                     formula = (Formula() /: mapFormula){ case (f, ff) => f combineWith ff }
-                } yield {
-                  ProgramFormula(FiniteMap(mapKeys.zip(mapValues), l.default, l.keyType, l.valueType), formula)
-                }
-              case newOut =>
+            def propagateChange(fm: FiniteMap) = {
+              val insertedPairs = fm.pairs.collect {
+                case (k, v) if !partEvaledPairs.exists(x => x._1 == k) =>
+                  Stream((k, ProgramFormula(v)))
+              }
+
+              val (newFiniteMapKV) = (ListBuffer[Stream[(Expr, ProgramFormula)]]() /: partEvaledPairs) {
+                case (lb, (key_v, (key, value, value_v))) =>
+                  val i = fm.pairs.lastIndexWhere(_._1 == key_v)
+                  if(i > -1) {
+                    val newValue = fm.pairs(i)._2
+                    lb += repair(program.subExpr(value), newOutProgram.subExpr(newValue)).map(pf => (key, pf))
+                  } else {
+                    lb
+                  }
+              }.toList ++ insertedPairs
+              for {solution <- inox.utils.StreamUtils.cartesianProduct(newFiniteMapKV)
+                   (mapKeys, mapValuesFormula) = solution.unzip
+                   mapValues = mapValuesFormula.map(_.expr)
+                   mapFormula = mapValuesFormula.map(_.formula)
+                   formula = (Formula() /: mapFormula){ case (f, ff) => f combineWith ff }
+              } yield {
+                ProgramFormula(FiniteMap(mapKeys.zip(mapValues), l.default, l.keyType, l.valueType), formula)
+              }
+            }
+            optVar(newOut).flatMap(newOutFormula.findConstraintValue).getOrElse(newOut) match {
+              case fm: FiniteMap => propagateChange(fm)
+              case _ =>
                 val insertedPairs = newOut match {
                   case v: Variable =>
                     Log("replacement by a variable - checking for inserted pairs")
@@ -724,11 +324,11 @@ object ReverseProgram extends lenses.Lenses {
                 Log(s"inserted pairs: $insertedPairs")
                 // We output the constraints with the given FiniteMap description.
                 // We repair symbolically on every map's value.
-                val repairs = partEvaledPairs.map{
+                val repairs = partEvaledPairs.map {
                   case (key_v, (key, value, value_v)) =>
                     repair(program.subExpr(value), newOutProgram.subExpr(MapApply(newOut, key))).map((key_v, _))
                 }
-                for{keys_pf_seq <- inox.utils.StreamUtils.cartesianProduct(repairs)} yield {
+                for {keys_pf_seq <- inox.utils.StreamUtils.cartesianProduct(repairs)} yield {
                   val (keys, pf_seq) = keys_pf_seq.unzip
                   val (list_m, formula) = combineResults(pf_seq, currentValues)
                   val new_exprs = keys.zip(list_m).toMap
@@ -744,25 +344,8 @@ object ReverseProgram extends lenses.Lenses {
             }
 
           }
-        case lFun@Lambda(vd, body) =>  // Check for closures, i.e. free variables.
-          val freeVars = exprOps.variablesOf(body).map(_.toVal) -- vd
-          if(freeVars.isEmpty) {
-            newOut match {
-              case l: Lambda =>
-                val freeVarsOfOut = exprOps.variablesOf(l)
-
-                if(freeVarsOfOut.isEmpty) {
-                  Stream(newOutProgram)
-                } else {
-                  Stream(newOutProgram.withoutConstraints())
-                }
-              case v: Variable =>
-                Stream(newOutProgram)
-              case _ => ???
-            }
-          }  else { // Closure
-            Stream(newOutProgram)
-          }
+        case lFun@Lambda(vd, body) =>
+          Stream(newOutProgram)
 
         // Variables are assigned the given value.
         case v@Variable(id, tpe, flags) =>
@@ -795,105 +378,102 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
-          Log("ADT in")
-          newOut match {
-            case Variable(ProgramFormula.subtree, tpe, s) =>
-              Log("Var subtree")
-              val treeVar = Variable(ProgramFormula.tree, tpe, s)
-              newOutFormula.findConstraintValue(treeVar) match {
-                case Some(originalTree) =>
-                  originalTree match {
-                    case Variable(vid, _, _) if vid == ProgramFormula.subtree => // End of it, no change to make.
-                      return Stream(program.withoutConstraints())
-                    case ADT(adtType2@ADTType(tp2, tpArgs2), argsIn2) =>
-                      if(adtType != adtType2) throw new Exception(s"Not the same type $adtType != $adtType2")
-                      val i = argsIn2.indexWhere(argIn => exprOps.exists{
-                        case k if k == Variable(ProgramFormula.subtree, tpe, s) => true
-                        case _ => false
-                      }(argIn))
-                      if(i == -1) throw new Exception(s"Could not find subtree in: $originalTree")
-
-                      repair(program.subExpr(argsIn(i)),
-                        ProgramFormula(newOut, treeVar === argsIn2(i)))
-                    case _ => throw new Exception(s"Not an ADT or the subtree: $originalTree")
-                  }
-                case None => throw new Exception(s"Could not find value of ${ValDef(ProgramFormula.tree, tpe, s)} in $newOutFormula")
-              }
-            case v: Variable =>
-              Log("Var")
-              Stream(ProgramFormula(v))
-            case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
-              Log("ADT 2")
-              val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
-                repair(ProgramFormula(aFun, program.formula), newOutProgram.subExpr(aVal))
-              }
-              val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
-              for {seq <- streamOfSeqSolutions
-                   _ = Log(s"combineResults($seq, $currentValues)")
-                   (newArgs, assignments) = combineResults(seq, currentValues)
-              } yield {
-                ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
-              }
-            case ADT(ADTType(tp2, tpArgs2), args2) =>
-              Log("ADT 3")
-              Stream.empty // Wrapping already handled.
-
-            case a =>
-              Log("special case")
-              newOutProgram match {
-                case ProgramFormula.ListInsert(tpe, before, inserted, after, remaining) =>
-                  Log("ListInsert")
-                  if(before.length == 0) { // Insertion happens before this element
-                    Log("beforeLength == 0")
-                    // We might delete the elements afterwards.
-                    if(after.length == 0) {
-                      Log("afterLength == 0")
-                      Stream(
-                        ProgramFormula(ListLiteral(inserted, tpe))
-                      )
-                    } else { // after.length > 0
-                      Log("afterLength > 0")
-                      val ListLiteral(functionValueList, tpe) = functionValue
-                      if(after.length == functionValueList.length) { // No deletion.
-                        Log("afterLength == functionValueList.length")
-                        for{ pf <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(after.head))
-                             pf2 <- repair(program.subExpr(argsIn(1)), ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail, remaining)) } yield {
-                          ProgramFormula(ListLiteral.concat(
-                            ListLiteral(inserted, tpe),
-                            ListLiteral(List(pf.expr), tpe),
-                            pf2.expr), pf.formula combineWith pf2.formula)
-                        }
-                      } else {
-                        Log("afterLength < functionValueList.length")
-                        assert(after.length < functionValueList.length) // some deletion happened.
-                        val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after, remaining) // Recursive problem if
-                        for{ pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
-                          pf.wrap{ x =>
-                            ListLiteral.concat(
-                              ListLiteral(inserted, tpe),
-                              x
-                            )
-                          }
-                        }
+          newOutProgram match {
+            case ProgramFormula.ListInsert(tpe, before, inserted, after, remaining) =>
+              Log("ListInsert")
+              if(before.length == 0) { // Insertion happens before this element
+                Log("beforeLength == 0")
+                // We might delete the elements afterwards.
+                if(after.length == 0) {
+                  Log("afterLength == 0")
+                  Stream(
+                    ProgramFormula(ListLiteral(inserted, tpe), remaining)
+                  )
+                } else { // after.length > 0
+                  Log("afterLength > 0")
+                  val ListLiteral(functionValueList, tpe) = functionValue
+                  if(after.length == functionValueList.length) { // No deletion.
+                    Log("afterLength == functionValueList.length")
+                    for{ pf <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(after.head))
+                         pf2 <- repair(program.subExpr(argsIn(1)), ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail, remaining)) } yield {
+                      ProgramFormula(ListLiteral.concat(
+                        ListLiteral(inserted, tpe),
+                        ListLiteral(List(pf.expr), tpe),
+                        pf2.expr), pf.formula combineWith pf2.formula combineWith Formula(remaining))
+                    }
+                  } else {
+                    Log("afterLength < functionValueList.length")
+                    assert(after.length < functionValueList.length) // some deletion happened.
+                    val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after, remaining) // Recursive problem if
+                    for{ pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
+                      pf.wrap{ x =>
+                        ListLiteral.concat(
+                          ListLiteral(inserted, tpe),
+                          x
+                        )
                       }
                     }
-                  } else { // before.length > 0
-                    assert(argsIn.length == 2, "supposed that there was an element here, but there was none.")
-                    val updatedOutProgram = ProgramFormula.ListInsert(tpe, before.tail, inserted, after, remaining)
-
-                    for{pfHead <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(before.head))
-                      pfTail <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
-                      ProgramFormula(
-                        ListLiteral.concat(
-                          ListLiteral(List(pfHead.expr), tpe),
-                          pfTail.expr
-                        ),
-                        pfHead.formula combineWith pfTail.formula
-                      )
-                    }
                   }
-                case _ =>
-                  println(newOutProgram)
+                }
+              } else { // before.length > 0
+                assert(argsIn.length == 2, "supposed that there was an element here, but there was none.")
+                val updatedOutProgram = ProgramFormula.ListInsert(tpe, before.tail, inserted, after, remaining)
+
+                for{pfHead <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(before.head))
+                    pfTail <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
+                  ProgramFormula(
+                    ListLiteral.concat(
+                      ListLiteral(List(pfHead.expr), tpe),
+                      pfTail.expr
+                    ),
+                    pfHead.formula combineWith pfTail.formula
+                  )
+                }
+              }
+            case ProgramFormula(newOut, newOutFormula) =>
+              newOut match {
+                case Variable(ProgramFormula.subtree, tpe, s) =>
+                  Log("Var subtree")
+                  val treeVar = Variable(ProgramFormula.tree, tpe, s)
+                  newOutFormula.findConstraintValue(treeVar) match {
+                    case Some(originalTree) =>
+                      originalTree match {
+                        case Variable(vid, _, _) if vid == ProgramFormula.subtree => // End of it, no change to make.
+                          return Stream(program.withoutConstraints())
+                        case ADT(adtType2@ADTType(tp2, tpArgs2), argsIn2) =>
+                          if (adtType != adtType2) throw new Exception(s"Not the same type $adtType != $adtType2")
+                          val i = argsIn2.indexWhere(argIn => exprOps.exists {
+                            case k if k == Variable(ProgramFormula.subtree, tpe, s) => true
+                            case _ => false
+                          }(argIn))
+                          if (i == -1) throw new Exception(s"Could not find subtree in: $originalTree")
+
+                          repair(program.subExpr(argsIn(i)),
+                            ProgramFormula(newOut, treeVar === argsIn2(i)))
+                        case _ => throw new Exception(s"Not an ADT or the subtree: $originalTree")
+                      }
+                    case None => throw new Exception(s"Could not find value of ${ValDef(ProgramFormula.tree, tpe, s)} in $newOutFormula")
+                  }
+                case v: Variable =>
+                  Log("Var")
+                  Stream(ProgramFormula(v))
+                case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
+                  Log("ADT 2")
+                  val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
+                    repair(ProgramFormula(aFun, program.formula), newOutProgram.subExpr(aVal))
+                  }
+                  val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
+                  for {seq <- streamOfSeqSolutions
+                       _ = Log(s"combineResults($seq, $currentValues)")
+                       (newArgs, assignments) = combineResults(seq, currentValues)
+                  } yield {
+                    ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
+                  }
+                case ADT(ADTType(tp2, tpArgs2), args2) =>
+                  Log("ADT 3")
+                  Stream.empty // Wrapping already handled.
+
+                case a =>
                   throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
               }
           }
@@ -908,7 +488,7 @@ object ReverseProgram extends lenses.Lenses {
             case (vd, i) => if(i == index) {
               vd.toVariable === newOut
             } else {
-              E(Utils.maybe)(vd.toVariable === originalAdtValue.args(i))
+              E(original)(vd.toVariable === originalAdtValue.args(i))
             }
           }
           val newConstraint = and(constraints : _*)
@@ -933,7 +513,7 @@ object ReverseProgram extends lenses.Lenses {
               found = true
               vd.toVariable === newOut
             } else {
-              E(Utils.maybe)(vd.toVariable === evalWithCache(MapApply(map_v, k)))
+              E(original)(vd.toVariable === evalWithCache(MapApply(map_v, k)))
             }
           })
           val finiteMapRepair = if (!found) { // We should not change the default, rather add a new entry.
@@ -973,9 +553,9 @@ object ReverseProgram extends lenses.Lenses {
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
                    isSameBody = (newBody == body)              /: Log.isSameBody
                    args <-
-                     combineArguments(program/* combineWith newBodyFreshFormula*/,
+                     combineArguments(program,
                        arguments.zip(freshArgsNames).map { case (arg, v) =>
-                      val expected = newBodyFreshFormula.getOrElse(v, argumentValues(freshToOld(v).toVal))
+                         val expected = v.toVariable
                       (arg, newOutProgram.subExpr(expected) combineWith newBodyFreshFormula)
                      })
                    (newArguments, newArgumentsFormula) = args
@@ -984,7 +564,8 @@ object ReverseProgram extends lenses.Lenses {
                      case v: Variable => Stream(ProgramFormula(v, (
                        if(isSameBody) Formula() else
                          Formula(Map(v.toVal -> newLambda)))))
-                     case l => repair(ProgramFormula(l, program.formula), newOutProgram.subExpr(newLambda) combineWith newBodyFreshFormula)
+                     case l => repair(ProgramFormula(l, program.formula),
+                       newOutProgram.subExpr(newLambda) combineWith newBodyFreshFormula)
                    }
                    ProgramFormula(newAppliee, lambdaRepairFormula) = pfLambda
                    finalApplication = Application(newAppliee, newArguments)           /: Log.prefix("finalApplication")
@@ -1045,7 +626,7 @@ object ReverseProgram extends lenses.Lenses {
               if(removed.isEmpty) { // Just added elements.
                 for(pf <- repair(program.subExpr(sExpr),
                   newOutProgram.subExpr(FiniteSet((vsSet ++ (added - elem_v)).toSeq, tpe)))) yield {
-                  pf.wrap(x => SetAdd(x, elem))
+                  pf.wrap(x => SetAdd(x, elem)) combineWith Formula(E(original)(elem === elem_v))
                 }
               } else {
                 if(removed contains elem_v) { // We replace SetAdd(f, v) by f
@@ -1055,7 +636,7 @@ object ReverseProgram extends lenses.Lenses {
                 } else { // All changes happened in the single set.
                   for(pf <- repair(program.subExpr(sExpr),
                     newOutProgram.subExpr(FiniteSet((vsSet ++ (added-elem_v) -- removed).toSeq, tpe))
-                  )) yield pf.wrap(x => SetAdd(x, elem))
+                  )) yield pf.wrap(x => SetAdd(x, elem)) combineWith Formula(E(original)(elem === elem_v))
                 }
               }
           }
@@ -1109,17 +690,19 @@ object ReverseProgram extends lenses.Lenses {
     result: Element("div", List(v), List(), List())
   * */
   private def maybeWrap(program: ProgramFormula, newOutProgram: ProgramFormula, functionValue: Expr)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
+    Log(s"Testing maybewrap for function Value = $functionValue")
     val newOut = newOutProgram.getFunctionValue.getOrElse(return Stream.empty)
     val function = program.expr
     if(functionValue == newOut) return Stream.empty[ProgramFormula] // Value returned in maybeUnwrap
+    Log(s"maybewrap 2")
 
     val containsFunctionValue = exprOps.exists {
       case t if t == functionValue => true
       case _ => false
     } _
-
     // Checks if the old value is inside the new value, in which case we add a wrapper.
     if (containsFunctionValue(newOut)) {
+      Log(s"maybewrap 3")
       val canWrap = newOut match {
         case ADT(ADTType(name, tps), args) =>
           function match {
@@ -1156,6 +739,7 @@ object ReverseProgram extends lenses.Lenses {
           }
         case _ => true
       }
+      Log(s"canwrap: $canWrap")
       if(canWrap) {
         // We wrap the computation of functionValue with ADT construction
         val newFunction = exprOps.postMap {

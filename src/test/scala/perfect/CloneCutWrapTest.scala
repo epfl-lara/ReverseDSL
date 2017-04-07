@@ -5,7 +5,6 @@ import inox.trees.dsl._
 import org.scalatest._
 import matchers._
 import Matchers.{=== => _, _}
-import perfect.ReverseProgram.ProgramFormula
 
 /**
   * Created by Mikael on 27/03/2017.
@@ -20,12 +19,12 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     val va = variable[String]("a")
     val vb = variable[String]("b")
     val vc = variable[String]("c")
-    val f = ReverseProgram.Formula(BooleanLiteral(true) && (vb +& "42") === vc && va === (vc +& vb) && vb === "17")
+    val f = Formula(BooleanLiteral(true) && (vb +& "42") === vc && va === (vc +& vb) && vb === "17")
     f.assignments match {
       case None => fail(s"Could not extract assignments from $f")
       case Some(f) => f(va) shouldEqual Let(vb.toVal, "17", Let(vc.toVal, vb +& "42", Let(va.toVal, vc +& vb, va)))
     }
-    val f2 = ReverseProgram.Formula(BooleanLiteral(true) && (vb +& "42") === va && va === (vc +& vb) && vb === "17")
+    val f2 = Formula(BooleanLiteral(true) && (vb +& "42") === va && va === (vc +& vb) && vb === "17")
     f2.assignments shouldEqual None
   }
   test("Wrap") {
@@ -76,6 +75,19 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         )
       )
 
+    val expectedOut4 = StringInsert("Hello ", "big", " world")
+    val pfun4_l = repairProgramList(pfun, expectedOut4, 2).take(2).toList
+    pfun4_l.map{
+      case Let(a, StringLiteral("Hello big"), Let(b, StringLiteral(" world"), va +& vb)) =>
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+        1
+      case Let(a, StringLiteral("Hello "), Let(b, StringLiteral("big world"), va +& vb)) =>
+        va shouldEqual a.toVariable
+        vb shouldEqual b.toVariable
+        2
+    }.sum shouldEqual 3
+
     pfun repairFrom StringInsert("Hello", " big", "  world") match {
       case Let(a, StringLiteral(s), Let(b, StringLiteral(t), va +& vb)) =>
         s shouldEqual "Hello big "
@@ -90,18 +102,6 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         va shouldEqual a.toVariable
         vb shouldEqual b.toVariable
     }
-    val expectedOut4 = StringInsert("Hello ", "big", " world")
-    val pfun4_l = repairProgramList(pfun, expectedOut4, 2).take(2).toList
-    pfun4_l.map{
-      case Let(a, StringLiteral("Hello big"), Let(b, StringLiteral(" world"), va +& vb)) =>
-        va shouldEqual a.toVariable
-        vb shouldEqual b.toVariable
-        1
-      case Let(a, StringLiteral("Hello "), Let(b, StringLiteral("big world"), va +& vb)) =>
-        va shouldEqual a.toVariable
-        vb shouldEqual b.toVariable
-        2
-    }.sum shouldEqual 3
   }
 
   test("Nested string insert") {

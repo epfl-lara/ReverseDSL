@@ -8,7 +8,6 @@ import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
 import inox.InoxProgram
-import perfect.ReverseProgram.ProgramFormula
 
 import scala.collection.immutable.Bag
 import scala.xml.MetaData
@@ -27,7 +26,7 @@ trait InoxConvertible[A] extends ToInoxTypeConvertible { self =>
 /** Implicit helpers to build constrainable types.*/
 object InoxConvertible {
   abstract class LiteralConvertible[A](tpe: inox.trees.dsl.trees.Type, toExpr: A => Expr) extends InoxConvertible[A] {
-    def getType = tpe
+    def getType: Type = tpe
     def recoverFrom(e: Expr): A = e match {
       case l: Literal[_] => l.value.asInstanceOf[A]
       case _ => throw new Exception(s"Could not recover $tpe from $e")
@@ -35,11 +34,11 @@ object InoxConvertible {
     def produce(a: A): Expr = toExpr(a)
   }
 
-  implicit object StringInoxConvertible extends LiteralConvertible[String](StringType, E(_))
-  implicit object IntInoxConvertible extends LiteralConvertible[Int](Int32Type, E(_))
-  implicit object BooleanInoxConvertible extends LiteralConvertible[Boolean](BooleanType, E(_))
-  implicit object CharInoxConvertible extends LiteralConvertible[Char](CharType, E(_))
-  implicit object BigIntInoxConvertible extends LiteralConvertible[BigInt](IntegerType, E(_))
+  implicit object StringInoxConvertible extends LiteralConvertible[String](StringType, E)
+  implicit object IntInoxConvertible extends LiteralConvertible[Int](Int32Type, E)
+  implicit object BooleanInoxConvertible extends LiteralConvertible[Boolean](BooleanType, E)
+  implicit object CharInoxConvertible extends LiteralConvertible[Char](CharType, E)
+  implicit object BigIntInoxConvertible extends LiteralConvertible[BigInt](IntegerType, E)
 
   implicit def mapConvertible[A: InoxConvertible, B: InoxConvertible]: InoxConvertible[Map[A, B]] = new InoxConvertible[Map[A, B]] {
     def getType: inox.trees.dsl.trees.Type = MapType(inoxTypeOf[A], inoxTypeOf[B])
@@ -369,7 +368,10 @@ object InoxConvertible {
     ADT(ADTType(Utils.xmlNode, Seq()), Seq(tag, attributes, children))
 
   def _Map[A: InoxConvertible, B: InoxConvertible](elements: (Expr, Expr)*): Expr = {
-    FiniteMap(elements.toSeq, Utils.defaultValue(inoxTypeOf[B])(Utils.defaultSymbols), inoxTypeOf[A], inoxTypeOf[B])
+    _MapWithDefault(Utils.defaultValue(inoxTypeOf[B])(Utils.defaultSymbols): Expr, elements: _*)(c[A], c[B])
+  }
+  def _MapWithDefault[A: InoxConvertible, B: InoxConvertible](default: Expr, elements: (Expr, Expr)*): Expr = {
+    FiniteMap(elements.toSeq, default, inoxTypeOf[A], inoxTypeOf[B])
   }
   def _Set[A: InoxConvertible](elements: Expr*): Expr = {
     FiniteSet(elements.toSeq, inoxTypeOf[A])

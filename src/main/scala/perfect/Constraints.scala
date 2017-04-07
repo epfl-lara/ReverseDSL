@@ -109,7 +109,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
           val trueAnds = exprs.filterNot{ case BooleanLiteral(true) => true case Equals(v, v2) if v == v2 => true case _ => false }
           Some(if(trueAnds.isEmpty) E(true) else
           if(trueAnds.length == 1) trueAnds.head else
-            And(trueAnds))
+            And(trueAnds.distinct))
         case _ => None
       } _
 
@@ -132,11 +132,11 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
         case _ => None
       } _
 
-    val finalFormula = (
+    val finalFormula = inox.utils.fixpoint(
       toplevelIdentityRemoved
         andThen removedAndTrue
         andThen removeFalseTrue
-      )(formula)
+      , 10)(formula)
 
     copyWithNewFormula(finalFormula)
   }
@@ -170,7 +170,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
   def splitMaybe(e: Seq[Expr], notMaybes: Seq[Expr], maybes: Seq[Equals]): (List[Expr], List[Equals]) = {
     e match {
       case Seq() => (notMaybes.reverse.toList, maybes.reverse.toList)
-      case FunctionInvocation(Utils.maybe, _, Seq(equality@Equals(a, b))) +: tail =>
+      case FunctionInvocation(Utils.original, _, Seq(equality@Equals(a, b))) +: tail =>
         splitMaybe(tail, notMaybes, equality +: maybes)
       case a +: tail =>
         splitMaybe(tail, a +: notMaybes, maybes)
@@ -181,7 +181,8 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
     * If a combination of maybe is satisfiables with e._1, no sub-combination should be tested.
     * The Int is startToDeleteAt: Int = 0, a way to know the number of Equals from the beginning we should not remove.
     **/
-  def maxSMTMaybes(es: Stream[(List[Expr], List[Equals], Int)]): Stream[(ThisSolver, prog.Model)] = {
+  def maxSMTMaybes(maybeSatisfied: List[Set[Equals]],
+                   es: Stream[(List[Expr], List[Equals], Int)]): Stream[(ThisSolver, prog.Model)] = {
     if(es.isEmpty) return Stream.empty
     val e = es.head
 
@@ -207,24 +208,29 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
     // Recursively, once for example D and E hold, add it.
     // (~A || ~B || ~C) && (~D || ~E) &&  (F || G)  && maxSat(A, B, C, D, E, F, G)
     // and so on...
+
     Log(System.currentTimeMillis())
     val solver = Log.time("Get new solver") := prog.getSolver.getNewSolver
-    Log("solving " + and(e._1 ++ e._2 : _*))
+    val constraint = and(e._1 ++ e._2 : _*)
+    Log("solving " + constraint)
     Log.time("Assert constraint") := solver.assertCnstr(and(e._1 ++ e._2 : _*))
     //Log("#2")
-
     (Log.time("Check answer") := solver.check(SolverResponses.Model)) match {
       case SatWithModel(model) =>
-        Log(System.currentTimeMillis())
-        Log("One solution !")
-        val updatedStream = es.filter{ x =>  !x._2.toSet.subsetOf(maybePart.toSet)}
-
-        (solver, model) #:: maxSMTMaybes(updatedStream)
+        Log("One solution ! for maybePart.toSet == " + maybePart)
+        val newMaybeSatisfied: List[Set[Equals]] = maybeSatisfied :+ maybePart.toSet
+        val updatedStream: Stream[(List[Expr], List[Equals], Int)] = es.filter{x =>
+          val vx2 = x._2.toSet
+          newMaybeSatisfied.forall(mb => !vx2.subsetOf(mb))
+        }
+        (solver, model) #:: maxSMTMaybes(newMaybeSatisfied, updatedStream)
       case m =>
-        Log(s"No solution ($m). Removing maybes...")
-        maxSMTMaybes(es.tail #::: {
+        Log(s"No solution ($m). Already satisfiable: $maybeSatisfied. Removing maybes...")
+        maxSMTMaybes(maybeSatisfied, es.tail #::: {
           for {i <- (numForceMaybeToKeep until e._2.length).toStream
                seq = e._2.take(i) ++ e._2.drop(i + 1)
+               s = seq.toSet
+               if maybeSatisfied.forall(mb => !s.subsetOf(mb))
           } yield (constPart, seq, numForceMaybeToKeep)
         })
     }
@@ -235,7 +241,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
     t match {
       case Leaf(seqExpr) =>
         val (eqs, maybes)  = splitMaybe(seqExpr, Nil, Nil)
-        for{ solver <- maxSMTMaybes(Stream((eqs, maybes, 0))) } yield solver
+        for{ solver <- maxSMTMaybes(Nil, Stream((eqs, maybes, 0))) } yield solver
       case Node(Leaf(seqExpr), value, right) =>
         //Log("First we will solve " + right)
         //Log("Then we inverse " + value)
@@ -254,7 +260,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
               //_ = Log("Solving this :" + newSeqExpr)
               (eqs, maybes)  = splitMaybe(newSeqExpr, Nil, Nil)
               //_ = Log("Solving maybe:" + x)
-              solver <- maxSMTMaybes(Stream((eqs, maybes, 0)))
+              solver <- maxSMTMaybes(Nil, Stream((eqs, maybes, 0)))
         } yield {
           solver
         }

@@ -21,7 +21,7 @@ object Utils {
   val xmlNode: Identifier = FreshIdentifier("Node")
   val xmlAttribute: Identifier = FreshIdentifier("Attribute")
 
-  val maybe : Identifier = FreshIdentifier("maybe")
+  val original : Identifier = FreshIdentifier("original") // Special identifier to mark that a value did not change.
 
 
   val list: Identifier = FreshIdentifier("List")
@@ -184,4 +184,9 @@ object Utils {
       } else s
     }
   }
+
+  def optVar(that: Expr): Option[Variable]  =
+    if(that.isInstanceOf[Variable]) {
+      Some(that.asInstanceOf[Variable])
+    } else None
 }

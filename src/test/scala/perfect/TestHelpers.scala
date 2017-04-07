@@ -1,6 +1,5 @@
 package perfect
 import legacy._
-import perfect.ReverseProgram.ProgramFormula
 
 /**
   * Created by Mikael on 09/03/2017.
@@ -24,7 +23,6 @@ trait TestHelpers extends InoxConvertible.conversions {
   import InoxConvertible._
   import StringConcatExtended._
 
-  type PFun = (InoxProgram, Identifier)
 
   implicit class Obtainable(body: Expr) {
     def repairFrom(e: ProgramFormula) = repairProgram(body, e)
@@ -94,10 +92,17 @@ trait TestHelpers extends InoxConvertible.conversions {
     program
   }
 
-  protected def isVarIn(id: Identifier, body: inox.trees.Expr) = {
+  protected def isVarIn(id: Identifier, body: inox.trees.Expr): Boolean = {
     inox.trees.exprOps.exists {
       case v: Variable => v.id == id
       case _ => false
+    }(body)
+  }
+
+  protected def countVarIn(id: Identifier, body: inox.trees.Expr): Int = {
+    inox.trees.exprOps.count {
+      case v: Variable if v.id == id => 1
+      case _ => 0
     }(body)
   }
 

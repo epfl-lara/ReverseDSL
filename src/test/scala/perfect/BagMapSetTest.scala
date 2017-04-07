@@ -44,7 +44,8 @@ class BagMapSetTest extends FunSuite with TestHelpers {
       }
 
     checkProg("Bonjour, comment tu vas?", pfun)
-    checkProg("Salut, comment tu vas?", repairProgram(pfun, "Salut, comment tu vas?")) match {
+    val pfun2 = repairProgram(pfun, "Salut, comment tu vas?")
+    checkProg("Salut, comment tu vas?", pfun2) match {
       case Let(t, FiniteMap(pairs, default, _, _), MapApply(t2, StringLiteral("hello")) +& StringLiteral(", ") +& MapApply(t3, StringLiteral("howareu"))) =>
         pairs.toList shouldEqual List[(Expr, Expr)](
           "hello" -> "Salut",
@@ -150,19 +151,15 @@ class BagMapSetTest extends FunSuite with TestHelpers {
   test("Revert SetAdd") {
     val pfun =
       let("flags" :: TSet[String],
-        _Set[String](
-          "cvc4", "z3"
-        )
+        _Set[String]("cvc4", "z3")
       ){ flags =>
-        let("oflags" :: String,
-          "debug"
-        ){ oflags =>
+        let("oflags" :: String, "debug"){ oflags =>
           SetAdd(flags, oflags)
         }
       }
 
-    checkProg(_Set[String]("cvc4", "debug",  "z3"), pfun)
-    checkProg(_Set[String]("cvc4", "debug",  "vampire", "z3"),
-      repairProgram(pfun, _Set[String]("cvc4", "debug", "z3", "vampire")))
+    pfun shouldProduce _Set[String]("cvc4", "debug",  "z3")
+    pfun repairFrom _Set[String]("cvc4", "debug", "z3", "vampire") shouldProduce
+      _Set[String]("cvc4", "debug",  "vampire", "z3")
   }
 }

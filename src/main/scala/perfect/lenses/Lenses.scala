@@ -41,34 +41,7 @@ trait Lenses { self: ReverseProgram.type =>
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)]
   }
 
-  object ListLiteral {
-    import Utils._
-    def unapply(e: Expr): Option[(List[Expr], Type)] = e match {
-      case ADT(ADTType(cons, Seq(tp)), Seq(head, tail)) =>
-        unapply(tail).map(res => (head :: res._1, tp))
-      case ADT(ADTType(nil, Seq(tp)), Seq()) =>
-        Some((Nil, tp))
-      case _ => None
-    }
-    def apply(e: List[Expr], tp: Type): Expr = e match {
-      case head :: tail =>
-        ADT(ADTType(cons, Seq(tp)), Seq(head, apply(tail, tp)))
-      case Nil =>
-        ADT(ADTType(nil, Seq(tp)), Seq())
-    }
-    /** Requires either f to be empty, or e to be a ListLiteral */
-    def concat(e: Expr, f: Expr*): Expr = {
-      if(f.isEmpty) e else {
-        e match {
-          case ADT(ADTType(cons, Seq(tp)), Seq(head, tail)) =>
-            ADT(ADTType(cons, Seq(tp)), Seq(head, concat(tail, f: _*)))
-          case ADT(ADTType(nil, Seq(tp)), Seq()) =>
-            concat(f.head, f.tail: _*)
-          case _ => throw new Exception("[internal error] cannot concatenate non-literal on the left using ListLiteral.concat")
-        }
-      }
-    }
-  }
+
 
   /** Lense-like filter */
   case object FilterReverser extends Reverser with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.
@@ -119,33 +92,34 @@ trait Lenses { self: ReverseProgram.type =>
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
       val ListLiteral(originalInput, inputType) = originalArgsValues.head
       val argType = lambda.args.head.getType
-      val uniqueUnknownValue = defaultValue(argType)
+      val uniqueUnknownValue: Expr = defaultValue(argType)
+      val unknown = ValDef(FreshIdentifier("unknown"), argType)
+      val unknownVar = unknown.toVariable
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
       val mapr = new MapReverseLike[(Expr, Formula), Expr, ((Expr, Lambda), Formula)] {
         override def f = (exprF: (Expr, Formula)) => evalWithCache(Application(lambda, Seq(exprF._1)))
 
         override def fRev = (prevIn: Option[(Expr, Formula)], out: Expr) => {
           Log(s"Map.fRev: $prevIn, $out")
+          val unknown = ValDef(FreshIdentifier("unknown", true), argType)
+          val unknownVar = unknown.toVariable
           val (Seq(in), newFormula) =
-            prevIn.map(x => (Seq(x._1), x._2)).getOrElse {
-              val unknown = ValDef(FreshIdentifier("unknown"),lambda.args.head.getType)
-              (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> uniqueUnknownValue)))
-            }
+            prevIn.map(x => (Seq(x._1), x._2)).getOrElse {(Seq(unknownVar), Formula(unknownVar === uniqueUnknownValue))}
           Log(s"in:$in\nnewformula:$newFormula")
-          Log.prefix("res=") :=
+          Log.prefix(s"fRev($prevIn, $out)=") :=
           repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), newOutput.subExpr(out)).flatMap {
             case ProgramFormula(Application(lambda2, Seq(in2)), formula)
               if lambda2 == lambda => //The argument's values have changed
               Stream(Left((in2, formula)))
-            case ProgramFormula(Application(lambda2Expr, Seq(in2)), f:Formula) =>
+            case ProgramFormula(Application(lambda2Expr, Seq(in2)), formula) =>
               val lambda2 = castOrFail[Expr, Lambda](lambda2Expr)
-              Stream(Right(((in, castOrFail[Expr, Lambda](lambda2)), f)))
+              // In the case when in2 is now a variable, we add the constraint that it should equal the original variable.
+              Stream(Right(((in2, castOrFail[Expr, Lambda](lambda2)), formula)))
             case e@ProgramFormula(app, f) =>
               throw new Exception(s"[Internal error] Don't know how to handle: $e")
           // We remove those which only return the uniqueUnknownValue
           // If we modified the lambda, we sort solutions to see if we can change the value.
           }.
-            filter{case Left((`uniqueUnknownValue`, _)) => false case _ => true}.
             ifFirst(p => p.isInstanceOf[Right[_, _]], _.takeFirstTrue(3, e =>
             e match {
               case l: Left[_, _] => true
@@ -199,7 +173,7 @@ trait Lenses { self: ReverseProgram.type =>
                   if (lambda2 != lambda) {
                     Nil
                   } else {
-                    formula2.evalPossible(expr2).map(x => Left((x, Formula())))
+                    List(Left(expr2, formula2))
                   }
               }
             }
@@ -223,8 +197,10 @@ trait Lenses { self: ReverseProgram.type =>
           }
         case _ =>
           //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
-          mapr.mapRev((originalInput.map(x => (x, Formula()))),
-            ListLiteral.unapply(newOutput.functionValue).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
+          val res = mapr.mapRev((originalInput.map(x => (x, Formula()))),
+            ListLiteral.unapply(newOutput.functionValue).get._1)
+            Log("intermediate: "+res)
+            res.flatMap(recombineArgumentsLambdas(lambda, tpes))
       }
     }
 
@@ -334,10 +310,6 @@ trait Lenses { self: ReverseProgram.type =>
 
           // Priority to the insertion/modification/deletion of elements
           // If not ambiguous (e.g. infix selected and replaced, or infix empty), change the infix.
-          // Todo: Return an index of where the start selection occurred (position in list, inside element + maybe prefix)
-          // Return same index for out.
-          // StringInsert for left element being changed, right element being changed (if not the same).
-          // ListInsert for elements in the middle.
           sealed abstract class ElementOrInfix {
             def s: String
           }
@@ -661,6 +633,7 @@ trait Lenses { self: ReverseProgram.type =>
 
   private def recombineArgumentsLambdas(lambda: Lambda, tpes: Seq[Type])
                                        (e: List[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]) = {
+    Log(s"recombineArgumentLambdas($e)")
     val argumentsChanged = e.map{
       case Left((e, _)) => e
       case Right(((e, lambda), _)) => e
@@ -701,17 +674,13 @@ trait Lenses { self: ReverseProgram.type =>
           Log(s"flatmap in:$in\nnewformula:$newFormula")
           Log.res :=
             repair(ProgramFormula(Application(lambda, Seq(in)), newFormula), newOutput.subExpr(ListLiteral(out, tpes(1)))).flatMap {
-              case ProgramFormula(Application(_, Seq(in2)), f)
-                if in2 != in => //The argument's values have changed
-                Stream(Left((in2, f)))
-              case ProgramFormula(Application(_, Seq(in2)), f:Formula)
-                if in2 == in && in2.isInstanceOf[Variable] =>
-                // The repair introduced a variable. We evaluate all possible values.
-                // TODO: Alternatively, propagate the constraint on the variable
-                Stream(Left((in2, f)))
-              case e@ProgramFormula(Application(lambda2: Lambda, Seq(in2)), f:Formula)
-                if in2 == in && lambda2 != lambda => // The lambda has changed.
-                Stream(Right((in, castOrFail[Expr, Lambda](lambda2)), f))
+              case ProgramFormula(Application(lambda2, Seq(in2)), formula)
+                if lambda2 == lambda => //The argument's values have changed
+                Stream(Left((in2, formula)))
+              case ProgramFormula(Application(lambda2Expr, Seq(in2)), formula) =>
+                val lambda2 = castOrFail[Expr, Lambda](lambda2Expr)
+                // In the case when in2 is now a variable, we add the constraint that it should equal the original variable.
+                Stream(Right(((in2, castOrFail[Expr, Lambda](lambda2)), formula)))
               case e@ProgramFormula(app, f) =>
                 throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
             }.filter{ case Left((`uniqueUnknownValue`, _)) => false case _ => true}
@@ -874,20 +843,15 @@ trait Lenses { self: ReverseProgram.type =>
         })
       }
 
-      def defaultCase(addMaybes: Boolean = false): Stream[(Seq[ProgramFormula], Formula)] = {
+      def defaultCase: Stream[(Seq[ProgramFormula], Formula)] = {
         val left = ValDef(FreshIdentifier("l", true), StringType, Set())
         val right = ValDef(FreshIdentifier("r", true), StringType, Set())
         Log(s"String default case: ${left.id} + ${right.id} == $newOutput:")
 
-        val newConstraint = newOutput === left.toVariable +& right.toVariable &<>& (if(addMaybes)
-          E(maybe)(left.toVariable === leftValue) && E(maybe)(right.toVariable === rightValue)
-        else BooleanLiteral(true)
-        ) // Maybe use what is below for faster convergence?
-        //            (if(addMaybes) not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
-        val newVarsInConstraint = exprOps.variablesOf(newConstraint).map(_.toVal)
-        val f = Formula(unknownConstraints = newConstraint)
-
-        Stream((Seq(ProgramFormula(left.toVariable), ProgramFormula(right.toVariable)), f))
+        val f = Formula(newOutput === left.toVariable +& right.toVariable)
+        Stream((Seq(
+          ProgramFormula(left.toVariable, E(original)(left.toVariable === leftValue)),
+          ProgramFormula(right.toVariable, E(original)(right.toVariable === rightValue))), f))
       }
 
       // Prioritize changes that touch only one of the two expressions.
@@ -959,9 +923,7 @@ trait Lenses { self: ReverseProgram.type =>
             }}.map(_._1).toStream
 
         case ProgramFormula(StringLiteral(s), _) =>
-          rightCase(s) append leftCase(s) append {
-            defaultCase(false)
-          }
+          rightCase(s) append leftCase(s) append defaultCase
         case ProgramFormula(StringConcat(StringLiteral(left), right), _) => // TODO !!
           val leftValue_s = asStr(leftValue)
           if(leftValue_s.startsWith(left)) {
@@ -980,7 +942,7 @@ trait Lenses { self: ReverseProgram.type =>
             ???
           }
         case _ =>
-          defaultCase(true)
+          defaultCase
       }
     }
 
