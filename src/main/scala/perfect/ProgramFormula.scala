@@ -166,26 +166,25 @@ object ProgramFormula {
   object CloneText {
     val leftName = "lClone"
     val rightName = "rClone"
-    def apply(left: Expr, s: Expr, right: Expr): ProgramFormula = {
-      val insertedVarName: String = s match {
-        case StringLiteral(text) => text.split("\\W+").find(x => x.nonEmpty && x.charAt(0).isLetter).getOrElse("x")
-        case _ => "x"
-      }
-      val insertedVar = Variable(FreshIdentifier(insertedVarName.toLowerCase()), StringType, Set())
+    def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set())): ProgramFormula = {
+      val variable = if(insertedVar.id.name == "") {
+        val insertedVarName: String = text.split("\\W+").find(x => x.nonEmpty && x.charAt(0).isLetter).getOrElse("x")
+        Variable(FreshIdentifier(insertedVarName.toLowerCase()), StringType, Set())
+      } else insertedVar
 
       ProgramFormula(
-        left +& insertedVar +& right,
+        StringLiteral(left) +& variable +& StringLiteral(right),
         // tree === left +& s +& right &&    (if not modificaiton)
-        insertedVar === s
+        variable === StringLiteral(text)
       )
     }
 
-    def unapply(f: ProgramFormula): Option[(String, String, String)] = {
+    def unapply(f: ProgramFormula): Option[(String, String, String, Variable)] = {
       f.expr match {
         case StringLiteral(left) +& (v@Variable(id, StringType, _)) +& StringLiteral(right) =>
           f.formula.findConstraintValue(v).getOrElse(return None) match {
             case StringLiteral(cloned) =>
-              Some((left, cloned, right))
+              Some((left, cloned, right, v))
             case _ => None
           }
         case _ => None

@@ -206,28 +206,34 @@ object ReverseProgram extends lenses.Lenses {
           }
         case _ => Stream.empty[ProgramFormula]
       }
-    def originalSolutions =
+    def originalSolutions : Stream[ProgramFormula] =
       function match {
         // Values (including lambdas) should be immediately replaced by the new value
         case l: Literal[_] =>
-          newOut match {
-            case v: Variable => // Replacement with the variable newOut, with a maybe clause.
-              Stream(newOutProgram combineWith Formula(E(original)(v === l)))
-            case l: Literal[_] => // Raw replacement
-              Stream(newOutProgram)
-            case m: MapApply =>
-              repair(program, newOutProgram.subExpr(newOutProgram.formula.findConstraintVariableOrLiteral(m)))
-
-            /*case l@Let(cloned: ValDef, _, _) =>
-              Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
+          newOutProgram match {
+            case ProgramFormula.CloneText(left, middle, right, v) =>
+              Stream(ProgramFormula(Let(v.toVal, StringLiteral(middle), StringLiteral(left) +& v +& StringLiteral(right))))
             case _ =>
-              newOutProgram match {
-                case ProgramFormula.StringInsert(left, inserted, right, direction) =>
-                  Stream(ProgramFormula(StringLiteral(left + inserted + right)))
+              newOut match {
+                case v: Variable => // Replacement with the variable newOut, with a maybe clause.
+                  Stream(newOutProgram combineWith Formula(E(original)(v === l)))
+                case l: Literal[_] => // Raw replacement
+                  Stream(newOutProgram)
+                case m: MapApply =>
+                  repair(program, newOutProgram.subExpr(newOutProgram.formula.findConstraintVariableOrLiteral(m)))
+
+                /*case l@Let(cloned: ValDef, _, _) =>
+                  Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
                 case _ =>
-                  throw new Exception("Don't know what to do, not a Literal, a Variable, a let, a string insertion or deletion: "+newOut)
+                  newOutProgram match {
+                    case ProgramFormula.StringInsert(left, inserted, right, direction) =>
+                      Stream(ProgramFormula(StringLiteral(left + inserted + right)))
+                    case _ =>
+                      throw new Exception("Don't know what to do, not a Literal, a Variable, a let, a string insertion or deletion: "+newOut)
+                  }
               }
           }
+
         case l: FiniteSet => // TODO: Need some rewriting to keep the variable's order.
           lazy val evaledElements = l.elements.map{ e =>
             (evalWithCache(letm(currentValues) in e), e)}
