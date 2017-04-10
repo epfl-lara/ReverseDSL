@@ -28,7 +28,7 @@ trait Lenses { self: ReverseProgram.type =>
   val funDefs = reversers.map(_.funDef) ++ List(
     mkFunDef(Utils.stringCompare)(){case _ =>
       (Seq("left"::StringType, "right"::StringType),
-        Int32Type,
+        IntegerType,
         { case Seq(l, r) =>
             StringLength(l) - StringLength(r) // Dummy
         })
@@ -119,14 +119,7 @@ trait Lenses { self: ReverseProgram.type =>
             case e@ProgramFormula(app, f) =>
               throw new Exception(s"[Internal error] Don't know how to handle: $e")
           // We remove those which only return the uniqueUnknownValue
-          // If we modified the lambda, we sort solutions to see if we can change the value.
-          }/*.
-            ifFirst(p => p.isInstanceOf[Right[_, _]], _.takeFirstTrue(3, e =>
-            e match {
-              case l: Left[_, _] => true
-              case l: Right[_, _]  => false
-            }
-          ))*/
+          }
         }
       }
 
@@ -246,7 +239,7 @@ trait Lenses { self: ReverseProgram.type =>
               )
             )
           } else_ {
-            ADT(T(nil)(T(list)(tA)), Seq())
+            ADT(T(nil)(tA), Seq())
           }
         })
     }
@@ -830,37 +823,31 @@ trait Lenses { self: ReverseProgram.type =>
 
     def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)] = {
       val newOutput = newOutputProgram.expr
-      val leftValue = originalArgsValues.head
-      val rightValue = originalArgsValues.tail.head
+      val leftValue@StringLiteral(lv) = originalArgsValues.head
+      val rightValue@StringLiteral(rv) = originalArgsValues.tail.head
 
       def leftCase(s: String):  Stream[((Seq[ProgramFormula], Formula), Int)] = {
-        Log.prefix("Testing left:") := (leftValue match {
-          case StringLiteral(lv) =>
-            (if (s.startsWith(lv)) {
-              val newRight = s.drop(lv.length)
-              val weight = -typeJump(lv, newRight)
-              Stream(
-                ((Seq(ProgramFormula(leftValue), ProgramFormula(StringLiteral(newRight))), Formula()),
-                 weight)
-              )
-            } else Stream.empty)  /:: Log.prefix("left worked:")
-          case _ => Stream.empty
-        })
+        Log.prefix("Testing left:") :=
+          (if (s.startsWith(lv)) {
+            val newRight = s.drop(lv.length)
+            val weight = -typeJump(lv, newRight)
+            Stream(
+              ((Seq(ProgramFormula(leftValue), ProgramFormula(StringLiteral(newRight))), Formula()),
+               weight)
+            )
+          } else Stream.empty)  /:: Log.prefix("left worked:")
       }
 
       def rightCase(s: String): Stream[((Seq[ProgramFormula], Formula), Int)] = {
-        Log.prefix("Testing right:") := (rightValue match {
-          case StringLiteral(rv) =>
-            (if (s.endsWith(rv)) {
-              val newLeft = s.take(s.length - rv.length)
-              val StringLiteral(left_v) = leftValue
-              Log(s"Computing typeJump(${s.take(s.length - rv.length)}, ${rv})")
-              val weight = -typeJump(s.take(s.length - rv.length), rv)
-              Stream(((Seq(ProgramFormula(StringLiteral(newLeft)), ProgramFormula(rightValue)), Formula()),
-              weight))
-            } else Stream.empty)  /:: Log.prefix("right worked:")
-          case _ => Stream.empty
-        })
+        Log.prefix("Testing right:") :=
+          (if (s.endsWith(rv)) {
+            val newLeft = s.take(s.length - rv.length)
+            val StringLiteral(left_v) = leftValue
+            Log(s"Computing typeJump(${s.take(s.length - rv.length)}, ${rv})")
+            val weight = -typeJump(s.take(s.length - rv.length), rv)
+            Stream(((Seq(ProgramFormula(StringLiteral(newLeft)), ProgramFormula(rightValue)), Formula()),
+            weight))
+          } else Stream.empty)  /:: Log.prefix("right worked:")
       }
 
       def defaultCase: Stream[(Seq[ProgramFormula], Formula)] = {
@@ -901,8 +888,8 @@ trait Lenses { self: ReverseProgram.type =>
               StringLiteral(leftValue_s.substring(0, leftAfter.length))
             }
             val directionWeight = direction match {
-              case StringInsert.InsertToLeft => 0 // Best weight.
-              case StringInsert.InsertToRight => 1 // Worst weight
+              case StringInsert.InsertToRight => 0 // Best weight.
+              case StringInsert.InsertToLeft => 1 // Worst weight
               case StringInsert.InsertAutomatic => typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
             }
             val overwriteWeight = rightAfter.length - rightValue_s.length
@@ -930,8 +917,8 @@ trait Lenses { self: ReverseProgram.type =>
             }
             val spaceWeight = typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
             val directionWeight = direction match {
-              case StringInsert.InsertToLeft => 1 // Worst weight
-              case StringInsert.InsertToRight => 0 // Best weight
+              case StringInsert.InsertToRight => 1 // Worst weight
+              case StringInsert.InsertToLeft => 0 // Best weight
               case StringInsert.InsertAutomatic => typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
             }
 
@@ -1016,14 +1003,14 @@ trait Lenses { self: ReverseProgram.type =>
     import Utils._
     val identifier = merge
     val funDef : FunDef = mkFunDef(identifier)("A") { case Seq(tA) =>
-      (Seq("left":: T(list)(tA), "right":: T(list)(tA), "comp" :: FunctionType(Seq(tA, tA), Int32Type)),
+      (Seq("left":: T(list)(tA), "right":: T(list)(tA), "comp" :: FunctionType(Seq(tA, tA), IntegerType)),
         T(list)(tA),
         { case Seq(left, right, comp) =>
           if_(left.isInstOf(T(cons)(tA))) {
             if_(right.isInstOf(T(cons)(tA))) {
               let("leftcons"::T(cons)(tA), left.asInstOf(T(cons)(tA)))( leftcons =>
                 let("rightcons"::T(cons)(tA), right.asInstOf(T(cons)(tA)))( rightcons =>
-                  if_(Application(comp, Seq(leftcons.getField(head), rightcons.getField(head))) <= IntLiteral(0)) {
+                  if_(Application(comp, Seq(leftcons.getField(head), rightcons.getField(head))) <= IntegerLiteral(BigInt(0))) {
                     ADT(T(cons)(tA), Seq(leftcons.getField(head), FunctionInvocation(identifier, Seq(tA), Seq(leftcons.getField(tail), right, comp))))
                   } else_ {
                     ADT(T(cons)(tA), Seq(rightcons.getField(head), FunctionInvocation(identifier, Seq(tA), Seq(left, rightcons.getField(tail), comp))))
@@ -1050,7 +1037,7 @@ trait Lenses { self: ReverseProgram.type =>
     import InoxConvertible._
 
     val funDef: inox.trees.FunDef = mkFunDef(identifier)("A"){ case Seq(tA) =>
-      (Seq("in" :: T(list)(tA), "comp" :: FunctionType(Seq(tA, tA), Int32Type)),
+      (Seq("in" :: T(list)(tA), "comp" :: FunctionType(Seq(tA, tA), IntegerType)),
       T(list)(tA),
       { case Seq(input, comp) =>
           if_(input.isInstOf(T(nil)(tA)) || input.asInstOf(T(cons)(tA)).getField(tail).isInstOf(T(nil)(tA))) {
