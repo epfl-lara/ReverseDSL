@@ -351,12 +351,23 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("Clone") {
     val pfun: Expr = "I like to move it!"
     pfun repairFrom CloneText("I like to", " move it", "!") match {
-      case Let(vd, StringLiteral(s), StringLiteral(a) +& (v: Variable) +& StringLiteral(b)) =>
+      case Let(vd, StringLiteral(" move it"), StringLiteral("I like to") +& (v: Variable) +& StringLiteral("!")) =>
         vd.id shouldEqual v.id
-        a shouldEqual "I like to"
-        s shouldEqual " move it"
-        b shouldEqual "!"
     }
+  }
+
+  test("Clone another constant part of a concatenation") {
+    val pfun: Expr = let("v"::String, " move it")(v => "I like to" +& v +& "!")
+    pfun repairFrom CloneText("I ", "like", " to move it!") match {
+      case Let(like, StringLiteral("like"), Let(move, StringLiteral(" move it"),
+      (StringLiteral("I ") +& (like2: Variable) +& StringLiteral(" to") +& (move2: Variable)) +& StringLiteral("!"))) =>
+        move.id shouldEqual move2.id
+        like.id shouldEqual like2.id
+    }
+  }
+
+  test("Clone an existing variable") {
+
   }
 
   test("Paste") {

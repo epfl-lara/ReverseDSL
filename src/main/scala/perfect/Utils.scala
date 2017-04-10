@@ -22,7 +22,7 @@ object Utils {
   val xmlAttribute: Identifier = FreshIdentifier("Attribute")
 
   val original : Identifier = FreshIdentifier("original") // Special identifier to mark that a value did not change.
-
+  val insertvar: Identifier = FreshIdentifier("insertVar") // Sepcial identifier to mark a variable that should be added to the program.
 
   val list: Identifier = FreshIdentifier("List")
   val cons: Identifier = FreshIdentifier("Cons")

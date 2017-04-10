@@ -338,4 +338,23 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
   def combineWith(f: Formula): ProgramFormula = {
     ProgramFormula(expr, formula combineWith f).wrappingLowPriority(isWrappingLowPriority)
   }
+
+  /** Removes all insertVar from the formula and inserts them into the program.*/
+  def insertVariables(): ProgramFormula = {
+    val TopLevelAnds(ands) = formula.unknownConstraints
+    val (insertedV, remaining) = ands.partition{
+      case FunctionInvocation(Utils.insertvar, Seq(), Seq(Equals(v: Variable, e: Expr))) =>
+        true
+      case _ => false
+    }
+    val inserted = insertedV collect {
+      case FunctionInvocation(Utils.insertvar, Seq(), Seq(Equals(v: Variable, e: Expr))) =>
+        (v, e)
+    }
+    val newFormula = if(insertedV.isEmpty) formula else Formula(and(remaining: _*))
+    (this /: inserted) {
+      case (ProgramFormula(expr, formula), (v, e)) =>
+        ProgramFormula(Let(v.toVal, e, expr), newFormula)
+    }
+  }
 }

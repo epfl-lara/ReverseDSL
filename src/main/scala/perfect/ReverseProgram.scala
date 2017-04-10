@@ -39,7 +39,7 @@ object ReverseProgram extends lenses.Lenses {
     implicit val cache = new HashMap[Expr, Expr]
     val newMain = FreshIdentifier("main")
     for { r <- repair(ProgramFormula(prevIn.get), outProg)
-          ProgramFormula(newOutExpr, f) = r
+          ProgramFormula(newOutExpr, f) = r.insertVariables()
           _ = Log("Remaining formula: " + f)
           _ = Log("Remaining expression: " + newOutExpr)
           assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toSeq.map(_.toVal))
@@ -212,7 +212,10 @@ object ReverseProgram extends lenses.Lenses {
         case l: Literal[_] =>
           newOutProgram match {
             case ProgramFormula.CloneText(left, middle, right, v) =>
-              Stream(ProgramFormula(Let(v.toVal, StringLiteral(middle), StringLiteral(left) +& v +& StringLiteral(right))))
+              def first = if(program.canDoWrapping) { // Insert let-expressions the closest to the use.
+                Stream(ProgramFormula(Let(v.toVal, StringLiteral(middle), StringLiteral(left) +& v +& StringLiteral(right))))
+              } else Stream.empty
+              first #::: Stream(ProgramFormula(StringLiteral(left) +& v +& StringLiteral(right), E(insertvar)(v === StringLiteral(middle))))
             case ProgramFormula.PasteVariable(left, v, v_value, right, direction) =>
               if(left == "" && right == "") {
                 Stream(ProgramFormula(v))

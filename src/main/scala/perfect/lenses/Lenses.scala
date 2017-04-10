@@ -943,6 +943,37 @@ trait Lenses { self: ReverseProgram.type =>
               // Second, if equality, attach where the most characters have been removed.
               x._2._1 < y._2._1 || (x._2._1 == y._2._1 && x._2._2 < y._2._2)
             }}.map(_._1).toStream
+        case pc@ProgramFormula.CloneText(left, cloned, right, variable) =>
+          def cloneToLeft: List[(ArgumentsFormula, Int)] = {
+            if(right.endsWith(rv)) {
+              val newLeft = left
+              val newRight = right.substring(0, right.length - rv.length)
+              val leftClone = ProgramFormula.CloneText(newLeft, cloned, newRight, variable)
+              val rightClone = ProgramFormula(rightValue)
+              val weight = 0 /*direction match {
+                case ProgramFormula.PasteVariable.PasteToLeft => 0
+                case ProgramFormula.PasteVariable.PasteToRight => 1
+                case ProgramFormula.PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
+              }*/
+              List(((Seq(leftClone, rightClone), Formula()), weight)) /: Log.prefix("cloneToLeft: ")
+            } else Nil
+          }
+          def cloneToRight: List[(ArgumentsFormula, Int)] = {
+            if(left.startsWith(lv)) {
+              val newLeft = left.substring(lv.length)
+              val newRight = right
+              val leftPaste = ProgramFormula(leftValue)
+              val rightPaste = ProgramFormula.CloneText(newLeft, cloned, newRight, variable)
+              val weight = 0 /*direction match {
+                case ProgramFormula.PasteVariable.PasteToLeft => 1
+                case ProgramFormula.PasteVariable.PasteToRight => 0
+                case ProgramFormula.PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
+              }*/
+              List(((Seq(leftPaste, rightPaste), Formula()), weight)) /: Log.prefix("cloneToRight: ")
+            } else Nil
+          }
+          (cloneToLeft ++ cloneToRight).sortBy(_._2).map(_._1).toStream
+
         case pv@ProgramFormula.PasteVariable(left, v, v_value, right, direction) =>
           def pasteToLeft: List[(ArgumentsFormula, Int)] = {
             /*Log(s"Right:'$right'")
