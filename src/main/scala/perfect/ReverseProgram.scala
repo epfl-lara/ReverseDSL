@@ -225,8 +225,19 @@ object ReverseProgram extends lenses.Lenses {
               }
             case _ =>
               newOut match {
-                case v: Variable => // Replacement with the variable newOut, with a maybe clause.
-                  Stream(newOutProgram combineWith Formula(E(original)(v === l)))
+                case v: Variable => // We check if the replacement value is a Paste, in which case we are allowed to modify the program.
+                  newOutFormula.findConstraintValue(v).map{ expr =>
+                    ProgramFormula(expr, newOutFormula) // TODO: Maybe remove the value v from the newOutFormula before.
+                  } match {
+                    case Some(ProgramFormula.PasteVariable(left, v2, v2_value, right, direction)) =>
+                      val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
+                      Stream(ProgramFormula(newExpr, newOutFormula))
+                    case _ =>
+                      // Replacement with the variable newOut, with a maybe clause.
+                      Stream(newOutProgram combineWith Formula(E(original)(v === l)))
+                  }
+
+
                 case l: Literal[_] => // Raw replacement
                   Stream(newOutProgram)
                 case m: MapApply =>
@@ -370,27 +381,27 @@ object ReverseProgram extends lenses.Lenses {
             case ProgramFormula.PasteVariable(left, v2, v_value, right, direction) =>
               val StringLiteral(s) = functionValue
 
-              def insertLeft = if(left == s) {
+              def insertLeft = (if(left == s) {
                 if(right != "") {
                   Stream(ProgramFormula(v +& v2 +& StringLiteral(right)))
                 } else {
                   Stream(ProgramFormula(v +& v2))
                 }
-              } else Stream.empty
-              def insertRight = if(right == s) {
+              } else Stream.empty) /:: Log.insertLeft
+              def insertRight = (if(right == s) {
                 if(left != "") {
                   Stream(ProgramFormula(StringLiteral(left) +& v2 + v))
                 } else {
                   Stream(ProgramFormula(v +& v2))
                 }
-              } else Stream.empty
+              } else Stream.empty) /:: Log.insertRight
 
-              def propagate = if(left != s && right != s &&
+              def propagate = (if(left != s && right != s &&
                   s.startsWith(left) && s.endsWith(right) &&
                   s.length >= left.length + right.length ) {
                 // We need to propagate this paste to higher levels.
-                Stream(ProgramFormula(v2, newOutFormula combineWith (v2 === newOutProgram.expr)))
-              } else Stream.empty
+                Stream(ProgramFormula(v, newOutFormula combineWith (v === newOutProgram.expr)))
+              } else Stream.empty) /:: Log.propagate
               insertLeft #::: insertRight #::: propagate
             case _ =>
               Stream(ProgramFormula(v, Formula(v === newOut) combineWith newOutFormula))

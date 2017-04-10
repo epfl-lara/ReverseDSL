@@ -382,6 +382,63 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
+  test("Paste inside a variable") {
+    val pfun: Let =
+      let("k"::String, " like")(like =>
+        let("v"::String, " move it")(move_it =>
+        "I"+& like +& " to" +& move_it +& "!"))
+    val like = pfun.vd.toVariable
+
+    pfun repairFrom PasteVariable("I like to move", like, " like", " it!", PasteVariable.PasteAutomatic) match {
+      case Let(like, StringLiteral(like_s),
+      Let(move_it, StringLiteral(" move") +& (like2: Variable) +& StringLiteral(" it"),
+      StringLiteral("I") +& (like3: Variable) +& StringLiteral(" to") +& (move_it2: Variable) +& StringLiteral("!"))) =>
+        like.toVariable shouldEqual like3
+        move_it.toVariable shouldEqual move_it2
+        like2 shouldEqual like3
+    }
+  }
+
+  /*test("Paste inside a variable and reverse order.") {
+    val pfun: Let =
+        let("v"::String, " move it")(move_it =>
+          let("k"::String, " like")(like =>
+          "I"+& like +& " to" +& move_it +& "!"))
+    val like = pfun.vd.toVariable
+
+    pfun repairFrom PasteVariable("I like to move", like, " like", " it!", PasteVariable.PasteAutomatic) match {
+      case Let(like, StringLiteral(like_s),
+      Let(move_it, StringLiteral(" move") +& (like2: Variable) +& StringLiteral(" it"),
+      StringLiteral("I") +& (like3: Variable) +& StringLiteral(" to") +& (move_it2: Variable) +& StringLiteral("!"))) =>
+        like.toVariable shouldEqual like3
+        move_it.toVariable shouldEqual move_it2
+        like2 shouldEqual like3
+    }
+  }*/
+
+  /*test("Paste Recursive ?") {
+    val pfun: Let = let("v"::String, " move it")(v => "I like to" +& v +& "!")
+    val v = pfun.vd.toVariable
+
+    pfun repairFrom PasteVariable("I like to move", v, " move it", " it!", PasteVariable.PasteToLeft) match {
+      case Let(vd, StringLiteral(s), StringLiteral(a) +& ((v: Variable) +& (v2: Variable)) +& StringLiteral(b)) =>
+        v shouldEqual v2
+        v.id shouldEqual vd.id
+        s shouldEqual " move it"
+        a shouldEqual "I like to"
+        b shouldEqual "!"
+    }
+
+    pfun repairFrom PasteVariable("I like to move it", v, " move it", "!", PasteVariable.PasteToRight) match {
+      case Let(vd, StringLiteral(s), StringLiteral(a) +& (v: Variable) +& ((v2: Variable) +& StringLiteral(b))) =>
+        v shouldEqual v2
+        v.id shouldEqual vd.id
+        s shouldEqual " move it"
+        a shouldEqual "I like to"
+        b shouldEqual "!"
+    }
+  }*/
+
   test("Cut") {
 
   }

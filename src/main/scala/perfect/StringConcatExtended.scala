@@ -13,6 +13,15 @@ import scala.collection.generic.CanBuildFrom
 object StringConcatExtended {
   implicit class AugmentedSubExpr[T <: Expr](e: T) {
     @inline def +&(other: Expr) = StringConcat(e, other)
+
+    /** Simplifies the expression by removing empty string literals*/
+    @inline def +<>&(other: Expr) = e match {
+      case StringLiteral("") => other
+      case _ => other match {
+        case StringLiteral("") => e
+        case _ => e +& other
+      }
+    }
   }
   implicit class AugmentedString(e: String) extends AugmentedSubExpr(StringLiteral(e))
   object +& {
