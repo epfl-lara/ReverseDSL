@@ -63,6 +63,18 @@ object ProgramFormula {
     type InsertDirection = Value
     val InsertToLeft, InsertToRight, InsertAutomatic = Value
 
+    def computeDirection(left: String, s: String, right: String): InsertDirection = {
+      val leftJump = ReverseProgram.StringConcatReverser.typeJump(left, s)
+      val rightJump = ReverseProgram.StringConcatReverser.typeJump(s, right)
+      if(leftJump < rightJump) {
+        InsertToLeft
+      } else if(leftJump > rightJump) {
+        InsertToRight
+      } else {
+        InsertAutomatic
+      }
+    }
+
     /** Need a preference to attach to left or right. If not specified, will try to infer it from the expressions
       * @param left The untouched string to the left of the insertion (may have removals)
       * @param s The newly inserted string
@@ -72,17 +84,8 @@ object ProgramFormula {
     def apply(left: String, s: String, right: String, direction: InsertDirection): ProgramFormula = {
       val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
       val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
-      val rDirection = if(direction != InsertAutomatic) direction else {
-        val leftJump = ReverseProgram.StringConcatReverser.typeJump(left, s)
-        val rightJump = ReverseProgram.StringConcatReverser.typeJump(s, right)
-        if(leftJump < rightJump) {
-          InsertToLeft
-        } else {
-          InsertToRight
-        }
-      }
 
-      rDirection match {
+      direction match {
         case InsertToLeft =>
           ProgramFormula(
             StringLiteral(left) +& StringLiteral(s) +& rightTreeStr,
@@ -94,7 +97,11 @@ object ProgramFormula {
             leftTreeStr +& StringLiteral(s) +& StringLiteral(right),
             leftTreeStr === StringLiteral(left)
           )
-
+        case InsertAutomatic =>
+          ProgramFormula(
+            leftTreeStr +& StringLiteral(s) +& rightTreeStr,
+            leftTreeStr === StringLiteral(left) && rightTreeStr === StringLiteral(right)
+          )
       }
 
     }
@@ -102,16 +109,20 @@ object ProgramFormula {
     def unapply(f: ProgramFormula): Option[(String, String, String, InsertDirection)] = {
       f.expr match {
         case (StringLiteral(leftBefore)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(idRight, StringType, _))
-          if idRight.name == rightName
-        =>
+          if idRight.name == rightName =>
           val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
           Some((leftBefore, inserted, rightBefore, InsertToLeft))
         case (leftTreeStr@Variable(idLeft, StringType, _)) +& StringLiteral(inserted) +& StringLiteral(rightBefore)
-          if idLeft.name == leftName
-        =>
+          if idLeft.name == leftName =>
           val StringLiteral(leftBefore) = f.formula.findConstraintValue(leftTreeStr).getOrElse(return None)
           Some((leftBefore, inserted, rightBefore, InsertToRight))
-        case _ => None
+        case (leftTreeStr@Variable(idLeft, StringType, _)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(idRight, StringType, _))
+          if idLeft.name == leftName && idRight.name == rightName =>
+          val StringLiteral(leftBefore) = f.formula.findConstraintValue(leftTreeStr).getOrElse(return None)
+          val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
+          Some((leftBefore, inserted, rightBefore, InsertAutomatic))
+        case _ =>
+          None
       }
     }
   }

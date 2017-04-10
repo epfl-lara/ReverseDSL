@@ -512,19 +512,23 @@ object ReverseProgram extends lenses.Lenses {
             case l: Lambda => l
             case l => evalWithCache(letm(currentValues) in l)
           }) /: Log.Original_Value
+
+          // Returns the new list of arguments plus a mapping from old to new values.
+          def freshenArgsList(argNames: Seq[ValDef]): (Seq[ValDef], Map[ValDef, Variable], Map[ValDef, Variable]) = {
+            val freshArgsNames = argNames.map(vd => ValDef(FreshIdentifier(vd.id.name, true), vd.tpe, vd.flags))
+            val oldToFresh = argNames.zip(freshArgsNames.map(_.toVariable)).toMap
+            val freshToOld = freshArgsNames.zip(argNames.map(_.toVariable)).toMap
+            (freshArgsNames, oldToFresh, freshToOld)
+          }
+
           originalValue match {
             case l@Lambda(argNames, body) =>
-              val freshArgsNames = argNames.map(vd => ValDef(FreshIdentifier(vd.id.name, true), vd.tpe, vd.flags))
-              val freshBody = exprOps.replaceFromSymbols(argNames.zip(freshArgsNames.map(_.toVariable)).toMap, body)
-              val oldToFresh = argNames.zip(freshArgsNames).toMap
-              val freshToOld = freshArgsNames.zip(argNames.map(_.toVariable)).toMap
-              val argumentValues = argNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
-              val freshArgumentValues = argumentValues.map{ case (k,v) => oldToFresh(k) -> v}
-              val freshFormula = Formula(freshArgumentValues)
+              val (freshArgsNames, oldToFresh, freshToOld) = freshenArgsList(argNames)
+              val freshBody = exprOps.replaceFromSymbols(oldToFresh, body)
+              val argumentValues = freshArgsNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
+              val freshFormula = Formula(argumentValues)
               val newpf = (program.subExpr(freshBody) combineWith freshFormula).wrappingEnabled
-              for {pf <-
-                     repair(newpf, newOutProgram)  /::
-                       Log.prefix(s"For repair$stackLevel, recovered:\n")
+              for {pf <- repair(newpf, newOutProgram)  /:: Log.prefix(s"For repair$stackLevel, recovered:\n")
                    ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
                    newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
                    isSameBody = (newBody == body)              /: Log.isSameBody

@@ -565,11 +565,17 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
         )
       def unapply(e: Expr): Option[(Expr, Expr)] = e match {
         case FunctionInvocation(Utils.mkString,Seq(),
-          Seq(input, middle)
+      Seq(input, middle)
       ) => Some((input, middle))
         case _ => None
       }
     }
+
+    MkString(List[String]("c"), "") repairFrom StringInsert("","kp", "c", StringInsert.InsertAutomatic) match {
+      case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("kpc") }
+
+    MkString(List[String]("a","c"), "") repairFrom StringInsert("a","b", "c", StringInsert.InsertAutomatic) match {
+      case MkString(l, StringLiteral("b")) => l shouldEqual _List[String]("a","c") }
 
     MkString(List[String]("a","b","c"), "\n") repairFrom StringInsert("a\n","d\n", "b\nc", StringInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("\n")) => l shouldEqual _List[String]("a","d", "b", "c") }
@@ -580,8 +586,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     MkString(List[String]("dc"), "") repairFrom StringInsert("","kp", "c", StringInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("kpc") }
 
-   /* MkString(List[String]("abc","def","gh"), "") repairFrom StringInsert("ab","#","efgh", StringInsert.InsertAutomatic) match {
-      case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("ab","ef","gh") }*/
+    /* MkString(List[String]("abc","def","gh"), "") repairFrom StringInsert("ab","#","efgh", StringInsert.InsertAutomatic) match {
+       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("ab","ef","gh") }*/
 
     MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","m?#k", "d", StringInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","om","kd") }
@@ -616,14 +622,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     MkString(List[String]("c"), "#") repairFrom StringInsert("c","k#d", "", StringInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("ck","d") }
 
-    MkString(List[String]("c"), "") repairFrom StringInsert("","kp", "c", StringInsert.InsertAutomatic) match {
-      case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("kpc") }
-
     MkString(List[String]("a","c", "d"), "#") repairFrom StringInsert("a","b", "d", StringInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("abd") }
-
-    MkString(List[String]("a","c"), "") repairFrom StringInsert("a","b", "c", StringInsert.InsertAutomatic) match {
-      case MkString(l, StringLiteral("b")) => l shouldEqual _List[String]("a","c") }
 
     MkString(List[String]("a", "b", "c"), "#") repairFrom StringInsert("a#","e#f#q","b#c", StringInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("a", "e", "f", "qb", "c") }

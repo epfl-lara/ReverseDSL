@@ -344,7 +344,10 @@ trait Lenses { self: ReverseProgram.type =>
           // ==> [leftUntouched   ]leftUpdated [inserted]rightUpdated   [rightUntouched]
             //When complete coverage, replace this if-then-else by this body because it's the same code with coverage
 
-          if(notHandledList.length == 1 && notHandledList.head.isInstanceOf[Infix]) { // The prefix was selected and updated !
+          if(notHandledList.length == 1 && notHandledList.head.isInstanceOf[Infix] ||
+            notHandledList.length == 0 && infix == "" && direction == StringInsert.InsertAutomatic &&
+              leftUntouched.length > 0 && rightUntouched.length > 0
+          ) { // The prefix was selected and updated !
             solutions += ((Seq(ProgramFormula(originalInputExpr),
               StringInsert(leftUpdated, inserted, rightUpdated, direction)), Formula()))
           } else if(notHandledList.length % 2 == 0) { // An insertion occurred either on the element before or the element after.
@@ -414,7 +417,7 @@ trait Lenses { self: ReverseProgram.type =>
                       ), ifPrepend.formula), ProgramFormula(infixExpr)), Formula()))
 
                   val toAdd = direction match {
-                    case StringInsert.InsertToLeft =>
+                    case StringInsert.InsertToLeft | StringInsert.InsertAutomatic =>
                       infixModification ++ elementToLeftModification ++ elementToRightModification
                     case StringInsert.InsertToRight =>
                       elementToRightModification ++ infixModification ++ elementToLeftModification

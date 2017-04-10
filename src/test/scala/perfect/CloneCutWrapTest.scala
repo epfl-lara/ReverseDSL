@@ -169,8 +169,8 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
     pfun repairFrom StringInsert("Hello ", "big", "world", StringInsert.InsertToLeft) match {
       case StringLiteral(s) +& StringLiteral(t) =>
-        s shouldEqual "Hello "
-        t shouldEqual "bigworld"
+        s shouldEqual "Hello big"
+        t shouldEqual "world"
     }
 
     val pfun2 = "Hello" +& " world"
