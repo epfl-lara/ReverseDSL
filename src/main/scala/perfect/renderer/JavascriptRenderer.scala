@@ -15,6 +15,7 @@ object JavascriptRenderer extends inox.ast.Printer {
   var printTypes = false
   var useLambdaArrows = true
   private val q = "\""
+  private val t = "`"
 
   /** For the real javascript use these definitions*/
   var jsdefs =
@@ -26,6 +27,20 @@ object JavascriptRenderer extends inox.ast.Printer {
       |  return res;
       |}
     """.stripMargin
+
+  object StringConcats {
+    private object StringConcatExtract {
+      def unapply(e: Expr): Some[List[Expr]] = e match {
+        case StringConcat(StringConcatExtract(a), StringConcatExtract(b)) => Some(a ++ b)
+        case e => Some(List(e))
+      }
+    }
+
+    def unapply(e: Expr): Option[List[Expr]] = e match {
+      case StringConcatExtract(l) if l.length >= 2 => Some(l)
+      case _ => None
+    }
+  }
 
   override protected def ppBody(tree: Tree)(implicit ctx: PrinterContext): Unit = tree match {
     case fm @ FiniteMap(rs, dflt, _, _) =>
@@ -68,7 +83,19 @@ object JavascriptRenderer extends inox.ast.Printer {
       p"new $adt($args)"
     case MapApply(a, i) =>
       p"$a[$i]"
-    case StringConcat(StringConcat(a, sl@StringLiteral(s)), b) if s.endsWith("\n") =>
+    case StringConcats(ss) if ss.exists(_.isInstanceOf[StringLiteral]) => // Use tick printing.
+      p"`"
+      for(s <- ss) {
+        s match {
+          case StringLiteral(v) =>
+            val escaped = v.replaceAllLiterally("\\", "\\\\").replaceAllLiterally("`", "\\`") // We can keep newlines !
+            ctx.sb append escaped // We appen the string raw.
+          case e => p"$${$e}"
+        }
+      }
+      p"`"
+
+    case StringConcat(StringConcat(a, sl@StringLiteral(s)), b) if s.endsWith("\n") => // Is not used anymore normally
       p"""$a + $sl +
          |$b"""
     case IsInstanceOf(e, ADTType(Utils.nil, Seq())) => p"$e.length === 0"
@@ -79,8 +106,8 @@ object JavascriptRenderer extends inox.ast.Printer {
     case FunctionInvocation(id, tps, args) =>
       p"$id($args)"
     case StringLiteral(v) =>
-      val escaped = StringEscapeUtils.escapeJava(v)
-      p"$q$escaped$q"
+      val escaped = v.replaceAllLiterally("\\", "\\\\").replaceAllLiterally("`", "\\`") // We can keep newlines !
+      p"$t$escaped$t"
     case _ => super.ppBody(tree)
   }
 }
