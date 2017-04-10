@@ -370,6 +370,20 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
 
   }
 
+
+  test("Clone accross a StringConcat of constants") {
+
+  }
+
+  test("Clone accross a StringConcat of constant/variable") {
+
+  }
+
+  test("Clone accross a StringConcat of variables") {
+
+  }
+
+
   test("Paste") {
     val pfun: Let = let("v"::String, " move it")(v => "I like to" +& v +& "!")
     val v = pfun.vd.toVariable
@@ -400,13 +414,23 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         "I"+& like +& " to" +& move_it +& "!"))
     val like = pfun.vd.toVariable
 
-    pfun repairFrom PasteVariable("I like to move", like, " like", " it!", PasteVariable.PasteAutomatic) match {
-      case Let(like, StringLiteral(like_s),
+    val pfun2 = pfun repairFrom PasteVariable("I like to move", like, " like", " it!", PasteVariable.PasteAutomatic) match {
+      case l@Let(like, StringLiteral(like_s),
       Let(move_it, StringLiteral(" move") +& (like2: Variable) +& StringLiteral(" it"),
       StringLiteral("I") +& (like3: Variable) +& StringLiteral(" to") +& (move_it2: Variable) +& StringLiteral("!"))) =>
         like.toVariable shouldEqual like3
         move_it.toVariable shouldEqual move_it2
         like2 shouldEqual like3
+        l
+    }
+    pfun2 repairFrom StringInsert("I like to move", " ", " like it!", StringInsert.InsertToLeft) match {
+      case l@Let(like, StringLiteral(like_s),
+      Let(move_it, StringLiteral(" move ") +& (like2: Variable) +& StringLiteral(" it"),
+      StringLiteral("I") +& (like3: Variable) +& StringLiteral(" to") +& (move_it2: Variable) +& StringLiteral("!"))) =>
+        like.toVariable shouldEqual like3
+        move_it.toVariable shouldEqual move_it2
+        like2 shouldEqual like3
+        l
     }
   }
 

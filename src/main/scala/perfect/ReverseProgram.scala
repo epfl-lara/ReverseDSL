@@ -380,7 +380,7 @@ object ReverseProgram extends lenses.Lenses {
         case v@Variable(id, tpe, flags) =>
           newOutProgram match {
             case ProgramFormula.StringInsert(left, inserted, right, direction) =>
-              Stream(ProgramFormula(v, Formula(v === StringLiteral(left + inserted + right))))
+              Stream(ProgramFormula(v, Formula(v === newOut) combineWith newOutFormula))
             case ProgramFormula.PasteVariable(left, v2, v_value, right, direction) =>
               val StringLiteral(s) = functionValue
 
@@ -419,16 +419,21 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case StringConcat(expr1, expr2) =>
-          ifEmpty(for(pf <- repair(program.subExpr(FunctionInvocation(StringConcatReverser.identifier, Nil,
-            Seq(expr1, expr2))), newOutProgram)) yield {
-            pf match {
-              case ProgramFormula(FunctionInvocation(StringConcatReverser.identifier, Nil, Seq(x, y)), f) =>
-                ProgramFormula(StringConcat(x, y), f)
-            }
-          }){
-            val constraint = newOut === function
-            Stream(ProgramFormula(function,
-              Formula(unknownConstraints=constraint)))
+          optVar(newOutProgram.expr).flatMap(newOutFormula.findConstraintValue).map(v => ProgramFormula(v, newOutFormula)) match {
+            case Some(pf@ProgramFormula.StringInsert(left, inserted, right, direction)) =>
+              repair(program, pf)
+            case _ =>
+              ifEmpty(for (pf <- repair(program.subExpr(FunctionInvocation(StringConcatReverser.identifier, Nil,
+                Seq(expr1, expr2))), newOutProgram)) yield {
+                pf match {
+                  case ProgramFormula(FunctionInvocation(StringConcatReverser.identifier, Nil, Seq(x, y)), f) =>
+                    ProgramFormula(StringConcat(x, y), f)
+                }
+              }) {
+                val constraint = newOut === function
+                Stream(ProgramFormula(function,
+                  Formula(unknownConstraints = constraint)))
+              }
           }
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
