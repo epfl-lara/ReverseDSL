@@ -213,6 +213,16 @@ object ReverseProgram extends lenses.Lenses {
           newOutProgram match {
             case ProgramFormula.CloneText(left, middle, right, v) =>
               Stream(ProgramFormula(Let(v.toVal, StringLiteral(middle), StringLiteral(left) +& v +& StringLiteral(right))))
+            case ProgramFormula.PasteVariable(left, v, v_value, right, direction) =>
+              if(left == "" && right == "") {
+                Stream(ProgramFormula(v))
+              } else if(left == "" && right != "") {
+                Stream(ProgramFormula(v +& StringLiteral(right)))
+              } else if(left != "" && right == "") {
+                Stream(ProgramFormula(StringLiteral(left) +& v))
+              } else  {
+                Stream(ProgramFormula(StringLiteral(left) +& v +& StringLiteral(right)))
+              }
             case _ =>
               newOut match {
                 case v: Variable => // Replacement with the variable newOut, with a maybe clause.
@@ -357,6 +367,31 @@ object ReverseProgram extends lenses.Lenses {
           newOutProgram match {
             case ProgramFormula.StringInsert(left, inserted, right, direction) =>
               Stream(ProgramFormula(v, Formula(v === StringLiteral(left + inserted + right))))
+            case ProgramFormula.PasteVariable(left, v2, v_value, right, direction) =>
+              val StringLiteral(s) = functionValue
+
+              def insertLeft = if(left == s) {
+                if(right != "") {
+                  Stream(ProgramFormula(v +& v2 +& StringLiteral(right)))
+                } else {
+                  Stream(ProgramFormula(v +& v2))
+                }
+              } else Stream.empty
+              def insertRight = if(right == s) {
+                if(left != "") {
+                  Stream(ProgramFormula(StringLiteral(left) +& v2 + v))
+                } else {
+                  Stream(ProgramFormula(v +& v2))
+                }
+              } else Stream.empty
+
+              def propagate = if(left != s && right != s &&
+                  s.startsWith(left) && s.endsWith(right) &&
+                  s.length >= left.length + right.length ) {
+                // We need to propagate this paste to higher levels.
+                Stream(ProgramFormula(v2, newOutFormula combineWith (v2 === newOutProgram.expr)))
+              } else Stream.empty
+              insertLeft #::: insertRight #::: propagate
             case _ =>
               Stream(ProgramFormula(v, Formula(v === newOut) combineWith newOutFormula))
           }

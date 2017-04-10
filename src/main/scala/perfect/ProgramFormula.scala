@@ -193,25 +193,55 @@ object ProgramFormula {
   }
 
   /** Paste a previously cloned variable. Like  StringInsert but with a variable inside it. */
-  object PasteVariable {
+  object PasteVariable extends Enumeration {
     private val leftName = "lPaste"
     private val rightName = "rPaste"
+    type PasteDirection = Value
+    val PasteToLeft, PasteToRight, PasteAutomatic = Value
 
-    def apply(left: Expr, insertedVar: Variable, right: Expr): ProgramFormula = {
-      ProgramFormula(
-        left +& insertedVar +& right
-      )
+    def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: PasteDirection): ProgramFormula = {
+      val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
+      val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
+
+      direction match {
+        case PasteToLeft =>
+          ProgramFormula(
+            StringLiteral(left) +& insertedVar +& rightTreeStr,
+            rightTreeStr === StringLiteral(right) && insertedVar === StringLiteral(originalVarValue)
+          )
+        case PasteToRight =>
+          ProgramFormula(
+            leftTreeStr +& insertedVar +& StringLiteral(right),
+            leftTreeStr === StringLiteral(left) && insertedVar === StringLiteral(originalVarValue)
+          )
+        case PasteAutomatic =>
+          ProgramFormula(
+            leftTreeStr +& insertedVar +& rightTreeStr,
+            leftTreeStr === StringLiteral(left) && rightTreeStr === StringLiteral(right) && insertedVar === StringLiteral(originalVarValue)
+          )
+      }
     }
 
-    def unapply(f: ProgramFormula): Option[(String, Variable, String)] = {
+    def unapply(f: ProgramFormula): Option[(String, Variable, String, String, PasteDirection)] = {
       f.expr match {
-        case StringLiteral(left) +& (v@Variable(id, StringType, _)) +& StringLiteral(right) =>
-          f.formula.findConstraintValue(v).getOrElse(return None) match {
-            case original: Variable =>
-              Some((left, original, right))
-            case _ => None
-          }
-        case _ => None
+        case (StringLiteral(leftBefore)) +& (inserted: Variable) +& (rightTreeStr@Variable(idRight, StringType, _))
+          if idRight.name == rightName =>
+          val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
+          val StringLiteral(insertedValue) = f.formula.findConstraintValue(inserted).getOrElse(return None)
+          Some((leftBefore, inserted, insertedValue, rightBefore, PasteToLeft))
+        case (leftTreeStr@Variable(idLeft, StringType, _)) +& (inserted: Variable) +& StringLiteral(rightBefore)
+          if idLeft.name == leftName =>
+          val StringLiteral(leftBefore) = f.formula.findConstraintValue(leftTreeStr).getOrElse(return None)
+          val StringLiteral(insertedValue) = f.formula.findConstraintValue(inserted).getOrElse(return None)
+          Some((leftBefore, inserted, insertedValue, rightBefore, PasteToRight))
+        case (leftTreeStr@Variable(idLeft, StringType, _)) +& (inserted: Variable) +& (rightTreeStr@Variable(idRight, StringType, _))
+          if idLeft.name == leftName && idRight.name == rightName =>
+          val StringLiteral(leftBefore) = f.formula.findConstraintValue(leftTreeStr).getOrElse(return None)
+          val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
+          val StringLiteral(insertedValue) = f.formula.findConstraintValue(inserted).getOrElse(return None)
+          Some((leftBefore, inserted, insertedValue, rightBefore, PasteAutomatic))
+        case _ =>
+          None
       }
     }
   }

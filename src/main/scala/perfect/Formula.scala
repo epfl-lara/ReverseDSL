@@ -166,6 +166,10 @@ case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
     Formula(and(ands.distinct :_*))
   }
 
+  def combineWith(b: Expr): Formula = {
+    this combineWith Formula(b)
+  }
+
   override def toString = "[" + unknownConstraints.toString() + "]"
   private lazy val unknownConstraintsVars: Set[ValDef] = exprOps.variablesOf(unknownConstraints).map(_.toVal)
 

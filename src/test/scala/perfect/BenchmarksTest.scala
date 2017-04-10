@@ -95,7 +95,7 @@ class BenchmarksTest extends FunSuite with TestHelpers {
       |A proof by induction uses the axiom of recurrence.
       |The axiom of recurrence states that if the following precondition is satisfied:
       |
-      |    $P(1) \wedge \forall n \ge 1. """.stripMargin, v, """(n) => P(n+1)$
+      |    $P(1) \wedge \forall n \ge 1. """.stripMargin, v, "P", """(n) => P(n+1)$
       |
       |then the following result holds:
       |
@@ -109,7 +109,7 @@ class BenchmarksTest extends FunSuite with TestHelpers {
       |By applying proof by induction, this result is trivially true for $1$. Now suppose that it is true for a given $n$. $1+\ldots+n = n(n+1)/2$. Adding $n+1$ to both sides gives: $1+\ldots+n+(n+1) = n(n+1)/2 + n+1 = (n+1)(n+2)/2$. Hence we can conclude.
       |
       |There are many variants of proof by induction: induction basis equal to 2, prefix induction, induction on multiple counters, infinite descent
-      |""".stripMargin)
+      |""".stripMargin, ProgramFormula.PasteVariable.PasteAutomatic)
 
     step3 shouldProduce step1
 
@@ -229,7 +229,7 @@ class BenchmarksTest extends FunSuite with TestHelpers {
       |A proof by induction uses the axiom of recurrence.
       |The axiom of recurrence states that if the following precondition is satisfied:
       |
-      |    $P(1) \wedge \forall n \ge 1. P(""".stripMargin, newValDef.toVariable, """) => P(n+1)$
+      |    $P(1) \wedge \forall n \ge 1. P(""".stripMargin, newValDef.toVariable, "n", """) => P(n+1)$
       |
       |then the following result holds:
       |
@@ -243,7 +243,7 @@ class BenchmarksTest extends FunSuite with TestHelpers {
       |By applying proof by induction, this result is trivially true for $1$. Now suppose that it is true for a given $n$. $1+\ldots+n = n(n+1)/2$. Adding $n+1$ to both sides gives: $1+\ldots+n+(n+1) = n(n+1)/2 + n+1 = (n+1)(n+2)/2$. Hence we can conclude.
       |
       |There are many variants of proof by induction: induction basis equal to 2, prefix induction, induction on multiple counters, infinite descent
-      |""".stripMargin)
+      |""".stripMargin, ProgramFormula.PasteVariable.PasteAutomatic)
 
     step31 match {
       case Let(p, StringLiteral(ps), Let(n, StringLiteral(ns), body)) =>

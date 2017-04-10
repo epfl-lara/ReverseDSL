@@ -13,7 +13,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import XmlTrees._
   import StringConcatExtended._
-  import ProgramFormula.{StringInsert, ListInsert, TreeWrap, TreeUnwrap}
+  import ProgramFormula.{StringInsert, ListInsert, TreeWrap, TreeUnwrap, CloneText, PasteVariable}
 
   test("Formula assignment") {
     val va = variable[String]("a")
@@ -349,7 +349,37 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("Clone") {
+    val pfun: Expr = "I like to move it!"
+    pfun repairFrom CloneText("I like to", " move it", "!") match {
+      case Let(vd, StringLiteral(s), StringLiteral(a) +& (v: Variable) +& StringLiteral(b)) =>
+        vd.id shouldEqual v.id
+        a shouldEqual "I like to"
+        s shouldEqual " move it"
+        b shouldEqual "!"
+    }
+  }
 
+  test("Paste") {
+    val pfun: Let = let("v"::String, " move it")(v => "I like to" +& v +& "!")
+    val v = pfun.vd.toVariable
+
+    pfun repairFrom PasteVariable("I like to move it", v, " move it", "!", PasteVariable.PasteToLeft) match {
+      case Let(vd, StringLiteral(s), StringLiteral(a) +& ((v: Variable) +& (v2: Variable)) +& StringLiteral(b)) =>
+        v shouldEqual v2
+        v.id shouldEqual vd.id
+        s shouldEqual " move it"
+        a shouldEqual "I like to"
+        b shouldEqual "!"
+    }
+
+    pfun repairFrom PasteVariable("I like to move it", v, " move it", "!", PasteVariable.PasteToRight) match {
+      case Let(vd, StringLiteral(s), StringLiteral(a) +& (v: Variable) +& ((v2: Variable) +& StringLiteral(b))) =>
+        v shouldEqual v2
+        v.id shouldEqual vd.id
+        s shouldEqual " move it"
+        a shouldEqual "I like to"
+        b shouldEqual "!"
+    }
   }
 
   test("Cut") {
