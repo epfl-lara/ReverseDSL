@@ -8,6 +8,7 @@ import inox.trees.dsl._
 import inox.solvers._
 import perfect.ImplicitTuples.{_1, _2, tuple2}
 import ProgramFormula._
+import StringConcatExtended._
 
 trait Lenses { self: ReverseProgram.type =>
 
@@ -25,15 +26,35 @@ trait Lenses { self: ReverseProgram.type =>
   )
 
   val reversions = reversers.map(x => x.identifier -> x).toMap
-  val funDefs = reversers.map(_.funDef) ++ List(
+
+  val customFunDefs = List(
     mkFunDef(Utils.stringCompare)(){case _ =>
       (Seq("left"::StringType, "right"::StringType),
         IntegerType,
         { case Seq(l, r) =>
-            StringLength(l) - StringLength(r) // Dummy
+          StringLength(l) - StringLength(r) // Dummy
+        })
+    },
+    mkFunDef(Utils.cloned)(){ case _ =>
+      (Seq("left"::StringType, "cloned"::StringType, "right"::StringType, "varname"::StringType),
+        StringType,
+        {
+          case Seq(left, cloned, right, varname) =>
+            left +& cloned +& right // Dummy
+        })
+    },
+    mkFunDef(Utils.stringinsert)(){ case _ =>
+      (Seq("left"::StringType, "inserted"::StringType, "right"::StringType, "direction"::StringType),
+        StringType,
+        {
+          case Seq(left, inserted, right, varname) =>
+            left +& inserted +& right // Dummy
         })
     }
   )
+
+  val funDefs = reversers.map(_.funDef) ++ customFunDefs
+
 
   type ArgumentsFormula = (Seq[ProgramFormula], Formula)
   

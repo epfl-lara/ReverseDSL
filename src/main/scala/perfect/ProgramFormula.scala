@@ -62,6 +62,10 @@ object ProgramFormula {
     private val rightName = "rightTreeStr"
     type InsertDirection = Value
     val InsertToLeft, InsertToRight, InsertAutomatic = Value
+    private object Direction {
+      def unapply(s: String): Option[InsertDirection] =
+        values.find(_.toString == s)
+    }
 
     def computeDirection(left: String, s: String, right: String): InsertDirection = {
       val leftJump = ReverseProgram.StringConcatReverser.typeJump(left, s)
@@ -84,43 +88,15 @@ object ProgramFormula {
     def apply(left: String, s: String, right: String, direction: InsertDirection): ProgramFormula = {
       val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
       val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
-
-      direction match {
-        case InsertToLeft =>
-          ProgramFormula(
-            StringLiteral(left) +& StringLiteral(s) +& rightTreeStr,
-            // tree === leftTreeStr +& rightTreeStr && (if not modificaiton)
-            rightTreeStr === StringLiteral(right)
-          )
-        case InsertToRight =>
-          ProgramFormula(
-            leftTreeStr +& StringLiteral(s) +& StringLiteral(right),
-            leftTreeStr === StringLiteral(left)
-          )
-        case InsertAutomatic =>
-          ProgramFormula(
-            leftTreeStr +& StringLiteral(s) +& rightTreeStr,
-            leftTreeStr === StringLiteral(left) && rightTreeStr === StringLiteral(right)
-          )
-      }
-
+      ProgramFormula(E(Utils.stringinsert)(StringLiteral(left), StringLiteral(s), StringLiteral(right), StringLiteral(direction.toString)))
     }
 
     def unapply(f: ProgramFormula): Option[(String, String, String, InsertDirection)] = {
       f.expr match {
-        case (StringLiteral(leftBefore)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(idRight, StringType, _))
-          if idRight.name == rightName =>
-          val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
-          Some((leftBefore, inserted, rightBefore, InsertToLeft))
-        case (leftTreeStr@Variable(idLeft, StringType, _)) +& StringLiteral(inserted) +& StringLiteral(rightBefore)
-          if idLeft.name == leftName =>
-          val StringLiteral(leftBefore) = f.formula.findConstraintValue(leftTreeStr).getOrElse(return None)
-          Some((leftBefore, inserted, rightBefore, InsertToRight))
-        case (leftTreeStr@Variable(idLeft, StringType, _)) +& StringLiteral(inserted) +& (rightTreeStr@Variable(idRight, StringType, _))
-          if idLeft.name == leftName && idRight.name == rightName =>
-          val StringLiteral(leftBefore) = f.formula.findConstraintValue(leftTreeStr).getOrElse(return None)
-          val StringLiteral(rightBefore) = f.formula.findConstraintValue(rightTreeStr).getOrElse(return None)
-          Some((leftBefore, inserted, rightBefore, InsertAutomatic))
+        case FunctionInvocation(Utils.stringinsert, Seq(), Seq(
+          StringLiteral(leftBefore), StringLiteral(inserted), StringLiteral(rightBefore), StringLiteral(Direction(direction))
+        )) =>
+          Some((leftBefore, inserted, rightBefore, direction))
         case _ =>
           None
       }
@@ -168,12 +144,13 @@ object ProgramFormula {
     val rightName = "rClone"
     def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set())): ProgramFormula = {
       val variable = if(insertedVar.id.name == "") Var(text) else insertedVar
-
+      ProgramFormula(E(Utils.cloned)(StringLiteral(left), StringLiteral(text), StringLiteral(right), variable))
+      /*
       ProgramFormula(
         StringLiteral(left) +& variable +& StringLiteral(right),
         // tree === left +& s +& right &&    (if not modificaiton)
         variable === StringLiteral(text)
-      )
+      )*/
     }
     object Var {
       /** Creates a variable from the text. If nothing found, uses i. */
@@ -198,12 +175,15 @@ object ProgramFormula {
 
     def unapply(f: ProgramFormula): Option[(String, String, String, Variable)] = {
       f.expr match {
+        case FunctionInvocation(Utils.cloned, Seq(), Seq(StringLiteral(left), StringLiteral(cloned), StringLiteral(right), v: Variable)) =>
+          Some((left, cloned, right, v))
+          /*
         case StringLiteral(left) +& (v@Variable(id, StringType, _)) +& StringLiteral(right) =>
           f.formula.findConstraintValue(v).getOrElse(return None) match {
             case StringLiteral(cloned) =>
               Some((left, cloned, right, v))
             case _ => None
-          }
+          }*/
         case _ => None
       }
     }

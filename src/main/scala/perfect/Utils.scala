@@ -106,8 +106,17 @@ object Utils {
   val sortWith = FreshIdentifier("sortWith")
   val merge = FreshIdentifier("merge")
   val splitEven = FreshIdentifier("splitEven")
-  val stringCompare = FreshIdentifier("stringCompare")
   val mkString = FreshIdentifier("mkString")
+
+  /** Dummy function implementation, body overriden in lambdaPreservingEvaluator*/
+  val stringCompare = FreshIdentifier("stringCompare")
+
+  /** Semantic helpers to repair formulas. */
+  val cloned = FreshIdentifier("cloned")
+  val stringinsert = FreshIdentifier("stringinsert")
+  val pastevariable = FreshIdentifier("pastevariable")
+  val treewrap = FreshIdentifier("treewrap")
+  val treeunwrap = FreshIdentifier("treeunwrap")
 
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)

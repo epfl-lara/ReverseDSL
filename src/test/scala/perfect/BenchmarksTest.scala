@@ -10,7 +10,7 @@ import perfect.InoxConvertible.{_List, inoxTypeOf, valdef}
 /**
   * Created by Mikael on 01/04/2017.
   */
-class BenchmarksTest extends FunSuite with TestHelpers {
+class BenchmarksTest extends FunSuite with TestHelpers {/*
   import StringConcatExtended._
   import InoxConvertible._
   import ImplicitTuples._
@@ -470,4 +470,5 @@ class BenchmarksTest extends FunSuite with TestHelpers {
     pfun repairFrom ProgramFormula.StringInsert("(","fr",")\nHi Marion, how are you doing?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham") shouldProduce
       "(fr)\nSalut Marion, comment tu vas ?\n\nMarion, here are the available pizzas:\n- Margharita\n- Salami\n- Pepperoni\n- Ham"
   }*/
+  */
 }
