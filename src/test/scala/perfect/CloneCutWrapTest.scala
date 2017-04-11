@@ -45,7 +45,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
-  /*test("Unwrap") {
+  test("Unwrap") {
     val output = _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
     val pfun =
       let("ad" :: String, "Hello"){ av =>
@@ -54,7 +54,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     pfun shouldProduce output
 
     val newOut = TreeUnwrap(
-      Node,
+      inoxTypeOf[Node],
       output,
       List(Utils.children, Utils.head)
     )
@@ -65,7 +65,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       case Let(ad, StringLiteral("Hello"), e) =>
         exprOps.variablesOf(e) should contain(ad.toVariable)
     }
-  }*/
+  }
 
   test("String insert") {
     val pfun =
