@@ -213,9 +213,9 @@ object ReverseProgram extends lenses.Lenses {
           newOutProgram match {
             case ProgramFormula.CloneText(left, middle, right, v) =>
               def first = if(program.canDoWrapping) { // Insert let-expressions the closest to the use.
-                Stream(ProgramFormula(Let(v.toVal, StringLiteral(middle), StringLiteral(left) +& v +& StringLiteral(right))))
+                Stream(ProgramFormula(Let(v.toVal, StringLiteral(middle), StringLiteral(left) +<>& v +<>& StringLiteral(right))))
               } else Stream.empty
-              first #::: Stream(ProgramFormula(StringLiteral(left) +& v +& StringLiteral(right), E(insertvar)(v === StringLiteral(middle))))
+              first #::: Stream(ProgramFormula(StringLiteral(left) +<>& v +<>& StringLiteral(right), E(insertvar)(v === StringLiteral(middle))))
             case ProgramFormula.PasteVariable(left, v, v_value, right, direction) =>
               if(left == "" && right == "") {
                 Stream(ProgramFormula(v))

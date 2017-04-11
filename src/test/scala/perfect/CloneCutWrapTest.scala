@@ -1,6 +1,6 @@
 package perfect
 import inox._
-import inox.trees._
+import inox.trees.{not => dnot, _}
 import inox.trees.dsl._
 import org.scalatest._
 import matchers._
@@ -372,7 +372,23 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
 
 
   test("Clone accross a StringConcat of constants") {
-
+    val pfun = ("I like" +& " to ") +& ("move" +& " it!")
+    pfun repairFrom CloneText("I like ", "to move", " it!") match { // We don't have control on how the variables are inserted.
+      case Let(c1, StringLiteral("to "), Let(c2, StringLiteral("move"), Let(cloned, cv1 +& cv2,
+      (StringLiteral("I like") +& (StringLiteral(" ") +& cv11)) +& (cv22 +& StringLiteral(" it!"))))) =>
+        c1.toVariable shouldEqual cv1
+        c2.toVariable shouldEqual cv2
+        cv1 shouldEqual cv11
+        cv2 shouldEqual cv22
+        c1.id.toString should not equal cloned.id.toString
+      case Let(c2, StringLiteral("move"), Let(c1, StringLiteral("to "), Let(cloned, cv1 +& cv2,
+      (StringLiteral("I like") +& (StringLiteral(" ") +& cv11)) +& (cv22 +& StringLiteral(" it!"))))) =>
+        c1.toVariable shouldEqual cv1
+        c2.toVariable shouldEqual cv2
+        cv1 shouldEqual cv11
+        cv2 shouldEqual cv22
+        c1.id.toString should not equal cloned.id.toString
+    }
   }
 
   test("Clone accross a StringConcat of constant/variable") {

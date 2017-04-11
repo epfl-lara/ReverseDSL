@@ -811,6 +811,7 @@ trait Lenses { self: ReverseProgram.type =>
   case object StringConcatReverser extends Reverser {
     import StringConcatExtended._
     import Utils._
+    import ProgramFormula._
     val identifier = FreshIdentifier("tmpstringconcat")
 
     @inline def charType(a: Char): Int =
@@ -943,17 +944,17 @@ trait Lenses { self: ReverseProgram.type =>
               // Second, if equality, attach where the most characters have been removed.
               x._2._1 < y._2._1 || (x._2._1 == y._2._1 && x._2._2 < y._2._2)
             }}.map(_._1).toStream
-        case pc@ProgramFormula.CloneText(left, cloned, right, variable) =>
+        case pc@CloneText(left, cloned, right, variable) =>
           def cloneToLeft: List[(ArgumentsFormula, Int)] = {
             if(right.endsWith(rv)) {
               val newLeft = left
               val newRight = right.substring(0, right.length - rv.length)
-              val leftClone = ProgramFormula.CloneText(newLeft, cloned, newRight, variable)
+              val leftClone = CloneText(newLeft, cloned, newRight, variable)
               val rightClone = ProgramFormula(rightValue)
               val weight = 0 /*direction match {
-                case ProgramFormula.PasteVariable.PasteToLeft => 0
-                case ProgramFormula.PasteVariable.PasteToRight => 1
-                case ProgramFormula.PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
+                case PasteVariable.PasteToLeft => 0
+                case PasteVariable.PasteToRight => 1
+                case ariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
               }*/
               List(((Seq(leftClone, rightClone), Formula()), weight)) /: Log.prefix("cloneToLeft: ")
             } else Nil
@@ -963,16 +964,29 @@ trait Lenses { self: ReverseProgram.type =>
               val newLeft = left.substring(lv.length)
               val newRight = right
               val leftPaste = ProgramFormula(leftValue)
-              val rightPaste = ProgramFormula.CloneText(newLeft, cloned, newRight, variable)
+              val rightPaste = CloneText(newLeft, cloned, newRight, variable)
               val weight = 0 /*direction match {
-                case ProgramFormula.PasteVariable.PasteToLeft => 1
-                case ProgramFormula.PasteVariable.PasteToRight => 0
-                case ProgramFormula.PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
+                case PasteVariable.PasteToLeft => 1
+                case PasteVariable.PasteToRight => 0
+                case PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
               }*/
               List(((Seq(leftPaste, rightPaste), Formula()), weight)) /: Log.prefix("cloneToRight: ")
             } else Nil
           }
-          (cloneToLeft ++ cloneToRight).sortBy(_._2).map(_._1).toStream
+          // If the clone overlaps the two arguments
+          def cloneBoth: List[(ArgumentsFormula, Int)] = {
+            if(!left.startsWith(lv)&& !right.endsWith(rv) &&
+              lv.startsWith(left) && rv.endsWith(right)) {
+              val leftCloned = cloned.substring(0, lv.length - left.length)
+              val rightCloned = cloned.substring(lv.length - left.length)
+              val leftVar = CloneText.Var(leftCloned, Seq(variable.id.name))
+              val leftClone = CloneText(left, leftCloned, "", leftVar)
+              val rightVar = CloneText.Var(rightCloned, Seq(variable.id.name, leftVar.id.name))
+              val rightClone = CloneText("", rightCloned, right, rightVar)
+              List(((Seq(leftClone, rightClone), Formula(E(Utils.insertvar)(variable === leftVar +& rightVar))), 0))
+            } else Nil
+          }
+          (cloneToLeft ++ cloneToRight ++ cloneBoth).sortBy(_._2).map(_._1).toStream
 
         case pv@ProgramFormula.PasteVariable(left, v, v_value, right, direction) =>
           def pasteToLeft: List[(ArgumentsFormula, Int)] = {

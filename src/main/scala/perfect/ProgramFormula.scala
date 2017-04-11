@@ -163,20 +163,36 @@ object ProgramFormula {
   }
 
   /** Inserts a variable for a given selected text.*/
-  object CloneText {
+  object CloneText { ct =>
     val leftName = "lClone"
     val rightName = "rClone"
     def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set())): ProgramFormula = {
-      val variable = if(insertedVar.id.name == "") {
-        val insertedVarName: String = text.split("\\W+").find(x => x.nonEmpty && x.charAt(0).isLetter).getOrElse("x")
-        Variable(FreshIdentifier(insertedVarName.toLowerCase()), StringType, Set())
-      } else insertedVar
+      val variable = if(insertedVar.id.name == "") Var(text) else insertedVar
 
       ProgramFormula(
         StringLiteral(left) +& variable +& StringLiteral(right),
         // tree === left +& s +& right &&    (if not modificaiton)
         variable === StringLiteral(text)
       )
+    }
+    object Var {
+      /** Creates a variable from the text. If nothing found, uses i. */
+      def apply(text: String, conflicts: Seq[String] = Nil): Variable = {
+        val default = text.split("\\W+")
+          .find(x => x.nonEmpty && x.charAt(0).isLetter).getOrElse("x").toLowerCase()
+        var finalName = default
+        var suffix = ""
+        while(conflicts.exists(_ == finalName + suffix.reverse)) {
+          val zs = suffix.takeWhile(c => c == 'z')
+          val not_zs = suffix.drop(zs.length)
+          val after_zs = if(not_zs.isEmpty) "a" else {
+            (not_zs(0) + 1).toChar + not_zs.substring(1)
+          }
+          suffix = "a"*zs.length + after_zs
+        }
+        Variable(FreshIdentifier(finalName + suffix.reverse), StringType, Set())
+      }
+      def unapply(f: ProgramFormula): Option[Variable] = ct.unapply(f).map(_._4)
     }
 
     def unapply(f: ProgramFormula): Option[(String, String, String, Variable)] = {
@@ -348,13 +364,14 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
       case _ => false
     }
     val inserted = insertedV collect {
-      case FunctionInvocation(Utils.insertvar, Seq(), Seq(Equals(v: Variable, e: Expr))) =>
-        (v, e)
+      case FunctionInvocation(Utils.insertvar, Seq(), Seq(m@Equals(v: Variable, e: Expr))) => m
     }
     val newFormula = if(insertedV.isEmpty) formula else Formula(and(remaining: _*))
-    (this /: inserted) {
-      case (ProgramFormula(expr, formula), (v, e)) =>
-        ProgramFormula(Let(v.toVal, e, expr), newFormula)
-    }
+    val newInserted = Formula(and(inserted :_*))
+    val assignment = newInserted.assignments
+
+    if(inserted.nonEmpty && assignment.nonEmpty) {
+      ProgramFormula(assignment.get(expr), newFormula)
+    } else this
   }
 }
