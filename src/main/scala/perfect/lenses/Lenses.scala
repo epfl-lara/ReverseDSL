@@ -27,51 +27,15 @@ trait Lenses { self: ReverseProgram.type =>
 
   val reversions = reversers.map(x => x.identifier -> x).toMap
 
-  val customFunDefs = List(
+  val funDefs = reversers.map(_.funDef) ++ ProgramFormula.customFunDefs ++ List(
     mkFunDef(Utils.stringCompare)(){case _ =>
       (Seq("left"::StringType, "right"::StringType),
         IntegerType,
         { case Seq(l, r) =>
           StringLength(l) - StringLength(r) // Dummy
         })
-    },
-    mkFunDef(Utils.cloned)(){ case _ =>
-      (Seq("left"::StringType, "cloned"::StringType, "right"::StringType, "varname"::StringType),
-        StringType,
-        {
-          case Seq(left, cloned, right, varname) =>
-            left +& cloned +& right // Dummy
-        })
-    },
-    mkFunDef(Utils.pastevariable)(){ case _ =>
-      (Seq("left"::StringType, "pasted"::StringType,  "originalvalue"::StringType, "right"::StringType, "direction"::StringType),
-        StringType,
-        {
-          case Seq(left, pasted, originalvalue, right, direction) =>
-            left +& originalvalue +& right // Dummy
-        })
-    },
-    mkFunDef(Utils.stringinsert)(){ case _ =>
-      (Seq("left"::StringType, "inserted"::StringType, "right"::StringType, "direction"::StringType),
-        StringType,
-        {
-          case Seq(left, inserted, right, direction) =>
-            left +& inserted +& right // Dummy
-        })
-    },
-    mkFunDef(Utils.listinsert)("A"){ case Seq(tA) =>
-      (Seq("left"::T(Utils.list)(tA), "inserted"::T(Utils.list)(tA), "right"::T(Utils.list)(tA), "direction"::StringType),
-        T(Utils.list)(tA), {
-        case Seq(left, inserted, right, direction) =>
-          E(Utils.listconcat)(tA)(E(Utils.listconcat)(tA)(
-            left,
-            inserted),
-            right)
-      })
     }
   )
-
-  val funDefs = reversers.map(_.funDef) ++ customFunDefs
 
 
   type ArgumentsFormula = (Seq[ProgramFormula], Formula)

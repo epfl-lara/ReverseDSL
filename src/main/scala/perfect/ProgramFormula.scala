@@ -18,46 +18,70 @@ object ProgramFormula {
 
   def apply(e: Expr, f: Expr): ProgramFormula = ProgramFormula(e, Formula(f))
 
-  object TreeWrap {
-    private val treeName = "treeWrap"
+  trait CustomProgramFormula {
+    def funDef: FunDef
+  }
+
+  object TreeWrap extends CustomProgramFormula {
+    private val Wrap = FreshIdentifier("wrap")
     def apply(tree: Expr, wrapper: Expr => Expr)(implicit symbols: Symbols): ProgramFormula = {
       val tpe = tree.getType
-      val treeVar = Variable(FreshIdentifier(treeName, true), tpe, Set())
-      ProgramFormula(Application(Lambda(Seq(treeVar.toVal), wrapper(treeVar)), Seq(tree)))
+      ProgramFormula(E(Wrap)(tpe)(\("tree"::tpe)(treeVar => wrapper(treeVar)), tree))
     }
     def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, Expr => Expr)] = {
       pf.expr match {
-        case Application(Lambda(Seq(treeVal), wtree), Seq(original)) if treeVal.id.name == treeName =>
+        case FunctionInvocation(Wrap, tpe, Seq(Lambda(Seq(treeVal), wtree), original)) =>
           Some((original, (vr: Expr) => exprOps.replaceFromSymbols(Map(treeVal -> vr),wtree)))
         case _ => None
       }
     }
+    def funDef = mkFunDef(Wrap)("A"){ case Seq(tA) =>
+      (Seq("wrapper"::FunctionType(Seq(tA), tA), "tree"::tA),
+        tA, {
+        case Seq(wrapper, tree) =>
+          Application(wrapper, Seq(tree))
+      })
+    }
   }
 
-  object TreeUnwrap {
-    private val unwrappedName = "unwrap"
+  object TreeUnwrap extends CustomProgramFormula  {
+    private val Unwrap = FreshIdentifier("unwrap")
+
     def apply(tpe: Type, original: Expr, argsInSequence: List[Identifier]): ProgramFormula = {
-      val unwrappedVar = Variable(FreshIdentifier(unwrappedName, true), tpe, Set())
-      ProgramFormula(unwrappedVar, unwrappedVar === (original /: argsInSequence){ case (e, i) => ADTSelector(e, i)}  )
+      ProgramFormula(E(Unwrap)(tpe)(
+        original,
+        \("unwrap"::tpe)(unwrap =>
+          ((unwrap: Expr) /: argsInSequence){ case (e, i) => ADTSelector(e, i)}
+        )
+      ))
     }
     def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Type, Expr, List[Identifier])] = {
       pf.expr match {
-        case v@Variable(id, tpe, _) if id.name == unwrappedName =>
-          val adtselectors = pf.formula.findConstraintValue(v).getOrElse(return None)
+        case FunctionInvocation(Unwrap, Seq(tpe), Seq(original, Lambda(Seq(unwrapvd), adtselectors))) =>
           def unbuild(e: Expr): (Type, Expr, List[Identifier]) = e match {
             case ADTSelector(e, i) =>
               val (t, res, l) = unbuild(e)
               (t, res, l :+ i)
-            case res => (tpe, res, Nil)
+            case res => (tpe, original, Nil)
           }
           Some(unbuild(adtselectors))
         case _ => None
       }
     }
+
+    def funDef = mkFunDef(Unwrap)("A"){ case Seq(tA) =>
+      (Seq("original"::tA, "unwrapper"::FunctionType(Seq(tA), tA)),
+        tA, {
+        case Seq(original, unwrapper) =>
+          Application(unwrapper, Seq(original))
+      })
+    }
   }
 
   /** To build and extract a StringInsert specification. Works for modifications as well */
-  object StringInsert extends Enumeration {
+  object StringInsert extends Enumeration with CustomProgramFormula  {
+    private val InsertString = FreshIdentifier("insertString")
+
     type InsertDirection = Value
     val InsertToLeft, InsertToRight, InsertAutomatic = Value
     private object Direction {
@@ -84,12 +108,12 @@ object ProgramFormula {
       * @param direction -1 if the insertion should be inserted to left, 1 to right, 0 if automatically guessed.
       **/
     def apply(left: String, s: String, right: String, direction: InsertDirection): ProgramFormula = {
-      ProgramFormula(E(Utils.stringinsert)(StringLiteral(left), StringLiteral(s), StringLiteral(right), StringLiteral(direction.toString)))
+      ProgramFormula(E(InsertString)(StringLiteral(left), StringLiteral(s), StringLiteral(right), StringLiteral(direction.toString)))
     }
 
     def unapply(f: ProgramFormula): Option[(String, String, String, InsertDirection)] = {
       f.expr match {
-        case FunctionInvocation(Utils.stringinsert, Seq(), Seq(
+        case FunctionInvocation(InsertString, Seq(), Seq(
           StringLiteral(leftBefore), StringLiteral(inserted), StringLiteral(rightBefore), StringLiteral(Direction(direction))
         )) =>
           Some((leftBefore, inserted, rightBefore, direction))
@@ -97,12 +121,22 @@ object ProgramFormula {
           None
       }
     }
+
+    def funDef = mkFunDef(InsertString)(){ case _ =>
+      (Seq("left"::StringType, "inserted"::StringType, "right"::StringType, "direction"::StringType),
+        StringType,
+        {
+          case Seq(left, inserted, right, direction) =>
+            left +& inserted +& right // Dummy
+        })
+    }
   }
 
-  object ListInsert {
+  object ListInsert extends CustomProgramFormula  {
+    private val InsertList = FreshIdentifier("insertList")
     def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr], remaining: Expr/* = BooleanLiteral(true)*/): ProgramFormula = {
       ProgramFormula(
-        E(Utils.listinsert)(tpe)(
+        E(InsertList)(tpe)(
           ListLiteral(leftUnmodified, tpe),
           ListLiteral(inserted, tpe),
           ListLiteral(rightUnmodified, tpe),
@@ -112,7 +146,7 @@ object ProgramFormula {
 
     def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr], Expr)] = {
       f.expr match {
-        case FunctionInvocation(Utils.listinsert, Seq(tpe0), Seq(
+        case FunctionInvocation(InsertList, Seq(tpe0), Seq(
           ListLiteral(leftBefore, _),
         ListLiteral(inserted, tpe3),
         ListLiteral(rightBefore, _),
@@ -121,13 +155,26 @@ object ProgramFormula {
         case _ => None
       }
     }
+
+    def funDef = mkFunDef(InsertList)("A"){ case Seq(tA) =>
+      (Seq("left"::T(Utils.list)(tA), "inserted"::T(Utils.list)(tA), "right"::T(Utils.list)(tA), "direction"::StringType),
+        T(Utils.list)(tA), {
+        case Seq(left, inserted, right, direction) =>
+          E(Utils.listconcat)(tA)(E(Utils.listconcat)(tA)(
+            left,
+            inserted),
+            right)
+      })
+    }
   }
 
   /** Inserts a variable for a given selected text.*/
-  object CloneText { ct =>
+  object CloneText extends CustomProgramFormula  { ct =>
+    private val Cloned = FreshIdentifier("cloned")
+
     def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set())): ProgramFormula = {
       val variable = if(insertedVar.id.name == "") Var(text) else insertedVar
-      ProgramFormula(E(Utils.cloned)(StringLiteral(left), StringLiteral(text), StringLiteral(right), variable))
+      ProgramFormula(E(Cloned)(StringLiteral(left), StringLiteral(text), StringLiteral(right), variable))
     }
     object Var {
       /** Creates a variable from the text. If nothing found, uses i. */
@@ -152,15 +199,25 @@ object ProgramFormula {
 
     def unapply(f: ProgramFormula): Option[(String, String, String, Variable)] = {
       f.expr match {
-        case FunctionInvocation(Utils.cloned, Seq(), Seq(StringLiteral(left), StringLiteral(cloned), StringLiteral(right), v: Variable)) =>
+        case FunctionInvocation(Cloned, Seq(), Seq(StringLiteral(left), StringLiteral(cloned), StringLiteral(right), v: Variable)) =>
           Some((left, cloned, right, v))
         case _ => None
       }
     }
+
+    def funDef = mkFunDef(Cloned)(){ case _ =>
+      (Seq("left"::StringType, "cloned"::StringType, "right"::StringType, "varname"::StringType),
+        StringType,
+        { case Seq(left, cloned, right, varname) =>
+            left +& cloned +& right // Dummy
+        })
+    }
   }
 
   /** Paste a previously cloned variable. Like  StringInsert but with a variable inside it. */
-  object PasteVariable extends Enumeration {
+  object PasteVariable extends Enumeration with CustomProgramFormula  {
+    private val Paste = FreshIdentifier("pastevariable")
+
     type PasteDirection = Value
     val PasteToLeft, PasteToRight, PasteAutomatic = Value
     private object Direction {
@@ -168,7 +225,7 @@ object ProgramFormula {
         values.find(_.toString == s)
     }
     def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: PasteDirection): ProgramFormula = {
-      ProgramFormula(E(Utils.pastevariable)(
+      ProgramFormula(E(Paste)(
         StringLiteral(left),
         insertedVar,
         StringLiteral(originalVarValue),
@@ -179,7 +236,7 @@ object ProgramFormula {
 
     def unapply(f: ProgramFormula): Option[(String, Variable, String, String, PasteDirection)] = {
       f.expr match {
-        case FunctionInvocation(Utils.pastevariable, Seq(), Seq(
+        case FunctionInvocation(Paste, Seq(), Seq(
         StringLiteral(leftBefore),
         inserted: Variable,
         StringLiteral(insertedValue),
@@ -191,7 +248,27 @@ object ProgramFormula {
           None
       }
     }
+
+    def funDef = mkFunDef(Paste)(){ case _ =>
+      (Seq("left"::StringType, "pasted"::StringType,  "originalvalue"::StringType, "right"::StringType, "direction"::StringType),
+        StringType,
+        {
+          case Seq(left, pasted, originalvalue, right, direction) =>
+            left +& originalvalue +& right // Dummy
+        })
+    }
   }
+
+  val customProgramFormulas = List[CustomProgramFormula](
+    TreeWrap,
+    TreeUnwrap,
+    StringInsert,
+    ListInsert,
+    CloneText,
+    PasteVariable
+  )
+
+  val customFunDefs = customProgramFormulas.map(_.funDef)
 }
 
 case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {

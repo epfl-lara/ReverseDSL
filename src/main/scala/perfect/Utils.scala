@@ -111,14 +111,6 @@ object Utils {
   /** Dummy function implementation, body overriden in lambdaPreservingEvaluator*/
   val stringCompare = FreshIdentifier("stringCompare")
 
-  /** Semantic helpers to repair formulas. */
-  val cloned = FreshIdentifier("cloned")
-  val stringinsert = FreshIdentifier("stringinsert")
-  val listinsert = FreshIdentifier("listinsert")
-  val pastevariable = FreshIdentifier("pastevariable")
-  val treewrap = FreshIdentifier("treewrap")
-  val treeunwrap = FreshIdentifier("treeunwrap")
-
   val defaultSymbols =
     NoSymbols.withADTs(allConstructors)
 
