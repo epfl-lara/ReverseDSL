@@ -185,7 +185,7 @@ object ProgramFormula {
     def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set())): ProgramFormula = {
       val variable = if(insertedVar.id.name == "") Var(text) else insertedVar
       //ProgramFormula(E(Cloned)(StringLiteral(left), StringLiteral(text), StringLiteral(right), variable))
-      CloneTextMultiple(left, List((text, insertedVar, right)))
+      CloneTextMultiple(left, List((text, variable, right)))
     }
     object Var {
       /** Creates a variable from the text. If nothing found, uses i. */
