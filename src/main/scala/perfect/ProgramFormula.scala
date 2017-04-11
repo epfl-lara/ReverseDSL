@@ -58,8 +58,6 @@ object ProgramFormula {
 
   /** To build and extract a StringInsert specification. Works for modifications as well */
   object StringInsert extends Enumeration {
-    private val leftName = "leftTreeStr"
-    private val rightName = "rightTreeStr"
     type InsertDirection = Value
     val InsertToLeft, InsertToRight, InsertAutomatic = Value
     private object Direction {
@@ -86,8 +84,6 @@ object ProgramFormula {
       * @param direction -1 if the insertion should be inserted to left, 1 to right, 0 if automatically guessed.
       **/
     def apply(left: String, s: String, right: String, direction: InsertDirection): ProgramFormula = {
-      val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
-      val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
       ProgramFormula(E(Utils.stringinsert)(StringLiteral(left), StringLiteral(s), StringLiteral(right), StringLiteral(direction.toString)))
     }
 
@@ -104,13 +100,7 @@ object ProgramFormula {
   }
 
   object ListInsert {
-    private val leftName = "leftTreeList"
-    private val rightName = "rightTreeList"
-
     def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr], remaining: Expr/* = BooleanLiteral(true)*/): ProgramFormula = {
-      val leftTreeList  = Variable(FreshIdentifier(leftName,  true), T(Utils.list)(tpe), Set())
-      val rightTreeList = Variable(FreshIdentifier(rightName, true), T(Utils.list)(tpe), Set())
-
       ProgramFormula(
         E(Utils.listinsert)(tpe)(
           ListLiteral(leftUnmodified, tpe),
@@ -135,8 +125,6 @@ object ProgramFormula {
 
   /** Inserts a variable for a given selected text.*/
   object CloneText { ct =>
-    val leftName = "lClone"
-    val rightName = "rClone"
     def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set())): ProgramFormula = {
       val variable = if(insertedVar.id.name == "") Var(text) else insertedVar
       ProgramFormula(E(Utils.cloned)(StringLiteral(left), StringLiteral(text), StringLiteral(right), variable))
@@ -173,8 +161,6 @@ object ProgramFormula {
 
   /** Paste a previously cloned variable. Like  StringInsert but with a variable inside it. */
   object PasteVariable extends Enumeration {
-    private val leftName = "lPaste"
-    private val rightName = "rPaste"
     type PasteDirection = Value
     val PasteToLeft, PasteToRight, PasteAutomatic = Value
     private object Direction {
@@ -182,8 +168,6 @@ object ProgramFormula {
         values.find(_.toString == s)
     }
     def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: PasteDirection): ProgramFormula = {
-      val leftTreeStr = Variable(FreshIdentifier(leftName, true), StringType, Set())
-      val rightTreeStr = Variable(FreshIdentifier(rightName, true), StringType, Set())
       ProgramFormula(E(Utils.pastevariable)(
         StringLiteral(left),
         insertedVar,
