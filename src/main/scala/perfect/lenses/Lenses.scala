@@ -43,6 +43,14 @@ trait Lenses { self: ReverseProgram.type =>
             left +& cloned +& right // Dummy
         })
     },
+    mkFunDef(Utils.pastevariable)(){ case _ =>
+      (Seq("left"::StringType, "pasted"::StringType,  "originalvalue"::StringType, "right"::StringType, "direction"::StringType),
+        StringType,
+        {
+          case Seq(left, pasted, originalvalue, right, direction) =>
+            left +& originalvalue +& right // Dummy
+        })
+    },
     mkFunDef(Utils.stringinsert)(){ case _ =>
       (Seq("left"::StringType, "inserted"::StringType, "right"::StringType, "direction"::StringType),
         StringType,
