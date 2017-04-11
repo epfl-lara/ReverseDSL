@@ -174,7 +174,8 @@ object ProgramFormula {
 
     def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set())): ProgramFormula = {
       val variable = if(insertedVar.id.name == "") Var(text) else insertedVar
-      ProgramFormula(E(Cloned)(StringLiteral(left), StringLiteral(text), StringLiteral(right), variable))
+      //ProgramFormula(E(Cloned)(StringLiteral(left), StringLiteral(text), StringLiteral(right), variable))
+      CloneTextMultiple(left, List((text, insertedVar, right)))
     }
     object Var {
       /** Creates a variable from the text. If nothing found, uses i. */
@@ -194,22 +195,122 @@ object ProgramFormula {
         }
         Variable(FreshIdentifier(finalName + suffix.reverse), StringType, Set())
       }
-      def unapply(f: ProgramFormula): Option[Variable] = ct.unapply(f).map(_._4)
     }
 
-    def unapply(f: ProgramFormula): Option[(String, String, String, Variable)] = {
+    /*def unapply(f: ProgramFormula): Option[(String, String, String, Variable)] = {
       f.expr match {
         case FunctionInvocation(Cloned, Seq(), Seq(StringLiteral(left), StringLiteral(cloned), StringLiteral(right), v: Variable)) =>
           Some((left, cloned, right, v))
         case _ => None
       }
-    }
+    }*/
 
     def funDef = mkFunDef(Cloned)(){ case _ =>
       (Seq("left"::StringType, "cloned"::StringType, "right"::StringType, "varname"::StringType),
         StringType,
         { case Seq(left, cloned, right, varname) =>
             left +& cloned +& right // Dummy
+        })
+    }
+  }
+
+  /** Inserts a variable for a given selected text.*/
+  object CloneTextMultiple extends CustomProgramFormula  { ct =>
+    private val ClonedMultiple = FreshIdentifier("clones")
+    import ImplicitTuples._
+
+    def createExpr(left: String, textVarRights: List[(String, Variable, String)]): Expr = {
+      ((StringLiteral(left): Expr) /: textVarRights) {
+        case (e: Expr, (middle, v, right)) => e +<>& v +<>& StringLiteral(right)
+      }
+    }
+
+    def assignmentDirect(textVarRights: List[(String, Variable, String)]): (Expr => Expr) = { (e: Expr) =>
+      (e /: textVarRights) {
+        case (e: Expr, (middle, v, right)) => Let(v.toVal, StringLiteral(middle), e)
+      }
+    }
+
+    def assignmentFormula(textVarRights: List[(String, Variable, String)]): Formula = {
+      (Formula() /: textVarRights) {
+        case (f, (middle, v, right)) => f combineWith Formula(E(insertvar)(v === StringLiteral(middle)))
+      }
+    }
+
+    def merge(left1: String, textVarRight1: List[(String, Variable, String)],
+              left2: String, textVarRight2: List[(String, Variable, String)]): Option[ProgramFormula] = {
+      (textVarRight1, textVarRight2) match {
+        case (Nil, Nil) if left1 == left2 =>
+          Some(apply(left1, Nil))
+        case (Nil, textVarRight2) if left1.startsWith(left2) =>
+          Some(apply(left2, textVarRight2))
+        case (textVarRight1, Nil) if left2.startsWith(left1) =>
+          Some(apply(left1, textVarRight1))
+        case ((middle1, v1, right1)::tail1, (middle2, v2, right2)::tail2) =>
+          if(left1.length < left2.length) {
+            if(left2.startsWith(left1+middle1)) {
+              // We can insert the first variable in place of left2.
+              val updatedLeft2 = left2.substring(left1.length+middle1.length)
+              val updatedRight1 = if(updatedLeft2.length < right1.length) updatedLeft2 else right1
+              merge(updatedRight1, tail1, updatedLeft2, textVarRight2).map{
+                case CloneTextMultiple(leftNew, textVarRightNew) =>
+                  CloneTextMultiple(left1, (middle1, v1, leftNew)::textVarRightNew)
+              }
+            } else None
+          } else if(left1.length > left2.length) {
+            merge(left2, textVarRight2, left1, textVarRight1)
+          } else { // We don't know how to merge these two.
+            None
+          }
+
+      }
+
+
+    }
+
+
+    def apply(left: String, textVarRight: List[(String, Variable, String)]): ProgramFormula = {
+      ProgramFormula(E(ClonedMultiple)(
+        StringLiteral(left),
+        ListLiteral(textVarRight.map{ case (middle, v, right) =>
+          _Tuple3(StringType, StringType, StringType)(StringLiteral(middle), v, StringLiteral(right))
+        }, inoxTypeOf[(String, String, String)])))
+    }
+
+    def unapply(f: ProgramFormula): Option[(String, List[(String, Variable, String)])] = {
+      f.expr match {
+        case FunctionInvocation(ClonedMultiple, Seq(), Seq(StringLiteral(left), ListLiteral(textVarRightList, tpe))) =>
+          def unbuild(e: List[Expr]): Option[List[(String, Variable, String)]] = e match {
+            case Nil => Some(Nil)
+            case ADT(_, Seq(StringLiteral(text), v: Variable, StringLiteral(right))) :: tail => unbuild(tail).map{ l =>
+              (text, v, right)::l
+            }
+            case _ => None
+          }
+          unbuild(textVarRightList).map(x => (left, x))
+        case _ => None
+      }
+    }
+
+    private val string3 = T(tuple3)(StringType, StringType, StringType)
+
+    def funDef = mkFunDef(ClonedMultiple)(){ case _ =>
+      (Seq("left"::StringType, "textVarRight"::conversions.TList[(String, String, String)]),
+        StringType,
+        { case Seq(left, textVarRight) =>
+          if_(textVarRight.isInstOf(T(cons)(string3))) {
+            let("c"::T(cons)(string3), textVarRight.asInstOf(T(cons)(string3)))(c =>
+              let("head"::string3, c.getField(head))( head =>
+                FunctionInvocation(ClonedMultiple, Seq(),
+                  Seq(left +& head.getField(_1) +& head.getField(_2),
+                    c.getField(tail)
+                  )
+                )
+              )
+            )
+          } else_ {
+            left
+          } // Dummy
         })
     }
   }
@@ -265,6 +366,7 @@ object ProgramFormula {
     StringInsert,
     ListInsert,
     CloneText,
+    CloneTextMultiple,
     PasteVariable
   )
 

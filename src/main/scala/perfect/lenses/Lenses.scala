@@ -947,7 +947,7 @@ trait Lenses { self: ReverseProgram.type =>
               // Second, if equality, attach where the most characters have been removed.
               x._2._1 < y._2._1 || (x._2._1 == y._2._1 && x._2._2 < y._2._2)
             }}.map(_._1).toStream
-        case pc@CloneText(left, cloned, right, variable) =>
+        case pc@CloneTextMultiple(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
           def cloneToLeft: List[(ArgumentsFormula, Int)] = {
             if(right.endsWith(rv)) {
               val newLeft = left

@@ -210,12 +210,19 @@ object ReverseProgram extends lenses.Lenses {
       function match {
         // Values (including lambdas) should be immediately replaced by the new value
         case l: Literal[_] =>
+          import ProgramFormula._
           newOutProgram match {
-            case ProgramFormula.CloneText(left, middle, right, v) =>
+            case CloneTextMultiple(left, textVarRights) =>
+              val middleExpr = CloneTextMultiple.createExpr(left, textVarRights)
               def first = if(program.canDoWrapping) { // Insert let-expressions the closest to the use.
-                Stream(ProgramFormula(Let(v.toVal, StringLiteral(middle), StringLiteral(left) +<>& v +<>& StringLiteral(right))))
+                val outputExpr = CloneTextMultiple.assignmentDirect(textVarRights)(middleExpr)
+                Stream(ProgramFormula(outputExpr))
               } else Stream.empty
-              first #::: Stream(ProgramFormula(StringLiteral(left) +<>& v +<>& StringLiteral(right), E(insertvar)(v === StringLiteral(middle))))
+
+              first #::: {
+                val formula = CloneTextMultiple.assignmentFormula(textVarRights)
+                Stream(ProgramFormula(middleExpr, formula))
+              }
             case ProgramFormula.PasteVariable(left, v, v_value, right, direction) =>
               if(left == "" && right == "") {
                 Stream(ProgramFormula(v))
@@ -235,9 +242,10 @@ object ReverseProgram extends lenses.Lenses {
                     case Some(ProgramFormula.PasteVariable(left, v2, v2_value, right, direction)) =>
                       val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
                       Stream(ProgramFormula(newExpr, newOutFormula))
-                    case Some(ProgramFormula.CloneText(left, cloned, right, variable)) =>
-                      val newExpr = StringLiteral(left) +<>& variable +<>& StringLiteral(right)
-                      Stream(ProgramFormula(newExpr, newOutFormula combineWith E(insertvar)(variable === StringLiteral(cloned))))
+                    case Some(ProgramFormula.CloneTextMultiple(left, textVarRights)) =>
+                      val newExpr = CloneTextMultiple.createExpr(left, textVarRights)
+                      val formula = CloneTextMultiple.assignmentFormula(textVarRights)
+                      Stream(ProgramFormula(newExpr, newOutFormula combineWith formula))
                     case _ =>
                       // Replacement with the variable newOut, with a maybe clause.
                       Stream(newOutProgram combineWith Formula(E(original)(v === l)))

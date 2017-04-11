@@ -186,14 +186,27 @@ case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
   def findConstraintValue(v: Variable): Option[Expr] = {
     unknownConstraints match {
       case TopLevelAnds(ands) =>
-        ands.collectFirst[Expr] {
-          case Equals(mapVar, value)
+        val possibleExprs = ands.toList.collect[Expr, List[Expr]] {
+          case Equals(mapVar, value: Expr)
             if mapVar == v => value
-        }.orElse{
+        }.distinct
+        if(possibleExprs.isEmpty){
           ands.collectFirst[Expr] {
             case FunctionInvocation(Utils.original, _, Seq(
             Equals(mapVar, value))) if mapVar == v => value
           }
+        } else if(possibleExprs.length == 1) {
+          Some(possibleExprs.head)
+        } else { // We try to reunite expressions, for example when they are clones.
+          if(possibleExprs.map(ProgramFormula(_)).forall{ case ProgramFormula.CloneTextMultiple(_, _) => true case _ => false}) {
+            val first = ProgramFormula(possibleExprs.head)
+            val pf = ((Some(first): Option[ProgramFormula]) /: possibleExprs.tail.map(ProgramFormula(_))) {
+              case (None, _) => None
+              case (Some(ProgramFormula.CloneTextMultiple(left, list)), ProgramFormula.CloneTextMultiple(left2, list2)) =>
+                ProgramFormula.CloneTextMultiple.merge(left, list, left2, list2)
+            }
+            pf.map(_.expr)
+          } else None
         }
       case _ => None
     }
