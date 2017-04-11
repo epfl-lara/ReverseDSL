@@ -110,29 +110,24 @@ object ProgramFormula {
     def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr], remaining: Expr/* = BooleanLiteral(true)*/): ProgramFormula = {
       val leftTreeList  = Variable(FreshIdentifier(leftName,  true), T(Utils.list)(tpe), Set())
       val rightTreeList = Variable(FreshIdentifier(rightName, true), T(Utils.list)(tpe), Set())
+
       ProgramFormula(
-        E(Utils.listconcat)(tpe)(E(Utils.listconcat)(tpe)(
-          leftTreeList,
-          ListLiteral(inserted, tpe)),
-          rightTreeList),
-        // tree === E(Utils.listconcat)(tpe)(leftTreeList, rightTreeList)
-        leftTreeList === ListLiteral(leftUnmodified, tpe) && rightTreeList === ListLiteral(rightUnmodified, tpe)
-      ) combineWith Formula(remaining)
+        E(Utils.listinsert)(tpe)(
+          ListLiteral(leftUnmodified, tpe),
+          ListLiteral(inserted, tpe),
+          ListLiteral(rightUnmodified, tpe),
+          StringLiteral(".") // Not used direction
+        ), Formula(remaining))
     }
 
     def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr], Expr)] = {
       f.expr match {
-        case FunctionInvocation(Utils.listconcat, Seq(tpe0), Seq(
-        FunctionInvocation(Utils.listconcat, Seq(tpe1), Seq(
-        leftTreeList@Variable(idLeft, ADTType(Utils.list, Seq(tpe2)), _),
-        ListLiteral(inserted, tpe3))),
-        (rightTreeList@Variable(idRight, ADTType(Utils.list, Seq(tpe4)), _))))
-          if idLeft.name == leftName && idRight.name == rightName && tpe0 == tpe1 && tpe1 == tpe2 && tpe2 == tpe3 && tpe3 == tpe4
-        =>
-          val ListLiteral(leftBefore, _) = f.formula.findConstraintValue(leftTreeList).getOrElse(return None)
-          val ListLiteral(rightBefore, _) = f.formula.findConstraintValue(rightTreeList).getOrElse(return None)
-          val Formula(remaining) = f.formula.withoutFirstConstraintOn(leftTreeList).withoutFirstConstraintOn(rightTreeList)
-          Some((tpe1, leftBefore, inserted, rightBefore, remaining))
+        case FunctionInvocation(Utils.listinsert, Seq(tpe0), Seq(
+          ListLiteral(leftBefore, _),
+        ListLiteral(inserted, tpe3),
+        ListLiteral(rightBefore, _),
+        _)) =>
+          Some((tpe0, leftBefore, inserted, rightBefore, f.formula.unknownConstraints))
         case _ => None
       }
     }

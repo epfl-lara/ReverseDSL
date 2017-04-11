@@ -47,9 +47,19 @@ trait Lenses { self: ReverseProgram.type =>
       (Seq("left"::StringType, "inserted"::StringType, "right"::StringType, "direction"::StringType),
         StringType,
         {
-          case Seq(left, inserted, right, varname) =>
+          case Seq(left, inserted, right, direction) =>
             left +& inserted +& right // Dummy
         })
+    },
+    mkFunDef(Utils.listinsert)("A"){ case Seq(tA) =>
+      (Seq("left"::T(Utils.list)(tA), "inserted"::T(Utils.list)(tA), "right"::T(Utils.list)(tA), "direction"::StringType),
+        T(Utils.list)(tA), {
+        case Seq(left, inserted, right, direction) =>
+          E(Utils.listconcat)(tA)(E(Utils.listconcat)(tA)(
+            left,
+            inserted),
+            right)
+      })
     }
   )
 
