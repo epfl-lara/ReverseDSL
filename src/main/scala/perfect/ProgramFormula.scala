@@ -178,8 +178,9 @@ object ProgramFormula {
     object Var {
       /** Creates a variable from the text. If nothing found, uses i. */
       def apply(text: String, conflicts: Seq[String] = Nil): Variable = {
-        val default = text.split("\\W+")
-          .find(x => x.nonEmpty && x.charAt(0).isLetter).getOrElse("x").toLowerCase()
+        val word = text.split("\\W+")
+          .filter(x => x.nonEmpty && x.charAt(0).isLetter).mkString("_").take(15).toLowerCase()
+        val default = if(word.isEmpty) "x" else word
         var finalName = default
         var suffix = ""
         while(conflicts.exists(_ == finalName + suffix.reverse)) {

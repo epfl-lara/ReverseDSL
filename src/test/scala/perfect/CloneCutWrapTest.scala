@@ -400,7 +400,22 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   }
 
   test("Clone accross a StringConcat of constant/variable") {
+    val pfun =  let("moveit"::String, "move it ")(moveit =>
+        "I like to " +& moveit +& "like that")
 
+    (pfun repairFrom CloneText("I like ", "to move", " it like that") match {
+      case Let(c1, StringLiteral("to "), Let(c2, StringLiteral("move"), body)) => (c1, c2, body)
+      case Let(c2, StringLiteral("move"), Let(c1, StringLiteral("to "), body)) => (c1, c2, body)
+    }) match { case (cto, cmove,
+          Let(cloned, cto1 +& cmove1,
+          Let(moveit, cmove2 +& StringLiteral(" it "),
+          StringLiteral("I like ") +& cto2 +& moveit1 +& StringLiteral("like that")))) =>
+          cto.toVariable shouldEqual cto1
+          cmove.toVariable shouldEqual cmove1
+          cmove2 shouldEqual cmove1
+          cto2 shouldEqual cto1
+          moveit1 shouldEqual moveit.toVariable
+    }
   }
 
   test("Clone accross a StringConcat of different variables") {
@@ -408,25 +423,13 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       let("moveit"::String, "move it ")(moveit =>
         moveit +& likethat))
 
-    pfun repairFrom CloneText("move ","it like"," that") match { // We don't have control on how the variables are inserted.
-      case Let(c1, StringLiteral("it "),
-      Let(c2, StringLiteral("like"),
-      Let(cloned, cv1 +& cv2,
+    (pfun repairFrom CloneText("move ","it like"," that") match { // We don't have control on how the variables are inserted.
+      case Let(c1, StringLiteral("it "), Let(c2, StringLiteral("like"), b)) => (c1, c2, b)
+      case Let(c2, StringLiteral("like"), Let(c1, StringLiteral("it "), b)) => (c1, c2, b) }) match {
+      case (c1, c2, Let(cloned, cv1 +& cv2,
       Let(likethat, cv22 +& StringLiteral(" that"),
       Let(moveit, StringLiteral("move ") +&cv11 ,
-      (moveit1: Variable) +& (likethat1: Variable) ))))) =>
-        c1.toVariable shouldEqual cv1
-        c2.toVariable shouldEqual cv2
-        cv11 shouldEqual cv1
-        cv22 shouldEqual cv2
-        moveit.id shouldEqual moveit1.id
-        likethat.id shouldEqual likethat1.id
-      case Let(c2, StringLiteral("like"),
-      Let(c1, StringLiteral("it "),
-      Let(cloned, cv1 +& cv2,
-      Let(likethat, cv22 +& StringLiteral(" that"),
-      Let(moveit, StringLiteral("move ") +&cv11 ,
-      (moveit1: Variable) +& (likethat1: Variable) ))))) =>
+      (moveit1: Variable) +& (likethat1: Variable) )))) =>
         c1.toVariable shouldEqual cv1
         c2.toVariable shouldEqual cv2
         cv11 shouldEqual cv1
@@ -439,19 +442,12 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("Clone accross a StringConcat of same variables") {
     val pfun = let("move"::String, "move it ")(move => move +& move)
 
-    pfun repairFrom CloneText("move ", "it move", " it ") match { // We don't have control on how the variables are inserted.
-      case Let(c1, StringLiteral("it "), Let(c2, StringLiteral("move"),
-      Let(cloned, cv1 +& cv2, Let(move, cv22 +& StringLiteral(" ") +& cv11,
-      (move1: Variable) +& (move2: Variable) )))) =>
-        c1.toVariable shouldEqual cv1
-        c2.toVariable shouldEqual cv2
-        cv11 shouldEqual cv1
-        cv22 shouldEqual cv2
-        move1 shouldEqual move2
-        move.id shouldEqual move1.id
-      case Let(c2, StringLiteral("move"), Let(c1, StringLiteral("it "),
-      Let(cloned, cv1 +& cv2, Let(move, cv22 +& StringLiteral(" ") +& cv11,
-      (move1: Variable) +& (move2: Variable) )))) =>
+    (pfun repairFrom CloneText("move ", "it move", " it ") match { // We don't have control on how the variables are inserted.
+      case Let(c1, StringLiteral("it "), Let(c2, StringLiteral("move"), b)) => (c1, c2, b)
+      case Let(c2, StringLiteral("move"), Let(c1, StringLiteral("it "), b)) => (c1, c2, b)
+    }) match {
+      case (c1, c2, Let(cloned, cv1 +& cv2, Let(move, cv22 +& StringLiteral(" ") +& cv11,
+      (move1: Variable) +& (move2: Variable) ))) =>
         c1.toVariable shouldEqual cv1
         c2.toVariable shouldEqual cv2
         cv11 shouldEqual cv1
