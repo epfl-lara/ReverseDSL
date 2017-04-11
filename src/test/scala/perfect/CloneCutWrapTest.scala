@@ -45,6 +45,14 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
+  test("Clone node") {
+    // TODO
+  }
+
+  test("Insert node") {
+    // TODO
+  }
+
   test("Unwrap") {
     val output = _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
     val pfun =
@@ -395,8 +403,62 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
 
   }
 
-  test("Clone accross a StringConcat of variables") {
+  test("Clone accross a StringConcat of different variables") {
+    val pfun = let("likethat"::String, "like that")(likethat =>
+      let("moveit"::String, "move it ")(moveit =>
+        moveit +& likethat))
 
+    pfun repairFrom CloneText("move ","it like"," that") match { // We don't have control on how the variables are inserted.
+      case Let(c1, StringLiteral("it "),
+      Let(c2, StringLiteral("like"),
+      Let(cloned, cv1 +& cv2,
+      Let(likethat, cv22 +& StringLiteral(" that"),
+      Let(moveit, StringLiteral("move ") +&cv11 ,
+      (moveit1: Variable) +& (likethat1: Variable) ))))) =>
+        c1.toVariable shouldEqual cv1
+        c2.toVariable shouldEqual cv2
+        cv11 shouldEqual cv1
+        cv22 shouldEqual cv2
+        moveit.id shouldEqual moveit1.id
+        likethat.id shouldEqual likethat1.id
+      case Let(c2, StringLiteral("like"),
+      Let(c1, StringLiteral("it "),
+      Let(cloned, cv1 +& cv2,
+      Let(likethat, cv22 +& StringLiteral(" that"),
+      Let(moveit, StringLiteral("move ") +&cv11 ,
+      (moveit1: Variable) +& (likethat1: Variable) ))))) =>
+        c1.toVariable shouldEqual cv1
+        c2.toVariable shouldEqual cv2
+        cv11 shouldEqual cv1
+        cv22 shouldEqual cv2
+        moveit.id shouldEqual moveit1.id
+        likethat.id shouldEqual likethat1.id
+    }
+  }
+
+  test("Clone accross a StringConcat of same variables") {
+    val pfun = let("move"::String, "move it ")(move => move +& move)
+
+    pfun repairFrom CloneText("move ", "it move", " it ") match { // We don't have control on how the variables are inserted.
+      case Let(c1, StringLiteral("it "), Let(c2, StringLiteral("move"),
+      Let(cloned, cv1 +& cv2, Let(move, cv22 +& StringLiteral(" ") +& cv11,
+      (move1: Variable) +& (move2: Variable) )))) =>
+        c1.toVariable shouldEqual cv1
+        c2.toVariable shouldEqual cv2
+        cv11 shouldEqual cv1
+        cv22 shouldEqual cv2
+        move1 shouldEqual move2
+        move.id shouldEqual move1.id
+      case Let(c2, StringLiteral("move"), Let(c1, StringLiteral("it "),
+      Let(cloned, cv1 +& cv2, Let(move, cv22 +& StringLiteral(" ") +& cv11,
+      (move1: Variable) +& (move2: Variable) )))) =>
+        c1.toVariable shouldEqual cv1
+        c2.toVariable shouldEqual cv2
+        cv11 shouldEqual cv1
+        cv22 shouldEqual cv2
+        move1 shouldEqual move2
+        move.id shouldEqual move1.id
+    }
   }
 
 

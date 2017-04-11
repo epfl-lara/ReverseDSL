@@ -235,6 +235,9 @@ object ReverseProgram extends lenses.Lenses {
                     case Some(ProgramFormula.PasteVariable(left, v2, v2_value, right, direction)) =>
                       val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
                       Stream(ProgramFormula(newExpr, newOutFormula))
+                    case Some(ProgramFormula.CloneText(left, cloned, right, variable)) =>
+                      val newExpr = StringLiteral(left) +<>& variable +<>& StringLiteral(right)
+                      Stream(ProgramFormula(newExpr, newOutFormula combineWith E(insertvar)(variable === StringLiteral(cloned))))
                     case _ =>
                       // Replacement with the variable newOut, with a maybe clause.
                       Stream(newOutProgram combineWith Formula(E(original)(v === l)))
