@@ -236,16 +236,17 @@ object ReverseProgram extends lenses.Lenses {
             case _ =>
               newOut match {
                 case v: Variable => // We check if the replacement value is a Paste, in which case we are allowed to modify the program.
-                  newOutFormula.findConstraintValue(v).map{ expr =>
-                    ProgramFormula(expr, newOutFormula) // TODO: Maybe remove the value v from the newOutFormula before.
-                  } match {
-                    case Some(ProgramFormula.PasteVariable(left, v2, v2_value, right, direction)) =>
+                  newOutFormula.findConstraintValue(v) match {
+                    case Some(ProgramFormula.PasteVariable.Expr(left, v2, v2_value, right, direction)) =>
                       val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
                       Stream(ProgramFormula(newExpr, newOutFormula))
-                    case Some(ProgramFormula.CloneTextMultiple(left, textVarRights)) =>
+                    case Some(ProgramFormula.CloneTextMultiple.Expr(left, textVarRights)) =>
                       val newExpr = CloneTextMultiple.createExpr(left, textVarRights)
                       val formula = CloneTextMultiple.assignmentFormula(textVarRights)
                       Stream(ProgramFormula(newExpr, newOutFormula combineWith formula))
+                    case Some(ProgramFormula.StringInsert.Expr(left, middle, right, direction)) =>
+                      val newExpr = StringLiteral(left + middle + right)
+                      Stream(ProgramFormula(newExpr, newOutFormula))
                     case _ =>
                       // Replacement with the variable newOut, with a maybe clause.
                       Stream(newOutProgram combineWith Formula(E(original)(v === l)))

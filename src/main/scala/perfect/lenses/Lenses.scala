@@ -948,36 +948,28 @@ trait Lenses { self: ReverseProgram.type =>
               x._2._1 < y._2._1 || (x._2._1 == y._2._1 && x._2._2 < y._2._2)
             }}.map(_._1).toStream
         case pc@CloneTextMultiple(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
-          def cloneToLeft: List[(ArgumentsFormula, Int)] = {
+
+
+          def cloneToLeft: List[ArgumentsFormula] = {
             if(right.endsWith(rv)) {
               val newLeft = left
               val newRight = right.substring(0, right.length - rv.length)
               val leftClone = CloneText(newLeft, cloned, newRight, variable)
               val rightClone = ProgramFormula(rightValue)
-              val weight = 0 /*direction match {
-                case PasteVariable.PasteToLeft => 0
-                case PasteVariable.PasteToRight => 1
-                case ariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
-              }*/
-              List(((Seq(leftClone, rightClone), Formula()), weight)) /: Log.prefix("cloneToLeft: ")
+              List((Seq(leftClone, rightClone), Formula())) /: Log.prefix("cloneToLeft: ")
             } else Nil
           }
-          def cloneToRight: List[(ArgumentsFormula, Int)] = {
+          def cloneToRight: List[ArgumentsFormula] = {
             if(left.startsWith(lv)) {
               val newLeft = left.substring(lv.length)
               val newRight = right
               val leftPaste = ProgramFormula(leftValue)
               val rightPaste = CloneText(newLeft, cloned, newRight, variable)
-              val weight = 0 /*direction match {
-                case PasteVariable.PasteToLeft => 1
-                case PasteVariable.PasteToRight => 0
-                case PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
-              }*/
-              List(((Seq(leftPaste, rightPaste), Formula()), weight)) /: Log.prefix("cloneToRight: ")
+              List((Seq(leftPaste, rightPaste), Formula())) /: Log.prefix("cloneToRight: ")
             } else Nil
           }
           // If the clone overlaps the two arguments
-          def cloneBoth: List[(ArgumentsFormula, Int)] = {
+          def cloneBoth: List[ArgumentsFormula] = {
             if(!left.startsWith(lv)&& !right.endsWith(rv) &&
               lv.startsWith(left) && rv.endsWith(right)) {
               val leftCloned = cloned.substring(0, lv.length - left.length)
@@ -986,10 +978,10 @@ trait Lenses { self: ReverseProgram.type =>
               val leftClone = CloneText(left, leftCloned, "", leftVar)
               val rightVar = CloneText.Var(rightCloned, Seq(variable.id.name, leftVar.id.name))
               val rightClone = CloneText("", rightCloned, right, rightVar)
-              List(((Seq(leftClone, rightClone), Formula(E(Utils.insertvar)(variable === leftVar +& rightVar))), 0))
+              List((Seq(leftClone, rightClone), Formula(E(Utils.insertvar)(variable === leftVar +& rightVar))))
             } else Nil
           }
-          (cloneToLeft ++ cloneToRight ++ cloneBoth).sortBy(_._2).map(_._1).toStream
+          (cloneToLeft ++ cloneToRight ++ cloneBoth).toStream
 
         case pv@ProgramFormula.PasteVariable(left, v, v_value, right, direction) =>
           def pasteToLeft: List[(ArgumentsFormula, Int)] = {

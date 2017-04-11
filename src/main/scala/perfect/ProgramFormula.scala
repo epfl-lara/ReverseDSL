@@ -108,17 +108,27 @@ object ProgramFormula {
       * @param direction -1 if the insertion should be inserted to left, 1 to right, 0 if automatically guessed.
       **/
     def apply(left: String, s: String, right: String, direction: InsertDirection): ProgramFormula = {
-      ProgramFormula(E(InsertString)(StringLiteral(left), StringLiteral(s), StringLiteral(right), StringLiteral(direction.toString)))
+      ProgramFormula(Expr(left, s, right, direction))
     }
 
     def unapply(f: ProgramFormula): Option[(String, String, String, InsertDirection)] = {
-      f.expr match {
-        case FunctionInvocation(InsertString, Seq(), Seq(
+      Expr.unapply(f.expr)
+    }
+
+    object Expr {
+      def apply(left: String, s: String, right: String, direction: InsertDirection): Expr = {
+        E(InsertString)(StringLiteral(left), StringLiteral(s), StringLiteral(right), StringLiteral(direction.toString))
+      }
+
+      def unapply(e: Expr): Option[(String, String, String, InsertDirection)] = {
+        e match {
+          case FunctionInvocation(InsertString, Seq(), Seq(
           StringLiteral(leftBefore), StringLiteral(inserted), StringLiteral(rightBefore), StringLiteral(Direction(direction))
-        )) =>
-          Some((leftBefore, inserted, rightBefore, direction))
-        case _ =>
-          None
+          )) =>
+            Some((leftBefore, inserted, rightBefore, direction))
+          case _ =>
+            None
+        }
       }
     }
 
@@ -262,23 +272,18 @@ object ProgramFormula {
           } else { // We don't know how to merge these two.
             None
           }
-
       }
-
-
     }
 
-
-    def apply(left: String, textVarRight: List[(String, Variable, String)]): ProgramFormula = {
-      ProgramFormula(E(ClonedMultiple)(
-        StringLiteral(left),
-        ListLiteral(textVarRight.map{ case (middle, v, right) =>
-          _Tuple3(StringType, StringType, StringType)(StringLiteral(middle), v, StringLiteral(right))
-        }, inoxTypeOf[(String, String, String)])))
-    }
-
-    def unapply(f: ProgramFormula): Option[(String, List[(String, Variable, String)])] = {
-      f.expr match {
+    object Expr {
+      def apply(left: String, textVarRight: List[(String, Variable, String)]): Expr = {
+        E(ClonedMultiple)(
+          StringLiteral(left),
+          ListLiteral(textVarRight.map{ case (middle, v, right) =>
+            _Tuple3(StringType, StringType, StringType)(StringLiteral(middle), v, StringLiteral(right))
+          }, inoxTypeOf[(String, String, String)]))
+      }
+      def unapply(e: Expr): Option[(String, List[(String, Variable, String)])] = e match {
         case FunctionInvocation(ClonedMultiple, Seq(), Seq(StringLiteral(left), ListLiteral(textVarRightList, tpe))) =>
           def unbuild(e: List[Expr]): Option[List[(String, Variable, String)]] = e match {
             case Nil => Some(Nil)
@@ -290,6 +295,14 @@ object ProgramFormula {
           unbuild(textVarRightList).map(x => (left, x))
         case _ => None
       }
+    }
+
+    def apply(left: String, textVarRight: List[(String, Variable, String)]): ProgramFormula = {
+      ProgramFormula(Expr(left, textVarRight))
+    }
+
+    def unapply(f: ProgramFormula): Option[(String, List[(String, Variable, String)])] = {
+      Expr.unapply(f.expr)
     }
 
     private val string3 = T(tuple3)(StringType, StringType, StringType)
@@ -326,27 +339,37 @@ object ProgramFormula {
         values.find(_.toString == s)
     }
     def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: PasteDirection): ProgramFormula = {
-      ProgramFormula(E(Paste)(
-        StringLiteral(left),
-        insertedVar,
-        StringLiteral(originalVarValue),
-        StringLiteral(right),
-        StringLiteral(direction.toString)
-      ))
+      ProgramFormula(Expr(left, insertedVar, originalVarValue, right, direction))
     }
 
     def unapply(f: ProgramFormula): Option[(String, Variable, String, String, PasteDirection)] = {
-      f.expr match {
-        case FunctionInvocation(Paste, Seq(), Seq(
-        StringLiteral(leftBefore),
-        inserted: Variable,
-        StringLiteral(insertedValue),
-        StringLiteral(rightBefore),
-        StringLiteral(Direction(direction))
-        )) =>
-          Some((leftBefore, inserted, insertedValue, rightBefore, direction))
-        case _ =>
-          None
+      Expr.unapply(f.expr)
+    }
+
+    object Expr {
+      def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: PasteDirection): Expr = {
+        E(Paste)(
+          StringLiteral(left),
+          insertedVar,
+          StringLiteral(originalVarValue),
+          StringLiteral(right),
+          StringLiteral(direction.toString)
+        )
+      }
+
+      def unapply(f: Expr): Option[(String, Variable, String, String, PasteDirection)] = {
+        f match {
+          case FunctionInvocation(Paste, Seq(), Seq(
+          StringLiteral(leftBefore),
+          inserted: Variable,
+          StringLiteral(insertedValue),
+          StringLiteral(rightBefore),
+          StringLiteral(Direction(direction))
+          )) =>
+            Some((leftBefore, inserted, insertedValue, rightBefore, direction))
+          case _ =>
+            None
+        }
       }
     }
 

@@ -3,6 +3,7 @@ package perfect
 import inox.FreshIdentifier
 import inox.trees._
 import inox.trees.dsl._
+import perfect.ProgramFormula.StringInsert
 import perfect.ReverseProgram.{Cache, evalWithCache, letm}
 
 /**
@@ -31,6 +32,18 @@ object Formula {
         case _ => f && other
       }
     }
+  }
+
+  protected def inlineSimpleFormulas(e: Formula): Formula = {
+    val TopLevelAnds(exprs) = e.unknownConstraints
+    val newExprs = exprs.map {
+      case Equals(v: Variable, StringInsert.Expr(left, middle, right, direction)) =>
+        Equals(v, StringLiteral(left + middle + right))
+      case e => e
+    }
+    if(newExprs != exprs) {
+      Formula(and(newExprs: _*))
+    } else e
   }
 
   /** We remove maybes on values which are already known.
@@ -118,7 +131,7 @@ object Formula {
   }
 
   protected def simplify(e: Formula, freeVariables: Set[Variable]) = {
-    unifyADTDeclarations(removeUselessVariables(removeUselessMaybes(e), freeVariables))
+    unifyADTDeclarations(removeUselessVariables(removeUselessMaybes(inlineSimpleFormulas(e)), freeVariables))
   }
 }
 
