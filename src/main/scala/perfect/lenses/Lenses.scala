@@ -139,6 +139,38 @@ trait Lenses { self: ReverseProgram.type =>
       }
 
       newOutput match {
+        case ProgramFormula.TreeModification(tpeGlobal, tpeLocal, originalOutputModifList, modified, argsInSequence) =>
+          val ListLiteral(originalOutputModifList2, _) = originalOutputModifList
+          val (index, remaining) = argsInSequence.span(_ == Utils.tail)
+          val original = originalInput(index.length)
+          val newVar = Variable(FreshIdentifier("x"), inputType, Set())
+
+          if(remaining.isEmpty) {
+            ???
+          } else {
+            repair(ProgramFormula(Application(lambda, Seq(original))),
+              newOutput.subExpr(ProgramFormula.TreeModification.Expr(tpeGlobal, tpeLocal, originalOutputModifList2(index.length), modified, remaining.tail))) map {
+              case pf@ProgramFormula(Application(lExpr, Seq(expr2)), formula2) =>
+                val lambda2 = castOrFail[Expr, Lambda](lExpr)
+                if (lambda2 != lambda && expr2 == original) {
+                  (Seq(ProgramFormula.TreeModification(ADTType(Utils.cons, Seq(argType)),
+                    tpeLocal,
+                    originalArgsValues.head,
+                    expr2,
+                    index :+ Utils.head
+                  ) combineWith formula2, ProgramFormula(lambda2, formula2)), Formula())
+                } else {
+                  (Seq(ProgramFormula.TreeModification(ADTType(Utils.cons, Seq(argType)),
+                    tpeLocal,
+                    originalArgsValues.head,
+                    expr2,
+                    index :+ Utils.head
+                  ) combineWith formula2, ProgramFormula(lambda)), Formula())
+                }
+            }
+          }
+
+
         case ProgramFormula.ListInsert(tpe, before, inserted, after) =>
           // Beware, there might be changes in before or after. But at least, we know how the insertion occurred.
           val (newBeforeAfter: List[Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]]) =
@@ -760,6 +792,26 @@ trait Lenses { self: ReverseProgram.type =>
 
       // Prioritize changes that touch only one of the two expressions.
       newOutput match {
+        case ProgramFormula.TreeModification.Expr(tpeGlobal, tpeLocal, original@ADT(adt, Seq(hdOriginal, tlOriginal)), modified, path) =>
+          val (index, remaining) = path.span(_ == Utils.tail)
+          leftValue match {
+            case ListLiteral(l, _) =>
+              if(index.length < l.length) {
+                Stream((Seq(
+                  ProgramFormula.TreeModification(tpeGlobal, tpeLocal, original, modified, path),
+                  ProgramFormula(rightValue)),
+                  Formula())
+                )
+              } else {
+                Stream((Seq(
+                  ProgramFormula(leftValue),
+                  ProgramFormula.TreeModification(tpeGlobal, tpeLocal, original, modified, path.drop(index.length))),
+                  Formula()
+                ))
+              }
+            case _ => Stream.empty
+          }
+
         case ListLiteral(s, _) =>
           (leftValue match {
             case ListLiteral(lv, _) =>

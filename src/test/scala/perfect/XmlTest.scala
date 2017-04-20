@@ -21,7 +21,7 @@ class XmlTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import ImplicitTuples._
   import XmlTrees._
-/*
+
   val input: Node = <addrbook>
     <person>
       <name> Masato Takeichi </name>
@@ -45,7 +45,7 @@ class XmlTest extends FunSuite with TestHelpers {
   val tString = inoxTypeOf[String]
   val tNode = inoxTypeOf[Node]
 
-  val pfWithoutSortingFlatmap: PFun = {
+  val pfWithoutSortingFlatmap = {
     val in = valdef[Node]("in")
     val i1Node = valdef[Node]("i1")
     val i2String = valdef[String]("i2")
@@ -60,26 +60,22 @@ class XmlTest extends FunSuite with TestHelpers {
 
     val nInput = valdef[Node]("n")
 
-    val pf = function(
-      let(selectChild, selectChildImpl)(selectChildv =>
-        let(in, inoxExprOf[Node](input))(inVariable =>
-          _Node("addrbook", children=
-            FunctionInvocation(listconcat, Seq(tNode),
-              Seq(
-                _List[Node](_Node("index", children=
-                  FunctionInvocation(flatmap, Seq(tNode, tNode), Seq(inVariable.getField(children), Lambda(Seq(nInput),
-                    Application(selectChild.toVariable, Seq(nInput.toVariable, "name"))
-                  ))) )),
-                inVariable.getField(children)
-              )
+    let(selectChild, selectChildImpl)(selectChildv =>
+      let(in, inoxExprOf[Node](input))(inVariable =>
+        _Node("addrbook", children=
+          FunctionInvocation(listconcat, Seq(tNode),
+            Seq(
+              _List[Node](_Node("index", children=
+                FunctionInvocation(flatmap, Seq(tNode, tNode), Seq(inVariable.getField(children), Lambda(Seq(nInput),
+                  Application(selectChild.toVariable, Seq(nInput.toVariable, "name"))
+                ))) )),
+              inVariable.getField(children)
             )
-          )))
-    )(tNode)
-
-    pf
+          )
+        )))
   }
 
-  val pfWithoutSorting: PFun = {
+  val pfWithoutSorting = {
     val in = valdef[Node]("in")
     val i1Node = valdef[Node]("i1")
     val i2String = valdef[String]("i2")
@@ -114,22 +110,19 @@ class XmlTest extends FunSuite with TestHelpers {
       _Node("name", children=_List[Node](_Node(Application(getOrElse.toVariable, Seq(nInput.toVariable, "name", "")))))
     )
 
-    val pf = function(
-      let(in, inoxExprOf[Node](input))(inVariable =>
-        let(selectChild, selectChildImpl)(selectChildv =>
-          //let(obtainName, obtainNameImpl)(obtainv =>
-          let(getOrElse, getOrElseImpl)(getOrElsev =>
-              _Node("addrbook", children=
-                FunctionInvocation(listconcat, Seq(tNode),
-                  Seq(
-                    _List[Node](_Node("index", children=
-                      FunctionInvocation(map, Seq(tNode, tNode), Seq(inVariable.getField(children), obtainNameImpl)) )),
-                    inVariable.getField(children)
-                  )
+    let(in, inoxExprOf[Node](input))(inVariable =>
+      let(selectChild, selectChildImpl)(selectChildv =>
+        //let(obtainName, obtainNameImpl)(obtainv =>
+        let(getOrElse, getOrElseImpl)(getOrElsev =>
+            _Node("addrbook", children=
+              FunctionInvocation(listconcat, Seq(tNode),
+                Seq(
+                  _List[Node](_Node("index", children=
+                    FunctionInvocation(map, Seq(tNode, tNode), Seq(inVariable.getField(children), obtainNameImpl)) )),
+                  inVariable.getField(children)
                 )
-              ))))
-    )(tNode)
-    pf
+              )
+            ))))
   }
 
   val pfWithSorting = {
@@ -167,77 +160,72 @@ class XmlTest extends FunSuite with TestHelpers {
       _Node("name", children=_List[Node](_Node(Application(getOrElse.toVariable, Seq(nInput.toVariable, "name", "")))))
     )
 
-    val pf = function(
-      let(in, inoxExprOf[Node](input))(inVariable =>
-        let(selectChild, selectChildImpl)(selectChildv =>
-          //let(obtainName, obtainNameImpl)(obtainv =>
-          let(getOrElse, getOrElseImpl)(getOrElsev =>
-            let("childrenSortedByName"::inoxTypeOf[List[Node]],
-              FunctionInvocation(sortWith, Seq(inoxTypeOf[Node]), Seq(
-                inVariable.getField(children),
-                Lambda(Seq(n1, n2),
-                  -FunctionInvocation(stringCompare, Seq(), Seq(
-                    Application(getOrElsev, Seq(n1.toVariable, StringLiteral("name"), StringLiteral(""))),
-                    Application(getOrElsev, Seq(n2.toVariable, StringLiteral("name"), StringLiteral(""))))))
-              ))
-            )(childrenSortedByName =>
-              _Node("addrbook", children=
-                FunctionInvocation(listconcat, Seq(tNode),
-                  Seq(
-                    _List[Node](_Node("index", children=
-                      FunctionInvocation(map, Seq(tNode, tNode), Seq(childrenSortedByName, obtainNameImpl)) )),
-                    childrenSortedByName
-                  )
+    let(in, inoxExprOf[Node](input))(inVariable =>
+      let(selectChild, selectChildImpl)(selectChildv =>
+        //let(obtainName, obtainNameImpl)(obtainv =>
+        let(getOrElse, getOrElseImpl)(getOrElsev =>
+          let("childrenSortedByName"::inoxTypeOf[List[Node]],
+            FunctionInvocation(sortWith, Seq(inoxTypeOf[Node]), Seq(
+              inVariable.getField(children),
+              Lambda(Seq(n1, n2),
+                -FunctionInvocation(stringCompare, Seq(), Seq(
+                  Application(getOrElsev, Seq(n1.toVariable, StringLiteral("name"), StringLiteral(""))),
+                  Application(getOrElsev, Seq(n2.toVariable, StringLiteral("name"), StringLiteral(""))))))
+            ))
+          )(childrenSortedByName =>
+            _Node("addrbook", children=
+              FunctionInvocation(listconcat, Seq(tNode),
+                Seq(
+                  _List[Node](_Node("index", children=
+                    FunctionInvocation(map, Seq(tNode, tNode), Seq(childrenSortedByName, obtainNameImpl)) )),
+                  childrenSortedByName
                 )
-              )))))
-    )(tNode)
-    pf
+              )
+            )))))
   }
 
   test("Node") {
     val input: Node = <test>This is a test</test>
     val newOut: Expr = "tist"
     val expectedOut: Node = <tist>This is a test</tist>
-    val pf = function(
-      ADTSelector(input, tag)
-    )(inoxTypeOf[String])
+    val pf = ADTSelector(input, tag)
     implicit val s = Utils.defaultSymbols
 
-    pf repairFrom newOut shouldProduce newOut matchBody {
+    pf repairFrom newOut shouldProduce newOut match {
       case ADTSelector(ADT(_, Seq(StringLiteral(s), _, _)), _) =>
         s shouldEqual "tist"
     }
   }
 
-  test("Hu 2004 without sorting") {
-    val initialOut: Node = <addrbook>
-      <index>
-        <name>Masato Takeichi</name>
-        <name>Zhenjiang Hu</name>
-        <name>Shin-Cheng Mu</name>
-      </index>
-      <person>
-        <name>Masato Takeichi</name>
-        <email>takeichi@acm.org</email>
-        <tel>+81-3-5841-7430</tel>
-      </person>
-      <person>
-        <name>Zhenjiang Hu</name>
-        <email>hu@mist.i.u-tokyo.ac.jp</email>
-        <email>hu@ipl.t.u-tokyo.ac.jp</email>
-        <tel>+81-3-5841-7411</tel>
-      </person>
-      <person>
-        <name>Shin-Cheng Mu</name>
-        <email>scm@mist.i.u-tokyo.ac.jp</email>
-        <tel>+81-3-5841-7411</tel>
-      </person>
-    </addrbook>
+  val initialOutWithoutSorting: Node = <addrbook>
+    <index>
+      <name>Masato Takeichi</name>
+      <name>Zhenjiang Hu</name>
+      <name>Shin-Cheng Mu</name>
+    </index>
+    <person>
+      <name>Masato Takeichi</name>
+      <email>takeichi@acm.org</email>
+      <tel>+81-3-5841-7430</tel>
+    </person>
+    <person>
+      <name>Zhenjiang Hu</name>
+      <email>hu@mist.i.u-tokyo.ac.jp</email>
+      <email>hu@ipl.t.u-tokyo.ac.jp</email>
+      <tel>+81-3-5841-7411</tel>
+    </person>
+    <person>
+      <name>Shin-Cheng Mu</name>
+      <email>scm@mist.i.u-tokyo.ac.jp</email>
+      <tel>+81-3-5841-7411</tel>
+    </person>
+  </addrbook>
 
-    checkProg(initialOut, pfWithoutSorting)
+  test("Hu 2004 without sorting") {
+    pfWithoutSorting shouldProduce initialOutWithoutSorting
   }
   test("Hu 2004 without sorting modification in name") {
-    val newOutModification: Node = <addrbook>
+    /*val newOutModification: Node = <addrbook>
       <index>
         <name>Prof. Masato Takeichi</name>
         <name>Zhenjiang Hu</name>
@@ -259,7 +247,15 @@ class XmlTest extends FunSuite with TestHelpers {
         <email>scm@mist.i.u-tokyo.ac.jp</email>
         <tel>+81-3-5841-7411</tel>
       </person>
-    </addrbook>
+    </addrbook>*/
+    import Utils._
+    val newOutModification: ProgramFormula = ProgramFormula.TreeModification(
+      inoxTypeOf[Node],
+      inoxTypeOf[String],
+      initialOutWithoutSorting,
+      "Prof. Masato Takeichi",
+      List(children, head, children, head, children, head, tag)
+    )(Utils.defaultSymbols)
 
     val expectedOutModification: Node = <addrbook>
       <index>
@@ -594,5 +590,5 @@ class XmlTest extends FunSuite with TestHelpers {
     </addrbook>
 
     pfWithSorting repairFrom newOutInsertionIndex shouldProduce expectedOutInsertionIndex
-  }*/
+  }
 }
