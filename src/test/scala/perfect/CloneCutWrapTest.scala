@@ -13,7 +13,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import XmlTrees._
   import StringConcatExtended._
-  import ProgramFormula.{StringInsert, ListInsert, TreeWrap, TreeUnwrap, CloneText, PasteVariable}
+  import ProgramFormula.{StringInsert, ListInsert, TreeWrap, TreeUnwrap, TreeModification, CloneText, PasteVariable}
 
   test("Formula assignment") {
     val va = variable[String]("a")
@@ -71,6 +71,48 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       _Node("i", children=_List[Node](_Node("Hello")))
     } match {
       case Let(ad, StringLiteral("Hello"), e) =>
+        exprOps.variablesOf(e) should contain(ad.toVariable)
+    }
+  }
+
+  test("Tree modification without accelerator") {
+    val output = _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
+    val pfun =
+      let("ad" :: inoxTypeOf[Node], _Node("Hello")){ av =>
+        _Node("b", children=_List[Node](_Node("i", children=_List[Node](av))))
+      }
+    pfun shouldProduce output
+    implicit val symbols = Utils.defaultSymbols
+    val newOut = _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Good morning")))))
+
+    pfun repairFrom newOut shouldProduce {
+      _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Good morning")))))
+    } match {
+      case Let(ad, ADT(ADTType(Utils.xmlNode, Seq()), Seq(StringLiteral("Good morning"), _, _)), e) =>
+        exprOps.variablesOf(e) should contain(ad.toVariable)
+    }
+  }
+
+  test("Tree modification") {
+    val output = _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
+    val pfun =
+      let("ad" :: inoxTypeOf[Node], _Node("Hello")){ av =>
+        _Node("b", children=_List[Node](_Node("i", children=_List[Node](av))))
+      }
+    pfun shouldProduce output
+    implicit val symbols = Utils.defaultSymbols
+    val newOut = TreeModification(
+      inoxTypeOf[Node],
+      inoxTypeOf[String],
+      output,
+      "Good morning",
+      List(Utils.children, Utils.head, Utils.children, Utils.head, Utils.tag)
+    )
+
+    pfun repairFrom newOut shouldProduce {
+      _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Good morning")))))
+    } match {
+      case Let(ad, ADT(ADTType(Utils.xmlNode, Seq()), Seq(StringLiteral("Good morning"), _, _)), e) =>
         exprOps.variablesOf(e) should contain(ad.toVariable)
     }
   }

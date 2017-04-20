@@ -152,23 +152,44 @@ object ReverseProgram extends lenses.Lenses {
     }
 
     // Accelerators
-    newOutProgram match {
-      case ProgramFormula.TreeWrap(original, wrapper) if program.canDoWrapping =>
+    optVar(newOut).flatMap(newOutFormula.findConstraintValue).getOrElse(newOut) match {
+      case ProgramFormula.TreeWrap.Expr(original, wrapper) if program.canDoWrapping =>
         function match {
           case l: Let =>
           case Application(Lambda(_, _), _) =>
           case _ =>
             return Stream(ProgramFormula(wrapper(function)))
         }
-      case ProgramFormula.TreeUnwrap(tpe, original, Nil) =>
+      case ProgramFormula.TreeUnwrap.Expr(tpe, original, Nil) =>
         return Stream(program.assignmentsAsOriginals())
-      case ProgramFormula.TreeUnwrap(tpe, original, head::tail) =>
+      case ProgramFormula.TreeUnwrap.Expr(tpe, original, head::tail) =>
         function match {
           case l@ADT(ADTType(adtid, tps), args) =>
             symbols.adts(adtid) match {
               case f: ADTConstructor =>
                 val i = f.selectorID2Index(head)
                 return repair(program.subExpr(args(i)), ProgramFormula.TreeUnwrap(tpe, args(i), tail))
+              case _ =>
+            }
+          case _ =>
+        }
+      case ProgramFormula.TreeModification.Expr(tpeG, tpeL, _, modified, Nil) =>
+        return repair(program, newOutProgram.subExpr(modified))
+      case ProgramFormula.TreeModification.Expr(tpeG, tpeL, original, modified, head::tail) =>
+        function match {
+          case l@ADT(ADTType(adtid, tps), args) =>
+            symbols.adts(adtid) match {
+              case f: ADTConstructor =>
+                val i = f.selectorID2Index(head)
+                original match {
+                  case ADT(_, argsOriginal) =>
+                    val subOriginal = argsOriginal(i)
+                    return for{ pf <- repair(program.subExpr(args(i)),
+                      ProgramFormula.TreeModification(subOriginal.getType, tpeL, subOriginal, modified, tail)) } yield {
+                      pf.wrap(x =>
+                        ADT(l.adt, args.take(i) ++ List(x) ++ args.drop(i + 1)))
+                    }
+                }
               case _ =>
             }
           case _ =>
@@ -391,8 +412,6 @@ object ReverseProgram extends lenses.Lenses {
         // Variables are assigned the given value.
         case v@Variable(id, tpe, flags) =>
           newOutProgram match {
-            case ProgramFormula.StringInsert(left, inserted, right, direction) =>
-              Stream(ProgramFormula(v, Formula(v === newOut) combineWith newOutFormula))
             case ProgramFormula.PasteVariable(left, v2, v_value, right, direction) =>
               val StringLiteral(s) = functionValue
 
@@ -449,8 +468,8 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
-          newOutProgram match {
-            case ProgramFormula.ListInsert(tpe, before, inserted, after, remaining) =>
+          newOut match {
+            case ProgramFormula.ListInsert.Expr(tpe, before, inserted, after) =>
               Log("ListInsert")
               if(before.length == 0) { // Insertion happens before this element
                 Log("beforeLength == 0")
@@ -458,7 +477,7 @@ object ReverseProgram extends lenses.Lenses {
                 if(after.length == 0) {
                   Log("afterLength == 0")
                   Stream(
-                    ProgramFormula(ListLiteral(inserted, tpe), remaining)
+                    ProgramFormula(ListLiteral(inserted, tpe), newOutFormula)
                   )
                 } else { // after.length > 0
                   Log("afterLength > 0")
@@ -466,16 +485,17 @@ object ReverseProgram extends lenses.Lenses {
                   if(after.length == functionValueList.length) { // No deletion.
                     Log("afterLength == functionValueList.length")
                     for{ pf <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(after.head))
-                         pf2 <- repair(program.subExpr(argsIn(1)), ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail, remaining)) } yield {
+                         pf2 <- repair(program.subExpr(argsIn(1)),
+                           ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail) combineWith newOutFormula) } yield {
                       ProgramFormula(ListLiteral.concat(
                         ListLiteral(inserted, tpe),
                         ListLiteral(List(pf.expr), tpe),
-                        pf2.expr), pf.formula combineWith pf2.formula combineWith Formula(remaining))
+                        pf2.expr), pf.formula combineWith pf2.formula combineWith newOutFormula)
                     }
                   } else {
                     Log("afterLength < functionValueList.length")
                     assert(after.length < functionValueList.length) // some deletion happened.
-                    val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after, remaining) // Recursive problem if
+                    val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after) combineWith newOutFormula // Recursive problem if
                     for{ pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
                       pf.wrap{ x =>
                         ListLiteral.concat(
@@ -488,7 +508,7 @@ object ReverseProgram extends lenses.Lenses {
                 }
               } else { // before.length > 0
                 assert(argsIn.length == 2, "supposed that there was an element here, but there was none.")
-                val updatedOutProgram = ProgramFormula.ListInsert(tpe, before.tail, inserted, after, remaining)
+                val updatedOutProgram = ProgramFormula.ListInsert(tpe, before.tail, inserted, after) combineWith newOutFormula
 
                 for{pfHead <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(before.head))
                     pfTail <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
@@ -501,29 +521,27 @@ object ReverseProgram extends lenses.Lenses {
                   )
                 }
               }
-            case ProgramFormula(newOut, newOutFormula) =>
-              newOut match {
-                case v: Variable =>
-                  Stream(newOutProgram)
-                case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
-                  Log("ADT 2")
-                  val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
-                    repair(ProgramFormula(aFun, program.formula), newOutProgram.subExpr(aVal))
-                  }
-                  val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
-                  for {seq <- streamOfSeqSolutions
-                       _ = Log(s"combineResults($seq, $currentValues)")
-                       (newArgs, assignments) = combineResults(seq, currentValues)
-                  } yield {
-                    ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
-                  }
-                case ADT(ADTType(tp2, tpArgs2), args2) =>
-                  Log("ADT 3")
-                  Stream.empty // Wrapping already handled.
 
-                case a =>
-                  throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
+            case v: Variable =>
+              Stream(newOutProgram)
+            case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
+              Log("ADT 2")
+              val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
+                repair(ProgramFormula(aFun, program.formula), newOutProgram.subExpr(aVal))
               }
+              val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
+              for {seq <- streamOfSeqSolutions
+                   _ = Log(s"combineResults($seq, $currentValues)")
+                   (newArgs, assignments) = combineResults(seq, currentValues)
+              } yield {
+                ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
+              }
+            case ADT(ADTType(tp2, tpArgs2), args2) =>
+              Log("ADT 3")
+              Stream.empty // Wrapping already handled.
+
+            case a =>
+              throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
           }
 
         case as@ADTSelector(adt, selector) =>
@@ -703,6 +721,8 @@ object ReverseProgram extends lenses.Lenses {
                 pf.wrap(x => IfExpr(cond, thenn, x))
             case _ => throw new Exception(s"Not a boolean: $cond_v")
           }
+        case AsInstanceOf(a, tpe) =>
+          for{ p <- repair(program.subExpr(a), newOutProgram)} yield p.wrap(x => AsInstanceOf(x, tpe) )
         case anyExpr =>
           Log(s"Don't know how to handle this case : $anyExpr of type ${anyExpr.getClass.getName},\nIt evaluates to:\n$functionValue.")
           Stream.empty

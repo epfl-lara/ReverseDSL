@@ -22,17 +22,99 @@ object ProgramFormula {
     def funDef: FunDef
   }
 
+  /** A sub-element of the tree has been modified. */
+  object TreeModification extends CustomProgramFormula {
+    private val Modif = FreshIdentifier("modif")
+
+    def apply(tpeGlobal: Type, tpeLocal: Type, original: Expr, modified: Expr, argsInSequence: List[Identifier])(implicit symbols: Symbols): ProgramFormula = {
+      ProgramFormula(Expr(tpeGlobal, tpeLocal, original, modified, argsInSequence))
+    }
+    def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Type, Type, Expr, Expr, List[Identifier])] =
+      Expr.unapply(pf.expr)
+
+    object LambdaPath {
+      def apply(original: Expr, ail: List[Identifier])(implicit symbols: Symbols): Option[Expr] =
+        ail match {
+          case Nil =>
+            Some( \("x"::original.getType)(x => x) )
+          case head::tail =>
+            original match {
+              case l@ADT(ADTType(adtid, tps), args) =>
+                symbols.adts(adtid) match {
+                  case f: ADTConstructor =>
+                    val i = f.selectorID2Index(head)
+                    val expectedTp = args(i).getType
+                    apply(args(i), tail).map{ case lambda =>
+                      \("x"::original.getType)(x => ADT(l.adt, args.take(i) ++ List(Application(lambda, Seq(AsInstanceOf(ADTSelector(x, head), expectedTp)))) ++ args.drop(i+1)))
+                    }
+                  case _ =>
+                    None
+                }
+            }
+        }
+      def unapply(lambda: Expr)(implicit symbols: Symbols): Option[List[Identifier]] = lambda match {
+        case Lambda(Seq(x@ValDef(_, tpe, _)), ADT(adt@ADTType(adtid, tpArgs), args)) =>
+          args.zipWithIndex.collectFirst{ case (a@Application(l: Lambda, _), i) => (l, i) } flatMap {
+            case (newLambda, index) =>
+              symbols.adts(adtid) match {
+                case f: ADTConstructor =>
+                  val id: Identifier= f.fields(index).id
+                  unapply(newLambda).map(li => id +: li)
+                case _ => None
+              }
+          }
+        case Lambda(Seq(x), xv) if x.toVariable == xv => Some(Nil)
+        case _ => None
+      }
+    }
+
+    object Expr {
+      def apply(tpeGlobal: Type, tpeLocal: Type, original: Expr, modified: Expr, argsInSequence: List[Identifier])(implicit symbols: Symbols): Expr = {
+        E(Modif)(tpeGlobal, tpeLocal)(
+          original,
+          LambdaPath(original, argsInSequence).getOrElse(throw new Exception(s"Malformed original: $original or incompatible args: $argsInSequence")),
+          modified
+        )
+      }
+
+      def unapply(e: Expr)(implicit symbols: Symbols): Option[(Type, Type, Expr, Expr, List[Identifier])] = {
+        List(e) collectFirst {
+          case FunctionInvocation(Modif, Seq(tpeGlobal, tpeLocal),
+          Seq(original, LambdaPath(argsInSequence), modified)) =>
+            ((tpeGlobal, tpeLocal, original, modified, argsInSequence))
+        }
+      }
+    }
+
+    def funDef = mkFunDef(Modif)("A", "B"){ case Seq(tA, tB) =>
+      (Seq("wrapper"::FunctionType(Seq(tB), tA), "tree"::tB),
+        tA, {
+        case Seq(wrapper, tree) =>
+          Application(wrapper, Seq(tree))
+      })
+    }
+  }
+
+  /** The tree is included in the new output */
   object TreeWrap extends CustomProgramFormula {
     private val Wrap = FreshIdentifier("wrap")
     def apply(tree: Expr, wrapper: Expr => Expr)(implicit symbols: Symbols): ProgramFormula = {
-      val tpe = tree.getType
-      ProgramFormula(E(Wrap)(tpe)(\("tree"::tpe)(treeVar => wrapper(treeVar)), tree))
+      ProgramFormula(Expr.apply(tree, wrapper))
     }
     def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, Expr => Expr)] = {
-      pf.expr match {
-        case FunctionInvocation(Wrap, tpe, Seq(Lambda(Seq(treeVal), wtree), original)) =>
-          Some((original, (vr: Expr) => exprOps.replaceFromSymbols(Map(treeVal -> vr),wtree)))
-        case _ => None
+      Expr.unapply(pf.expr)
+    }
+    object Expr {
+      def apply(tree: Expr, wrapper: Expr => Expr)(implicit symbols: Symbols): Expr = {
+        val tpe = tree.getType
+        E(Wrap)(tpe)(\("tree"::tpe)(treeVar => wrapper(treeVar)), tree)
+      }
+      def unapply(expr: Expr)(implicit symbols: Symbols): Option[(Expr, Expr => Expr)] = {
+        expr match {
+          case FunctionInvocation(Wrap, tpe, Seq(Lambda(Seq(treeVal), wtree), original)) =>
+            Some((original, (vr: Expr) => exprOps.replaceFromSymbols(Map(treeVal -> vr), wtree)))
+          case _ => None
+        }
       }
     }
     def funDef = mkFunDef(Wrap)("A"){ case Seq(tA) =>
@@ -44,28 +126,53 @@ object ProgramFormula {
     }
   }
 
+  // The new output is included in the original tree.
   object TreeUnwrap extends CustomProgramFormula  {
     private val Unwrap = FreshIdentifier("unwrap")
 
     def apply(tpe: Type, original: Expr, argsInSequence: List[Identifier]): ProgramFormula = {
-      ProgramFormula(E(Unwrap)(tpe)(
-        original,
-        \("unwrap"::tpe)(unwrap =>
-          ((unwrap: Expr) /: argsInSequence){ case (e, i) => ADTSelector(e, i)}
-        )
-      ))
+      ProgramFormula(Expr(tpe, original, argsInSequence))
     }
-    def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Type, Expr, List[Identifier])] = {
-      pf.expr match {
-        case FunctionInvocation(Unwrap, Seq(tpe), Seq(original, Lambda(Seq(unwrapvd), adtselectors))) =>
-          def unbuild(e: Expr): (Type, Expr, List[Identifier]) = e match {
-            case ADTSelector(e, i) =>
-              val (t, res, l) = unbuild(e)
-              (t, res, l :+ i)
-            case res => (tpe, original, Nil)
-          }
-          Some(unbuild(adtselectors))
-        case _ => None
+    def unapply(pf: ProgramFormula): Option[(Type, Expr, List[Identifier])] = {
+      Expr.unapply(pf.expr)
+    }
+    object Expr {
+      def apply(tpe: Type, original: Expr, argsInSequence: List[Identifier]): Expr = {
+        E(Unwrap)(tpe)(original, Select(tpe, argsInSequence))
+      }
+      def unapply(e: Expr): Option[(Type, Expr, List[Identifier])] = {
+        e match {
+          case FunctionInvocation(Unwrap, Seq(tpe), Seq(original, Lambda(Seq(unwrapvd), adtselectors))) =>
+            def unbuild(e: Expr): (Type, Expr, List[Identifier]) = e match {
+              case ADTSelector(e, i) =>
+                val (t, res, l) = unbuild(e)
+                (t, res, l :+ i)
+              case res => (tpe, original, Nil)
+            }
+            Some(unbuild(adtselectors))
+          case _ => None
+        }
+      }
+    }
+
+    /** Builds and Unbuilds a lambda to select parts of the expression */
+    object Select {
+      def apply(tpe: Type, argsInSequence: List[Identifier]): Expr = {
+        \("original"::tpe)(original =>
+          ((original: Expr) /: argsInSequence){ case (e, i) => ADTSelector(e, i)}
+        )
+      }
+      def unapply(e: Expr): Option[(Type, List[Identifier])] = {
+        e match {
+          case Lambda(Seq(ValDef(_, tpe, _)), body) =>
+            def unbuild(e: Expr): Option[(Type, List[Identifier])] = e match {
+              case ADTSelector(e, i) => unbuild(e) map { case (t, l) => (t, l :+ i) }
+              case v: Variable => Some((tpe, Nil))
+              case _ => None
+            }
+            unbuild(body)
+          case _ => None
+        }
       }
     }
 
@@ -144,25 +251,34 @@ object ProgramFormula {
 
   object ListInsert extends CustomProgramFormula  {
     private val InsertList = FreshIdentifier("insertList")
-    def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr], remaining: Expr/* = BooleanLiteral(true)*/): ProgramFormula = {
-      ProgramFormula(
+    def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr]): ProgramFormula = {
+      ProgramFormula(Expr(tpe, leftUnmodified, inserted, rightUnmodified))
+    }
+
+    def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr])] = {
+      Expr.unapply(f.expr)
+    }
+
+    object Expr {
+      def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr]): Expr = {
         E(InsertList)(tpe)(
           ListLiteral(leftUnmodified, tpe),
           ListLiteral(inserted, tpe),
           ListLiteral(rightUnmodified, tpe),
           StringLiteral(".") // Not used direction
-        ), Formula(remaining))
-    }
+        )
+      }
 
-    def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr], Expr)] = {
-      f.expr match {
-        case FunctionInvocation(InsertList, Seq(tpe0), Seq(
+      def unapply(e: Expr): Option[(Type, List[Expr], List[Expr], List[Expr])] = {
+        e match {
+          case FunctionInvocation(InsertList, Seq(tpe0), Seq(
           ListLiteral(leftBefore, _),
-        ListLiteral(inserted, tpe3),
-        ListLiteral(rightBefore, _),
-        _)) =>
-          Some((tpe0, leftBefore, inserted, rightBefore, f.formula.unknownConstraints))
-        case _ => None
+          ListLiteral(inserted, tpe3),
+          ListLiteral(rightBefore, _),
+          _)) =>
+            Some((tpe0, leftBefore, inserted, rightBefore))
+          case _ => None
+        }
       }
     }
 
