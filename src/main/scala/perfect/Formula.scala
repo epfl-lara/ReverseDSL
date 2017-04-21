@@ -170,14 +170,19 @@ case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
   lazy val assignments: Option[Expr => Expr] = {
     def rec(constraints: List[Expr], seen: Set[Variable]): Option[Expr => Expr] = {
       if(constraints == Nil) Some(x => x) else {
-        constraints.collectFirst[(Expr => Expr, Variable, Equals)]{
+        val res = constraints.collectFirst[(Expr => Expr, Variable, Expr)]{
           case equ@Equals(v: Variable, e: Expr) if (exprOps.variablesOf(e) -- seen).isEmpty =>
             ((x: Expr) => Let(v.toVal, e, x), v, equ)
-          case equ@Equals(e: Expr, v: Variable) if (exprOps.variablesOf(e) -- seen).isEmpty =>
+          /*case equ@Equals(e: Expr, v: Variable) if (exprOps.variablesOf(e) -- seen).isEmpty =>
+            ((x: Expr) => Let(v.toVal, e, x), v, equ)*/
+        }.orElse(constraints.collectFirst[(Expr => Expr, Variable, Expr)]{
+          case equ@FunctionInvocation(Utils.original, Seq(), Seq(Equals(v: Variable, e: Expr))) if (exprOps.variablesOf(e) -- seen).isEmpty =>
             ((x: Expr) => Let(v.toVal, e, x), v, equ)
-        }.flatMap{ fve => rec(constraints.filter(x => x != fve._3), seen + fve._2).map(
+        }).flatMap{ fve => rec(constraints.filter(x => x != fve._3), seen + fve._2).map(
           (g: Expr => Expr) => ((x: Expr) => fve._1(g(x))))
         }
+        if(res.isEmpty) Log(s"Could not reduce $constraints knowing $seen")
+        res
       }
     }
     val TopLevelAnds(ands) = unknownConstraints
@@ -284,6 +289,7 @@ case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
             //println(s"input is of type ${input.getType}")
             val constraint = InoxConstraint(input === tupleWrap(freeVariables.map(_.toVariable)) && constraints)
             Log(s"Solving for $constraint")
+            ???
             constraint.toStreamOfInoxExpr(input)
         }
         streamOfSolutions.map {
