@@ -422,6 +422,7 @@ object InoxConvertible {
     }
     object TNode extends ToInoxTypeConvertible {
       def getType = inoxTypeOf[XmlTrees.Node]
+      def ::(name: String): ValDef = valdef[XmlTrees.Node](name)
     }
   }
   object conversions extends conversions

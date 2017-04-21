@@ -47,29 +47,22 @@ class XmlTest extends FunSuite with TestHelpers {
   val tNode = inoxTypeOf[Node]
 
   val pfWithoutSortingFlatmap = {
-    val in = valdef[Node]("in")
-    val i1Node = valdef[Node]("i1")
-    val i2String = valdef[String]("i2")
-    val i3Node = valdef[Node]("i3")
-    val selectChild = valdef[(Node, String) => List[Node]]("selectChild")
     /** Select the first child with the given name */
-    val selectChildImpl = Lambda(Seq(i1Node, i2String),
-      FunctionInvocation(filter, Seq(tNode), Seq(i1Node.toVariable.getField(children),
-        Lambda(Seq(i3Node), i3Node.toVariable.getField(tag) === i2String.toVariable)
+    val selectChildImpl = \("in"::TNode, "i2"::String)((i1Node, i2String) =>
+      FunctionInvocation(filter, Seq(tNode), Seq(i1Node.getField(children),
+        \("i3"::TNode)(i3Node => i3Node.getField(tag) === i2String)
       ))
     )
 
-    val nInput = valdef[Node]("n")
-
-    let(selectChild, selectChildImpl)(selectChildv =>
-      let(in, inoxExprOf[Node](input))(inVariable =>
+    let("selectChild"::inoxTypeOf[(Node, String) => List[Node]], selectChildImpl)(selectChildv =>
+      let("in"::TNode, inoxExprOf[Node](input))(inVariable =>
         _Node("addrbook", children=
           FunctionInvocation(listconcat, Seq(tNode),
             Seq(
               _List[Node](_Node("index", children=
-                FunctionInvocation(flatmap, Seq(tNode, tNode), Seq(inVariable.getField(children), Lambda(Seq(nInput),
-                  Application(selectChild.toVariable, Seq(nInput.toVariable, "name"))
-                ))) )),
+                FunctionInvocation(flatmap, Seq(tNode, tNode), Seq(inVariable.getField(children),
+                  \("n"::TNode)(nInput => Application(selectChildv, Seq(nInput, "name")))
+                )))),
               inVariable.getField(children)
             )
           )
@@ -77,43 +70,32 @@ class XmlTest extends FunSuite with TestHelpers {
   }
 
   val pfWithoutSorting = {
-    val in = valdef[Node]("in")
-    val i1Node = valdef[Node]("i1")
-    val i2String = valdef[String]("i2")
-    val i3Node = valdef[Node]("i3")
     val selectChild = valdef[(Node, String) => List[Node]]("selectChild")
     /** Select the first child with the given name */
-    val selectChildImpl = Lambda(Seq(i1Node, i2String),
-      FunctionInvocation(filter, Seq(tNode), Seq(i1Node.toVariable.getField(children),
-        Lambda(Seq(i3Node), i3Node.toVariable.getField(tag) === i2String.toVariable)
+    val selectChildImpl = \("i1"::TNode, "i2"::String)((i1Node, i2String) =>
+      FunctionInvocation(filter, Seq(tNode), Seq(i1Node.getField(children),
+        \("i3"::TNode)(i3Node => i3Node.getField(tag) === i2String)
       ))
     )
-    val n1 = valdef[Node]("n1")
-    val n2 = valdef[Node]("n2")
 
-    val fInput = valdef[Node]("n")
-    val kInput = valdef[String]("k")
-    val dInput = valdef[String]("d")
     val getOrElse = valdef[(Node, String, String) => String]("getOrElse")
-    val getOrElseImpl = Lambda(Seq(fInput, kInput, dInput),
-      let("k"::T(list)(tNode), Application(selectChild.toVariable, Seq(fInput.toVariable, kInput.toVariable)))(k =>
+    val getOrElseImpl = \("n"::TNode, "k"::String, "d"::String)((fInput, kInput, dInput) =>
+      let("k"::T(list)(tNode), Application(selectChild.toVariable, Seq(fInput, kInput)))(k =>
         if_(k.isInstOf(T(cons)(tNode))) {
           let("l"::T(list)(tNode), k.asInstOf(T(cons)(tNode)).getField(head).getField(children))(l =>
             if_(l.isInstOf(T(cons)(tNode))) {
               l.asInstOf(T(cons)(tNode)).getField(head).getField(tag)
-            } else_ dInput.toVariable
+            } else_ dInput
           )
-        } else_ dInput.toVariable
+        } else_ dInput
       )
     )
-    val nInput = valdef[Node]("n")
-    val obtainNameImpl = Lambda(Seq(nInput),
-      _Node("name", children=_List[Node](_Node(Application(getOrElse.toVariable, Seq(nInput.toVariable, "name", "")))))
+    val obtainNameImpl = \("n"::TNode)(nInput =>
+      _Node("name", children=_List[Node](_Node(Application(getOrElse.toVariable, Seq(nInput, "name", "")))))
     )
 
-    let(in, inoxExprOf[Node](input))(inVariable =>
+    let("in"::TNode, inoxExprOf[Node](input))(inVariable =>
       let(selectChild, selectChildImpl)(selectChildv =>
-        //let(obtainName, obtainNameImpl)(obtainv =>
         let(getOrElse, getOrElseImpl)(getOrElsev =>
             _Node("addrbook", children=
               FunctionInvocation(listconcat, Seq(tNode),
@@ -127,51 +109,40 @@ class XmlTest extends FunSuite with TestHelpers {
   }
 
   val pfWithSorting = {
-    val in = valdef[Node]("in")
-    val i1Node = valdef[Node]("i1")
-    val i2String = valdef[String]("i2")
-    val i3Node = valdef[Node]("i3")
     val selectChild = valdef[(Node, String) => List[Node]]("selectChild")
     /** Select the first child with the given name */
-    val selectChildImpl = Lambda(Seq(i1Node, i2String),
-      FunctionInvocation(filter, Seq(tNode), Seq(i1Node.toVariable.getField(children),
-        Lambda(Seq(i3Node), i3Node.toVariable.getField(tag) === i2String.toVariable)
+    val selectChildImpl = \("i1"::TNode, "i2"::String)((i1Node, i2String) =>
+      FunctionInvocation(filter, Seq(tNode), Seq(i1Node.getField(children),
+        \("i3"::TNode)(i3Node => i3Node.getField(tag) === i2String)
       ))
     )
-    val n1 = valdef[Node]("n1")
-    val n2 = valdef[Node]("n2")
 
-    val fInput = valdef[Node]("n")
-    val kInput = valdef[String]("k")
-    val dInput = valdef[String]("d")
     val getOrElse = valdef[(Node, String, String) => String]("getOrElse")
-    val getOrElseImpl = Lambda(Seq(fInput, kInput, dInput),
-      let("k"::T(list)(tNode), Application(selectChild.toVariable, Seq(fInput.toVariable, kInput.toVariable)))(k =>
+    val getOrElseImpl = \("n"::TNode, "k"::String, "d"::String)((fInput, kInput, dInput) =>
+      let("k"::T(list)(tNode), Application(selectChild.toVariable, Seq(fInput, kInput)))(k =>
         if_(k.isInstOf(T(cons)(tNode))) {
           let("l"::T(list)(tNode), k.asInstOf(T(cons)(tNode)).getField(head).getField(children))(l =>
             if_(l.isInstOf(T(cons)(tNode))) {
               l.asInstOf(T(cons)(tNode)).getField(head).getField(tag)
-            } else_ dInput.toVariable
+            } else_ dInput
           )
-        } else_ dInput.toVariable
+        } else_ dInput
       )
     )
-    val nInput = valdef[Node]("n")
-    val obtainNameImpl = Lambda(Seq(nInput),
-      _Node("name", children=_List[Node](_Node(Application(getOrElse.toVariable, Seq(nInput.toVariable, "name", "")))))
+    val obtainNameImpl = \("n"::TNode)( nInput =>
+      _Node("name", children=_List[Node](_Node(Application(getOrElse.toVariable, Seq(nInput, "name", "")))))
     )
 
-    let(in, inoxExprOf[Node](input))(inVariable =>
+    let("in"::TNode, inoxExprOf[Node](input))(inVariable =>
       let(selectChild, selectChildImpl)(selectChildv =>
-        //let(obtainName, obtainNameImpl)(obtainv =>
         let(getOrElse, getOrElseImpl)(getOrElsev =>
           let("childrenSortedByName"::inoxTypeOf[List[Node]],
             FunctionInvocation(sortWith, Seq(inoxTypeOf[Node]), Seq(
               inVariable.getField(children),
-              Lambda(Seq(n1, n2),
+              \("n1"::TNode, "n2"::TNode)((n1, n2) =>
                 -FunctionInvocation(stringCompare, Seq(), Seq(
-                  Application(getOrElsev, Seq(n1.toVariable, StringLiteral("name"), StringLiteral(""))),
-                  Application(getOrElsev, Seq(n2.toVariable, StringLiteral("name"), StringLiteral(""))))))
+                  Application(getOrElsev, Seq(n1, StringLiteral("name"), StringLiteral(""))),
+                  Application(getOrElsev, Seq(n2, StringLiteral("name"), StringLiteral(""))))))
             ))
           )(childrenSortedByName =>
             _Node("addrbook", children=
