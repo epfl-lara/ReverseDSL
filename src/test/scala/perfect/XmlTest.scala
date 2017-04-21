@@ -49,22 +49,20 @@ class XmlTest extends FunSuite with TestHelpers {
   val pfWithoutSortingFlatmap = {
     /** Select the first child with the given name */
     val selectChildImpl = \("in"::TNode, "i2"::String)((i1Node, i2String) =>
-      FunctionInvocation(filter, Seq(tNode), Seq(i1Node.getField(children),
+      E(filter)(tNode)(i1Node.getField(children),
         \("i3"::TNode)(i3Node => i3Node.getField(tag) === i2String)
-      ))
+      )
     )
 
     let("selectChild"::inoxTypeOf[(Node, String) => List[Node]], selectChildImpl)(selectChildv =>
       let("in"::TNode, inoxExprOf[Node](input))(inVariable =>
         _Node("addrbook", children=
-          FunctionInvocation(listconcat, Seq(tNode),
-            Seq(
-              _List[Node](_Node("index", children=
-                FunctionInvocation(flatmap, Seq(tNode, tNode), Seq(inVariable.getField(children),
-                  \("n"::TNode)(nInput => Application(selectChildv, Seq(nInput, "name")))
-                )))),
-              inVariable.getField(children)
-            )
+          E(listconcat)(tNode)(
+            _List[Node](_Node("index", children=
+              E(flatmap)(tNode, tNode)(inVariable.getField(children),
+                \("n"::TNode)(nInput => Application(selectChildv, Seq(nInput, "name")))
+              ))),
+            inVariable.getField(children)
           )
         )))
   }
@@ -73,9 +71,9 @@ class XmlTest extends FunSuite with TestHelpers {
     val selectChild = valdef[(Node, String) => List[Node]]("selectChild")
     /** Select the first child with the given name */
     val selectChildImpl = \("i1"::TNode, "i2"::String)((i1Node, i2String) =>
-      FunctionInvocation(filter, Seq(tNode), Seq(i1Node.getField(children),
+      E(filter)(tNode)(i1Node.getField(children),
         \("i3"::TNode)(i3Node => i3Node.getField(tag) === i2String)
-      ))
+      )
     )
 
     val getOrElse = valdef[(Node, String, String) => String]("getOrElse")
@@ -98,12 +96,10 @@ class XmlTest extends FunSuite with TestHelpers {
       let(selectChild, selectChildImpl)(selectChildv =>
         let(getOrElse, getOrElseImpl)(getOrElsev =>
             _Node("addrbook", children=
-              FunctionInvocation(listconcat, Seq(tNode),
-                Seq(
-                  _List[Node](_Node("index", children=
-                    FunctionInvocation(map, Seq(tNode, tNode), Seq(inVariable.getField(children), obtainNameImpl)) )),
-                  inVariable.getField(children)
-                )
+              E(listconcat)(tNode)(
+                _List[Node](_Node("index", children=
+                  E(map)(tNode, tNode)(inVariable.getField(children), obtainNameImpl))),
+                inVariable.getField(children)
               )
             ))))
   }
@@ -112,9 +108,9 @@ class XmlTest extends FunSuite with TestHelpers {
     val selectChild = valdef[(Node, String) => List[Node]]("selectChild")
     /** Select the first child with the given name */
     val selectChildImpl = \("i1"::TNode, "i2"::String)((i1Node, i2String) =>
-      FunctionInvocation(filter, Seq(tNode), Seq(i1Node.getField(children),
+      E(filter)(tNode)(i1Node.getField(children),
         \("i3"::TNode)(i3Node => i3Node.getField(tag) === i2String)
-      ))
+      )
     )
 
     val getOrElse = valdef[(Node, String, String) => String]("getOrElse")
@@ -137,21 +133,19 @@ class XmlTest extends FunSuite with TestHelpers {
       let(selectChild, selectChildImpl)(selectChildv =>
         let(getOrElse, getOrElseImpl)(getOrElsev =>
           let("childrenSortedByName"::inoxTypeOf[List[Node]],
-            FunctionInvocation(sortWith, Seq(inoxTypeOf[Node]), Seq(
+            E(sortWith)(inoxTypeOf[Node])(
               inVariable.getField(children),
               \("n1"::TNode, "n2"::TNode)((n1, n2) =>
-                -FunctionInvocation(stringCompare, Seq(), Seq(
+                -E(stringCompare)()(
                   Application(getOrElsev, Seq(n1, StringLiteral("name"), StringLiteral(""))),
-                  Application(getOrElsev, Seq(n2, StringLiteral("name"), StringLiteral(""))))))
-            ))
+                  Application(getOrElsev, Seq(n2, StringLiteral("name"), StringLiteral("")))))
+            )
           )(childrenSortedByName =>
             _Node("addrbook", children=
-              FunctionInvocation(listconcat, Seq(tNode),
-                Seq(
-                  _List[Node](_Node("index", children=
-                    FunctionInvocation(map, Seq(tNode, tNode), Seq(childrenSortedByName, obtainNameImpl)) )),
-                  childrenSortedByName
-                )
+              E(listconcat)(tNode)(
+                _List[Node](_Node("index", children=
+                  E(map)(tNode, tNode)(childrenSortedByName, obtainNameImpl))),
+                childrenSortedByName
               )
             )))))
   }
