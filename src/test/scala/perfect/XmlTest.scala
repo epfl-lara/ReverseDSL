@@ -406,6 +406,8 @@ class XmlTest extends FunSuite with TestHelpers {
       </person>
       <person>
         <name> Mikael Mayer </name>
+        <email> takeichi@acm.org </email>
+        <tel> +81-3-5841-7430 </tel>
       </person>
       <person>
         <name> Shin-Cheng Mu </name>

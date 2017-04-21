@@ -117,7 +117,7 @@ trait Lenses { self: ReverseProgram.type =>
       val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
       val ListLiteral(originalInput, inputType) = originalArgsValues.head
       val argType = lambda.args.head.getType
-      val uniqueUnknownValue: Expr = defaultValue(argType)
+      val valueByDefault: Expr = originalInput.headOption.getOrElse(defaultValue(argType))
       val unknown = ValDef(FreshIdentifier("unknown"), argType)
       val unknownVar = unknown.toVariable
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
@@ -129,7 +129,7 @@ trait Lenses { self: ReverseProgram.type =>
           val unknown = ValDef(FreshIdentifier("unknown", true), argType)
           val unknownVar = unknown.toVariable
           val (Seq(in), newFormula) =
-            prevIn.map(x => (Seq(x._1), x._2)).getOrElse {(Seq(unknownVar), Formula(unknownVar === uniqueUnknownValue))}
+            prevIn.map(x => (Seq(x._1), x._2)).getOrElse {(Seq(unknownVar), Formula(unknownVar === valueByDefault))}
           Log(s"in:$in\nnewformula:$newFormula")
           Log.prefix(s"fRev($prevIn, $out)=") :=
           repair(ProgramFormula(Application(lambda, Seq(in)), newFormula).wrappingLowPriority(), newOutput.subExpr(out)).flatMap {
@@ -142,7 +142,7 @@ trait Lenses { self: ReverseProgram.type =>
               Stream(Right(((in2, castOrFail[Expr, Lambda](lambda2)), formula)))
             case e@ProgramFormula(app, f) =>
               throw new Exception(s"[Internal error] Don't know how to handle: $e")
-          // We remove those which only return the uniqueUnknownValue
+          // We remove those which only return the valueByDefault
           }
         }
       }
@@ -209,22 +209,24 @@ trait Lenses { self: ReverseProgram.type =>
           // Inserted does not change the lambda normally
           val newInserted: List[Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]] = {
            // We have no choice but to repair the lambda to see what would be the original value for each of the newly added elements.
-            // We set up a way so that we discard changes in the lambda itself.
+            // The valueByDefault is just a copy of neighbor values if it exists.
+
             val (Seq(expr), newFormula) = {
               val unknown = ValDef(FreshIdentifier("unknown"), lambda.args.head.getType)
-              (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> uniqueUnknownValue)))
+              (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> valueByDefault)))
             }
             inserted.map { i =>
               if(i == StringLiteral("") && tpe == inputType) { // An empty string ltteral was added. First we suppose that it was inserted in the original elements
                 Stream(Left[(Expr, Formula), ((Expr, Lambda), Formula)]((i, Formula())))
               } else repair(ProgramFormula(Application(lambda, Seq(expr)), newFormula), ProgramFormula(i)).flatMap {
                 case pf@ProgramFormula(Application(lExpr, Seq(expr2)), formula2) =>
-                  val lambda2 = castOrFail[Expr, Lambda](lExpr)
+                  /*val lambda2 = castOrFail[Expr, Lambda](lExpr)
                   if (lambda2 != lambda) {
+                    Log(s"Attempt to modify from $lambda to $lambda2 aborted")
                     Nil
-                  } else {
+                  } else {*/
                     List(Left(expr2, formula2))
-                  }
+                  //}
               }
             }
           }

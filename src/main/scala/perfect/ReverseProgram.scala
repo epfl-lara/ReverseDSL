@@ -710,6 +710,25 @@ object ReverseProgram extends lenses.Lenses {
                 }
               }
           }
+          // Special case where we prefer the cons-branch. For that we need to modify the input.
+        /*case IfExpr(IsInstanceOf(v:Variable, ADTType(Utils.cons, Seq(tpe))), thenn, elze) =>
+          val value_v = evalWithCache(letm(currentValues) in v)
+          value_v match {
+            case ListLiteral(List(), tpe) => // Let's try to complete the nil to something else so that it passes the thenn branch.
+              val hd = Variable("hd", tpe, Set())
+              val tl = Variable("tl", ADTType(Utils.list, Seq(tpe)), Set())
+              val new_value_v = ListLiteral()
+
+              repair(program.subExpr(thenn), newOutProgram)
+
+              val newFormula = v === ADT(ADTType(Utils.cons, Seq(tpe)), Seq(hd, tl))
+
+            case ListLiteral(_, _) => // Then-branch
+              for(pf <- repair(program.subExpr(thenn), newOutProgram)) yield
+                pf.wrap(x => IfExpr(cond, x, elze))
+          }*/
+
+
         case IfExpr(cond, thenn, elze) =>
           val cond_v = evalWithCache(letm(currentValues) in cond)
           cond_v match {
@@ -729,18 +748,12 @@ object ReverseProgram extends lenses.Lenses {
       }
 
     (if(program.isWrappingLowPriority) {
-      interleave {
-        originalSolutions
-      } {
-        maybeWrappedSolutions
-      }
+      interleave { originalSolutions } { maybeWrappedSolutions }
     } else {
-      interleave {
-        maybeWrappedSolutions
-      } {
-        originalSolutions
-      }
-    }) #::: {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOutProgram):\n~>")
+      interleave { maybeWrappedSolutions } { originalSolutions }
+    }) #::: {
+      ???
+      Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOutProgram):\n~>")
   }
 
   /** Given a sequence of (arguments expression, expectedValue),
