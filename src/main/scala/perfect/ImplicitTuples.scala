@@ -6,8 +6,10 @@ import inox.trees.dsl._
 import inox.solvers._
 
 object ImplicitTuples {
+  def _TTuple2(tpe1: Type, tpe2: Type) =
+    ADTType(tuple2, Seq(tpe1, tpe2))
   def _Tuple2(tpe1: Type, tpe2: Type)(first: Expr, second: Expr) =
-    ADT(ADTType(tuple2, Seq(tpe1, tpe2)), Seq(first, second))
+    ADT(_TTuple2(tpe1, tpe2), Seq(first, second))
   def _Tuple3(tpe1: Type, tpe2: Type, tpe3: Type)(first: Expr, second: Expr, third: Expr) =
     ADT(ADTType(tuple3, Seq(tpe1, tpe2, tpe3)), Seq(first, second, third))
 

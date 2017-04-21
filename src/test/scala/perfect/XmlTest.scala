@@ -446,6 +446,15 @@ class XmlTest extends FunSuite with TestHelpers {
     pfWithSorting shouldProduce initialOutWithSorting
   }
   test("Hu 2004 modification in name") {
+    import Utils._
+    val newOutModification: ProgramFormula = ProgramFormula.TreeModification(
+      inoxTypeOf[Node],
+      inoxTypeOf[String],
+      initialOutWithoutSorting,
+      "Prof. Masato Takeichi",
+      List(children, head, children, tail, tail, head, children, head, tag)
+    )(Utils.defaultSymbols)
+    /*
     val newOutModification: Node = <addrbook>
       <index>
         <name>Zhenjiang Hu</name>
@@ -468,7 +477,7 @@ class XmlTest extends FunSuite with TestHelpers {
         <email>takeichi@acm.org</email>
         <tel>+81-3-5841-7430</tel>
       </person>
-    </addrbook>
+    </addrbook>*/
 
     val expectedOutModification: Node = <addrbook>
       <index>

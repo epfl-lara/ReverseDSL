@@ -1234,7 +1234,37 @@ trait Lenses { self: ReverseProgram.type =>
     }
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
-      ???
+      import ImplicitTuples._
+      val in@ListLiteral(inList, tpe) = originalArgsValues.head
+      val lambdaComp = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
+      val tracingLambdaComp = \("in1"::_TTuple2(tpes.head, Int32Type), "in2"::_TTuple2(tpes.head, Int32Type))((in1, in2) =>
+        Application(lambdaComp, Seq(in1.getField(_1), in2.getField(_1)))
+      )
+      val tracingIn = ListLiteral(inList.zipWithIndex.map{ case (e, i) => _Tuple2(tpes.head, Int32Type)(e, IntLiteral(i)) }, _TTuple2(tpes.head, Int32Type))
+
+      val expectedTracingOutput = evalWithCache(E(identifier)(_TTuple2(tpes.head, Int32Type))(tracingIn, tracingLambdaComp))
+
+      val ListLiteral(expectedTracedList, _) = expectedTracingOutput
+      val indexOrder = expectedTracedList.map {
+        case ADT(_, Seq(_, IntLiteral(i))) => i
+      }
+      val inverseMap = indexOrder.indices.toList.zip(indexOrder).toMap
+
+      // Bidirectionalization for free, we recover the position of the original elements.
+      optVar(newOutput.expr).flatMap(newOutput.formula.findConstraintValue).getOrElse(newOutput.expr) match {
+        case TreeModification.Expr(tpeGlobal, tpeLocal, original, modified, arguments) =>
+          val (index, remaining) = arguments.span(_ == tail)
+          if(remaining.nonEmpty) {
+            val n = index.length
+            val prev_n = inverseMap(n)
+            val newArguments = List.fill(prev_n.toInt)(tail) ++ remaining
+
+            Stream((Seq(TreeModification(tpeGlobal, tpeLocal, in, modified, newArguments),
+              ProgramFormula(lambdaComp)), Formula()))
+          } else ??? // We tried to change one of the tails. Not supported.
+        case v =>
+          ???
+      }
     }
   }
 }
