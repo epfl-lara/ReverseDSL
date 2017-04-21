@@ -3,7 +3,7 @@ package perfect
 import inox.FreshIdentifier
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ProgramFormula.{ListInsert, StringInsert}
+import perfect.ProgramFormula._
 import perfect.ReverseProgram.{Cache, evalWithCache, letm}
 
 /**
@@ -36,11 +36,14 @@ object Formula {
 
   protected def inlineSimpleFormulas(e: Formula): Formula = {
     val TopLevelAnds(exprs) = e.unknownConstraints
+    implicit val symbols = Utils.defaultSymbols
     val newExprs = exprs.map {
       case Equals(v: Variable, StringInsert.Expr(left, middle, right, direction)) =>
         Equals(v, StringLiteral(left + middle + right))
       case Equals(v: Variable, ListInsert.Expr(tpe, left, middle, right)) =>
         Equals(v, ListLiteral(left ++ middle ++ right, tpe))
+      case e@Equals(v: Variable, TreeModification.Expr(tpeGlobal, tpeLocal, original, modified, argsList)) =>
+        TreeModification.LambdaPath(original, argsList, modified).map(l => Equals(v, l)).getOrElse(e)
       case e => e
     }
     if(newExprs != exprs) {

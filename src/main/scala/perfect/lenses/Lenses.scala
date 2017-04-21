@@ -58,16 +58,25 @@ trait Lenses { self: ReverseProgram.type =>
       val newOutput = newOutputProgram.expr
       val ListLiteral(originalInput, _) = originalArgsValues.head
       Log(s"FilterReverser: $originalArgsValues => $newOutputProgram")
+      val filterLambda = (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true)
       newOutput match {
         case ListLiteral(newOutputList, _) =>
-          filterRev(originalInput, (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true), newOutputList).map{ (e: List[Expr]) =>
+          filterRev(originalInput, filterLambda, newOutputList).map{ (e: List[Expr]) =>
             (Seq(ProgramFormula(ListLiteral(e, tpes.head)), ProgramFormula(lambda)), Formula())
           }
         case Variable(id, lstType, flags) => // Convert to a formula and return a new variable
-          val newVar = Variable(id.freshen, lstType, flags)
-          Stream(((Seq(ProgramFormula(newVar), ProgramFormula(lambda)),
-            newOutputProgram.formula combineWith (FunctionInvocation(identifier, tpes, Seq(newVar, lambda)) === newOutput)
-          )))
+          newOutputProgram.getFunctionValue match {
+            case Some(ListLiteral(newOutputList, _)) =>
+              Log.prefix(s"filterRev($originalInput, $newOutputList)") :=
+              filterRev(originalInput, filterLambda, newOutputList).map{ (e: List[Expr]) =>
+                (Seq(ProgramFormula(ListLiteral(e, tpes.head)), ProgramFormula(lambda)), Formula())
+              }
+            case _ =>
+              val newVar = Variable(id.freshen, lstType, flags)
+              Stream(((Seq(ProgramFormula(newVar), ProgramFormula(lambda)),
+                newOutputProgram.formula combineWith (FunctionInvocation(identifier, tpes, Seq(newVar, lambda)) === newOutput)
+              )))
+          }
 
         case _ => ???
       }

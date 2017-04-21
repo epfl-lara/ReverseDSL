@@ -33,6 +33,25 @@ object ProgramFormula {
       Expr.unapply(pf.expr)
 
     object LambdaPath {
+      def apply(original: Expr, ail: List[Identifier], modified: Expr)(implicit symbols: Symbols): Option[Expr] =
+        ail match {
+          case Nil =>
+            Some( modified )
+          case head::tail =>
+            original match {
+              case l@ADT(ADTType(adtid, tps), args) =>
+                symbols.adts(adtid) match {
+                  case f: ADTConstructor =>
+                    val i = f.selectorID2Index(head)
+                    val expectedTp = args(i).getType
+                    apply(args(i), tail, modified).map{ case expr =>
+                      ADT(l.adt, args.take(i) ++ List(expr) ++ args.drop(i+1))
+                    }
+                  case _ =>
+                    None
+                }
+            }
+        }
       def apply(original: Expr, ail: List[Identifier])(implicit symbols: Symbols): Option[Expr] =
         ail match {
           case Nil =>
@@ -552,7 +571,24 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
               }
               givenValue = Some(res)
               givenValue
-            case _ => None
+            case None =>
+              expr match {
+                case FunctionInvocation(_, _, _) => None
+                case _ =>
+                  // Maybe we can generate the value out of the constraints still.
+                  var tmp = expr
+                  var prev = Set[Expr]()
+                  while(exprOps.variablesOf(tmp).nonEmpty && !(prev contains tmp)) {
+                    prev = prev + tmp
+                    val mapping = exprOps.variablesOf(tmp).map { v =>
+                      v.toVal -> formula.findConstraintValue(v).getOrElse(v)
+                    }.toMap
+                    tmp = exprOps.replaceFromSymbols(mapping, tmp)
+                  }
+                  if(exprOps.variablesOf(tmp).isEmpty) {
+                    Some(tmp)
+                  } else None
+              }
           }
         }
     }
