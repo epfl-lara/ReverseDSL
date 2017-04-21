@@ -136,7 +136,7 @@ class XmlTest extends FunSuite with TestHelpers {
             E(sortWith)(inoxTypeOf[Node])(
               inVariable.getField(children),
               \("n1"::TNode, "n2"::TNode)((n1, n2) =>
-                -E(stringCompare)()(
+                -E(stringCompare)(
                   Application(getOrElsev, Seq(n1, StringLiteral("name"), StringLiteral(""))),
                   Application(getOrElsev, Seq(n2, StringLiteral("name"), StringLiteral("")))))
             )
@@ -419,32 +419,31 @@ class XmlTest extends FunSuite with TestHelpers {
     pfWithoutSorting repairFrom newOutInsertionIndex shouldProduce expectedOutInsertionIndex
   }
 
+  val initialOutWithSorting: Node = <addrbook>
+    <index>
+      <name> Zhenjiang Hu </name>
+      <name> Shin-Cheng Mu </name>
+      <name> Masato Takeichi </name>
+    </index>
+    <person>
+      <name> Zhenjiang Hu </name>
+      <email> hu@mist.i.u-tokyo.ac.jp </email>
+      <email> hu@ipl.t.u-tokyo.ac.jp </email>
+      <tel> +81-3-5841-7411 </tel>
+    </person>
+    <person>
+      <name> Shin-Cheng Mu </name>
+      <email> scm@mist.i.u-tokyo.ac.jp </email>
+      <tel> +81-3-5841-7411 </tel>
+    </person>
+    <person>
+      <name> Masato Takeichi </name>
+      <email> takeichi@acm.org </email>
+      <tel> +81-3-5841-7430 </tel>
+    </person>
+  </addrbook>
   test("Hu 2004") {
-    val initialOut: Node = <addrbook>
-      <index>
-        <name> Zhenjiang Hu </name>
-        <name> Shin-Cheng Mu </name>
-        <name> Masato Takeichi </name>
-      </index>
-      <person>
-        <name> Zhenjiang Hu </name>
-        <email> hu@mist.i.u-tokyo.ac.jp </email>
-        <email> hu@ipl.t.u-tokyo.ac.jp </email>
-        <tel> +81-3-5841-7411 </tel>
-      </person>
-      <person>
-        <name> Shin-Cheng Mu </name>
-        <email> scm@mist.i.u-tokyo.ac.jp </email>
-        <tel> +81-3-5841-7411 </tel>
-      </person>
-      <person>
-        <name> Masato Takeichi </name>
-        <email> takeichi@acm.org </email>
-        <tel> +81-3-5841-7430 </tel>
-      </person>
-    </addrbook>
-
-    checkProg(initialOut, pfWithSorting)
+    pfWithSorting shouldProduce initialOutWithSorting
   }
   test("Hu 2004 modification in name") {
     val newOutModification: Node = <addrbook>

@@ -22,12 +22,12 @@ trait LambdaPreservingEvaluator extends inox.evaluators.RecursiveEvaluator {
     case FunctionInvocation(Utils.stringCompare, Seq(), Seq(left, right)) =>
       val StringLiteral(s) = e(left)
       val StringLiteral(t) = e(right)
-      if(s < t) {
-        IntLiteral(-1)
-      } else if(s == t) {
-        IntLiteral(0)
+      if (s < t) {
+        IntegerLiteral(-1)
+      } else if (s == t) {
+        IntegerLiteral(0)
       } else {
-        IntLiteral(1)
+        IntegerLiteral(1)
       }
     case _ => super.e(expr)
   }
