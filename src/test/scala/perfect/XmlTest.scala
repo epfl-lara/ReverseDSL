@@ -354,7 +354,7 @@ class XmlTest extends FunSuite with TestHelpers {
       ProgramFormula.ListInsert.Expr(inoxTypeOf[Node],
         List(
           <name> Masato Takeichi </name>: Node,
-            <name> Zhenjiang Hu </name>: Node),
+          <name> Zhenjiang Hu </name>: Node),
         List(<name> Mikael Mayer </name>: Node),
         List(<name> Shin-Cheng Mu </name>: Node)
       )
@@ -600,6 +600,22 @@ class XmlTest extends FunSuite with TestHelpers {
     pfWithSorting repairFrom newOutInsertionData shouldProduce expectedOutInsertionData
   }
   test("Hu 2004 insertion in index") {
+    import Utils._
+    val newOutInsertionIndex = TreeModification(
+      inoxTypeOf[Node],
+      inoxTypeOf[List[Node]],
+      initialOutWithoutSorting,
+      ProgramFormula.ListInsert.Expr(inoxTypeOf[Node],
+        List(
+          <name> Zhenjiang Hu </name>: Node),
+        List(<name> Mikael Mayer </name>: Node),
+        List(<name> Shin-Cheng Mu </name>: Node,
+          <name> Masato Takeichi </name>: Node
+        )
+      )
+      , List(children, head, children)
+    )(Utils.defaultSymbols)
+    /*
     val newOutInsertionIndex: Node = <addrbook>
       <index>
         <name> Zhenjiang Hu </name>
@@ -623,7 +639,7 @@ class XmlTest extends FunSuite with TestHelpers {
         <email> takeichi@acm.org </email>
         <tel> +81-3-5841-7430 </tel>
       </person>
-    </addrbook>
+    </addrbook>*/
 
     val expectedOutInsertionIndex: Node = <addrbook>
       <index>
@@ -645,6 +661,9 @@ class XmlTest extends FunSuite with TestHelpers {
       </person>
       <person>
         <name> Mikael Mayer </name>
+        <email> hu@mist.i.u-tokyo.ac.jp </email>
+        <email> hu@ipl.t.u-tokyo.ac.jp </email>
+        <tel> +81-3-5841-7411 </tel>
       </person>
       <person>
         <name> Masato Takeichi </name>
