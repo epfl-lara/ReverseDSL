@@ -1,5 +1,6 @@
 package perfect
 import legacy._
+import perfect.ProgramFormula.TreeModification
 import perfect.Utils.children
 
 /**
@@ -380,7 +381,22 @@ class XmlTest extends FunSuite with TestHelpers {
     pfWithoutSorting repairFrom newOutInsertionData shouldProduce expectedOutInsertionData
   }
   test("Hu 2004 without sorting insertion in index") {
-    val newOutInsertionIndex: Node = <addrbook>
+    import Utils._
+    val newOutInsertionIndex = TreeModification(
+      inoxTypeOf[Node],
+      inoxTypeOf[List[Node]],
+      initialOutWithoutSorting,
+      ProgramFormula.ListInsert.Expr(inoxTypeOf[Node],
+        List(
+          <name> Masato Takeichi </name>: Node,
+            <name> Zhenjiang Hu </name>: Node),
+        List(<name> Mikael Mayer </name>: Node),
+        List(<name> Shin-Cheng Mu </name>: Node)
+      )
+      , List(children, head, children)
+    )(Utils.defaultSymbols)/*
+    val newOutInsertionIndex: Node =
+      <addrbook>
       <index>
         <name> Masato Takeichi </name>
         <name> Zhenjiang Hu </name>
@@ -403,7 +419,7 @@ class XmlTest extends FunSuite with TestHelpers {
         <email> scm@mist.i.u-tokyo.ac.jp </email>
         <tel> +81-3-5841-7411 </tel>
       </person>
-    </addrbook>
+    </addrbook>*/
 
     val expectedOutInsertionIndex: Node = <addrbook>
       <index>
@@ -422,6 +438,9 @@ class XmlTest extends FunSuite with TestHelpers {
         <email> hu@mist.i.u-tokyo.ac.jp </email>
         <email> hu@ipl.t.u-tokyo.ac.jp </email>
         <tel> +81-3-5841-7411 </tel>
+      </person>
+      <person>
+        <name> Mikael Mayer </name>
       </person>
       <person>
         <name> Shin-Cheng Mu </name>
