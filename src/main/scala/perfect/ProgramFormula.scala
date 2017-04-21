@@ -185,16 +185,18 @@ object ProgramFormula {
     }
   }
 
+  object AssociativeInsert extends Enumeration {
+    type InsertDirection = Value
+    val InsertToLeft, InsertToRight, InsertAutomatic = Value
+    def unapply(s: String): Option[InsertDirection] =
+      values.find(_.toString == s)
+  }
+
   /** To build and extract a StringInsert specification. Works for modifications as well */
   object StringInsert extends Enumeration with CustomProgramFormula  {
     private val InsertString = FreshIdentifier("insertString")
 
-    type InsertDirection = Value
-    val InsertToLeft, InsertToRight, InsertAutomatic = Value
-    private object Direction {
-      def unapply(s: String): Option[InsertDirection] =
-        values.find(_.toString == s)
-    }
+    import AssociativeInsert._
 
     def computeDirection(left: String, s: String, right: String): InsertDirection = {
       val leftJump = ReverseProgram.StringConcatReverser.typeJump(left, s)
@@ -230,7 +232,7 @@ object ProgramFormula {
       def unapply(e: Expr): Option[(String, String, String, InsertDirection)] = {
         e match {
           case FunctionInvocation(InsertString, Seq(), Seq(
-          StringLiteral(leftBefore), StringLiteral(inserted), StringLiteral(rightBefore), StringLiteral(Direction(direction))
+          StringLiteral(leftBefore), StringLiteral(inserted), StringLiteral(rightBefore), StringLiteral(AssociativeInsert(direction))
           )) =>
             Some((leftBefore, inserted, rightBefore, direction))
           case _ =>

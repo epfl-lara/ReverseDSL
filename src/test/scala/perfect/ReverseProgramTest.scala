@@ -23,7 +23,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import StringConcatExtended._
   import perfect.ProgramFormula
-  import ProgramFormula.{StringInsert, ListInsert}
+  import ProgramFormula.{StringInsert, ListInsert,AssociativeInsert}
 
   val build = variable[String => Element]("build")
   val vText = variable[String]("text")
@@ -471,7 +471,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       ListInsert(StringType, List("- A", "- B"), List("- C"), List("- D", "- E")) shouldProduce
       _List[String]("- A", "- B", "- C", "- D", "- E")
 
-    val pfStr4 = StringInsert("- ", "B", "", StringInsert.InsertAutomatic)
+    val pfStr4 = StringInsert("- ", "B", "", AssociativeInsert.InsertAutomatic)
     Map(List("A","","C"), av => "- " +& av) repairFrom
     ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr4.expr), StringType), List("- C")), pfStr4.formula.unknownConstraints) shouldProduce
     _List[String]("- A", "- B", "- C")
@@ -484,25 +484,25 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
         list shouldEqual _List[String]("Margharita", "Salami", "Sushi", "Royal")
     }
 
-    val pfStr2 = StringInsert("", "*", " C", StringInsert.InsertAutomatic)
+    val pfStr2 = StringInsert("", "*", " C", AssociativeInsert.InsertAutomatic)
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
     ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula.unknownConstraints) shouldProduce
     _List[String]("* A", "* B", "* C", "* D")
 
 
 
-    val pfStr3 = StringInsert("- B", "o", "", StringInsert.InsertAutomatic)
+    val pfStr3 = StringInsert("- B", "o", "", AssociativeInsert.InsertAutomatic)
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
     ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3.expr), StringType), List("- C", "- D")), pfStr3.formula.unknownConstraints) shouldProduce
     _List[String]("- A", "- Bo", "- C", "- D")
 
-    val pfStr3b = StringInsert("- ", "o", "B", StringInsert.InsertAutomatic)
+    val pfStr3b = StringInsert("- ", "o", "B", AssociativeInsert.InsertAutomatic)
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
       ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3b.expr), StringType), List("- C", "- D")), pfStr3b.formula.unknownConstraints) shouldProduce
       _List[String]("- A", "- oB", "- C", "- D")
 
 
-    val pfStr = StringInsert("- ", "E", "", StringInsert.InsertAutomatic)
+    val pfStr = StringInsert("- ", "E", "", AssociativeInsert.InsertAutomatic)
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
       (ListInsert(StringType, List("- A", "- B"), List(), List(pfStr.expr)) combineWith pfStr.formula) shouldProduce
     _List[String]("- A", "- B", "- E")
@@ -572,67 +572,67 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       }
     }
 
-    MkString(List[String]("c"), "") repairFrom StringInsert("","kp", "c", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c"), "") repairFrom StringInsert("","kp", "c", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("kpc") }
 
-    MkString(List[String]("a","c"), "") repairFrom StringInsert("a","b", "c", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("a","c"), "") repairFrom StringInsert("a","b", "c", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("b")) => l shouldEqual _List[String]("a","c") }
 
-    MkString(List[String]("a","b","c"), "\n") repairFrom StringInsert("a\n","d\n", "b\nc", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("a","b","c"), "\n") repairFrom StringInsert("a\n","d\n", "b\nc", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("\n")) => l shouldEqual _List[String]("a","d", "b", "c") }
 
-    MkString(List[String]("a","dc"), "") repairFrom StringInsert("a","b", "c", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("a","dc"), "") repairFrom StringInsert("a","b", "c", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("a","bc") }
 
-    MkString(List[String]("dc"), "") repairFrom StringInsert("","kp", "c", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("dc"), "") repairFrom StringInsert("","kp", "c", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("kpc") }
 
-    /* MkString(List[String]("abc","def","gh"), "") repairFrom StringInsert("ab","#","efgh", StringInsert.InsertAutomatic) match {
+    /* MkString(List[String]("abc","def","gh"), "") repairFrom StringInsert("ab","#","efgh", AssociativeInsert.InsertAutomatic) match {
        case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("ab","ef","gh") }*/
 
-    MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","m?#k", "d", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","m?#k", "d", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","om","kd") }
 
-    MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","k", "d", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","k", "d", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","okd") }
 
-    MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","k?#", "d", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","ob","d"), "?#") repairFrom StringInsert("c?#o","k?#", "d", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("?#")) => l shouldEqual _List[String]("c","ok", "d") }
 
-    MkString(List[String]("c","d"), "?#") repairFrom StringInsert("c?",":", "#d", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","d"), "?#") repairFrom StringInsert("c?",":", "#d", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("?:#")) => l shouldEqual _List[String]("c","d") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("","m#k", "#e", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("","m#k", "#e", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("m","k","e") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c#","m#k", "#e", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c#","m#k", "#e", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("c","m","k","e") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","m#k", "e", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","m#k", "e", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("cm","ke") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","m#k#", "e", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","m#k#", "e", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("cm","k","e") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","#m#k", "e", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","#m#k", "e", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("c","m","ke") }
 
-    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","#m#k#", "e", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c","d","e"), "#") repairFrom StringInsert("c","#m#k#", "e", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("c","m","k","e") }
 
-    MkString(List[String]("c"), "#") repairFrom StringInsert("c","k#d", "", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("c"), "#") repairFrom StringInsert("c","k#d", "", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("ck","d") }
 
-    MkString(List[String]("a","c", "d"), "#") repairFrom StringInsert("a","b", "d", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("a","c", "d"), "#") repairFrom StringInsert("a","b", "d", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("abd") }
 
-    MkString(List[String]("a", "b", "c"), "#") repairFrom StringInsert("a#","e#f#q","b#c", StringInsert.InsertAutomatic) match {
+    MkString(List[String]("a", "b", "c"), "#") repairFrom StringInsert("a#","e#f#q","b#c", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("a", "e", "f", "qb", "c") }
 
-    MkString(List[String](), "#") repairFrom StringInsert("","a#b","", StringInsert.InsertAutomatic) match {
+    MkString(List[String](), "#") repairFrom StringInsert("","a#b","", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("#")) => l shouldEqual _List[String]("a","b") }
 
-    MkString(List[String](""), "") repairFrom StringInsert("","aloha", "", StringInsert.InsertAutomatic) match {
+    MkString(List[String](""), "") repairFrom StringInsert("","aloha", "", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("")) => l shouldEqual _List[String]("aloha") }
 
 
@@ -643,12 +643,12 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
 
 
-    MkString(List[String](), "") repairFrom StringInsert("","aloha", "", StringInsert.InsertAutomatic) match {
+    MkString(List[String](), "") repairFrom StringInsert("","aloha", "", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("")) =>
         l shouldEqual _List[String]("aloha")
     }
 
-    pfun repairFrom StringInsert("- Margharita\n- Royal\n", "\n", "- Salami", StringInsert.InsertAutomatic) match {
+    pfun repairFrom StringInsert("- Margharita\n- Royal\n", "\n", "- Salami", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("\n")) =>
         l shouldEqual _List[String]("- Margharita", "- Royal", "", "- Salami")
     }
@@ -660,18 +660,18 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       case MkString(l, StringLiteral("\n")) =>
         l shouldEqual  _List[String]("- Margharita", "- Salami")
     }
-    pfun repairFrom StringInsert("- Margharita", ",", "- Royal\n- Salami", StringInsert.InsertAutomatic) shouldProduce "- Margharita,- Royal,- Salami"
-    pfun repairFrom StringInsert("", "  ","- Margharita\n- Royal\n- Salami", StringInsert.InsertAutomatic) shouldProduce "  - Margharita\n- Royal\n- Salami"
-    pfun repairFrom StringInsert("- Margharita","s","\n- Royal\n- Salami", StringInsert.InsertAutomatic) shouldProduce "- Margharitas\n- Royal\n- Salami"
-    pfun repairFrom StringInsert("- Margharita\n","  ","- Royal\n- Salami", StringInsert.InsertAutomatic) shouldProduce "- Margharita\n  - Royal\n- Salami"
-    pfun repairFrom StringInsert("- Margharita\n- Royal","s","\n- Salami", StringInsert.InsertAutomatic) shouldProduce "- Margharita\n- Royals\n- Salami"
-    pfun repairFrom StringInsert("- Margharita\n- Royal\n","  ","- Salami", StringInsert.InsertAutomatic) shouldProduce "- Margharita\n- Royal\n  - Salami"
-    pfun repairFrom StringInsert("- Margharita\n- Royal\n- Salami","s", "", StringInsert.InsertAutomatic) shouldProduce "- Margharita\n- Royal\n- Salamis"
-    pfun repairFrom StringInsert("- Margharita","\n","\n- Royal\n- Salami", StringInsert.InsertAutomatic) shouldProduce "- Margharita\n\n- Royal\n- Salami"
-    pfun repairFrom StringInsert("- Margharita\n","\n","- Royal\n- Salami", StringInsert.InsertAutomatic) shouldProduce "- Margharita\n\n- Royal\n- Salami"
-    pfun repairFrom StringInsert("- Margharita\n","- Sushi\n","- Royal\n- Salami", StringInsert.InsertAutomatic) shouldProduce "- Margharita\n- Sushi\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita", ",", "- Royal\n- Salami", AssociativeInsert.InsertAutomatic) shouldProduce "- Margharita,- Royal,- Salami"
+    pfun repairFrom StringInsert("", "  ","- Margharita\n- Royal\n- Salami", AssociativeInsert.InsertAutomatic) shouldProduce "  - Margharita\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita","s","\n- Royal\n- Salami", AssociativeInsert.InsertAutomatic) shouldProduce "- Margharitas\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n","  ","- Royal\n- Salami", AssociativeInsert.InsertAutomatic) shouldProduce "- Margharita\n  - Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n- Royal","s","\n- Salami", AssociativeInsert.InsertAutomatic) shouldProduce "- Margharita\n- Royals\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n- Royal\n","  ","- Salami", AssociativeInsert.InsertAutomatic) shouldProduce "- Margharita\n- Royal\n  - Salami"
+    pfun repairFrom StringInsert("- Margharita\n- Royal\n- Salami","s", "", AssociativeInsert.InsertAutomatic) shouldProduce "- Margharita\n- Royal\n- Salamis"
+    pfun repairFrom StringInsert("- Margharita","\n","\n- Royal\n- Salami", AssociativeInsert.InsertAutomatic) shouldProduce "- Margharita\n\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n","\n","- Royal\n- Salami", AssociativeInsert.InsertAutomatic) shouldProduce "- Margharita\n\n- Royal\n- Salami"
+    pfun repairFrom StringInsert("- Margharita\n","- Sushi\n","- Royal\n- Salami", AssociativeInsert.InsertAutomatic) shouldProduce "- Margharita\n- Sushi\n- Royal\n- Salami"
 
-    pfun repairFrom StringInsert("- ","Ham","\n- Royal\n- Salami", StringInsert.InsertAutomatic) match {
+    pfun repairFrom StringInsert("- ","Ham","\n- Royal\n- Salami", AssociativeInsert.InsertAutomatic) match {
       case MkString(l, StringLiteral("\n")) =>
         l shouldEqual _List[String]("- Ham", "- Royal", "- Salami")
     }

@@ -391,7 +391,7 @@ trait Lenses { self: ReverseProgram.type =>
             //When complete coverage, replace this if-then-else by this body because it's the same code with coverage
 
           if(notHandledList.length == 1 && notHandledList.head.isInstanceOf[Infix] ||
-            notHandledList.length == 0 && infix == "" && direction == StringInsert.InsertAutomatic &&
+            notHandledList.length == 0 && infix == "" && direction == AssociativeInsert.InsertAutomatic &&
               leftUntouched.length > 0 && rightUntouched.length > 0
           ) { // The prefix was selected and updated !
             solutions += ((Seq(ProgramFormula(originalInputExpr),
@@ -414,7 +414,7 @@ trait Lenses { self: ReverseProgram.type =>
                       )
                   } else { // Does not end with infix, hence there is an StringInsertion and maybe a ListInsert.
                     solutions ++= (for{ lInserted <- middleInsertedPossible(inserted)} yield {
-                      val pf = StringInsert("", lInserted.last, firstElem.s, StringInsert.InsertToRight)
+                      val pf = StringInsert("", lInserted.last, firstElem.s, AssociativeInsert.InsertToRight)
                       if(lInserted.length == 1) {
                         val newExpr = ListLiteral.concat(
                           ListLiteral(leftUntouched.toOriginalListExpr, StringType),
@@ -439,7 +439,7 @@ trait Lenses { self: ReverseProgram.type =>
 
                   val elementToLeftModification = {  // Then the element to the left, if any
                     if(someInfixOrNone != None) {
-                      val ifAppend = StringInsert(leftUntouched.init.last.s, inserted, "", StringInsert.InsertToLeft)
+                      val ifAppend = StringInsert(leftUntouched.init.last.s, inserted, "", AssociativeInsert.InsertToLeft)
                       List((Seq(ProgramFormula(
                         ListLiteral.concat(
                           ListLiteral(leftUntouched.init.toOriginalListExpr, StringType),
@@ -461,9 +461,9 @@ trait Lenses { self: ReverseProgram.type =>
                       ), ifPrepend.formula), ProgramFormula(infixExpr)), Formula()))
 
                   val toAdd = direction match {
-                    case StringInsert.InsertToLeft | StringInsert.InsertAutomatic =>
+                    case AssociativeInsert.InsertToLeft | AssociativeInsert.InsertAutomatic =>
                       infixModification ++ elementToLeftModification ++ elementToRightModification
-                    case StringInsert.InsertToRight =>
+                    case AssociativeInsert.InsertToRight =>
                       elementToRightModification ++ infixModification ++ elementToLeftModification
                   }
 
@@ -486,7 +486,7 @@ trait Lenses { self: ReverseProgram.type =>
                     )
                 } else { // Does not start with infix, hence there is an StringInsertion and maybe a ListInsert.
                   solutions ++= (for{ lInserted <- middleInsertedPossible(inserted)} yield {
-                    val pf = StringInsert(lastElem.s, lInserted.head, "", StringInsert.InsertToLeft)
+                    val pf = StringInsert(lastElem.s, lInserted.head, "", AssociativeInsert.InsertToLeft)
                     if(lInserted.length == 1) {
                       val newExpr = ListLiteral.concat(
                         ListLiteral(leftUntouched.init.toOriginalListExpr, StringType),
@@ -537,7 +537,7 @@ trait Lenses { self: ReverseProgram.type =>
                     if(!startsWithInfix && !endsWithInfix) { // Merge of two elements by inserting something else.
                       // We report this as deleting the second argument and updating the first one with the value of the second.
                       // TODO: Do better once we have the technology of argument value rewriting.
-                      val insertion = StringInsert(prev.s, lInserted.head + next.s, "", StringInsert.InsertAutomatic)
+                      val insertion = StringInsert(prev.s, lInserted.head + next.s, "", AssociativeInsert.InsertAutomatic)
                       (Seq(ListInsert(
                         StringType,
                         leftUntouched.init.toOriginalListExpr :+ insertion.expr,
@@ -545,7 +545,7 @@ trait Lenses { self: ReverseProgram.type =>
                         rightUntouched.tail.toOriginalListExpr
                       ) combineWith insertion.formula, ProgramFormula(infixExpr)), Formula())
                     } else if(startsWithInfix && !endsWithInfix) { // We merge the insertion with the right element
-                      val insertion = StringInsert("", lInserted.last, next.s, StringInsert.InsertToRight)
+                      val insertion = StringInsert("", lInserted.last, next.s, AssociativeInsert.InsertToRight)
                       (Seq(ProgramFormula(
                         ListLiteral(
                           leftUntouched.toOriginalListExpr ++
@@ -553,7 +553,7 @@ trait Lenses { self: ReverseProgram.type =>
                           StringType
                         ), insertion.formula), ProgramFormula(infixExpr)), Formula())
                     } else /*if(!startsWithInfix && endsWithInfix) */{ // We merge the insertion with the right element
-                      val insertion = StringInsert(prev.s, lInserted.head, "", StringInsert.InsertToLeft)
+                      val insertion = StringInsert(prev.s, lInserted.head, "", AssociativeInsert.InsertToLeft)
                       (Seq(ProgramFormula(
                         ListLiteral(
                           (leftUntouched.init.toOriginalListExpr :+ insertion.expr) ++
@@ -563,8 +563,8 @@ trait Lenses { self: ReverseProgram.type =>
                     }
                   } else { // lInserted.length > 1
                     if(!startsWithInfix && !endsWithInfix) { // There is room for modifying two elements and inserting the rest.
-                      val insertionPrev = StringInsert(prev.s, lInserted.head, "", StringInsert.InsertToLeft)
-                      val insertionNext = StringInsert("", lInserted.last, next.s, StringInsert.InsertToRight)
+                      val insertionPrev = StringInsert(prev.s, lInserted.head, "", AssociativeInsert.InsertToLeft)
+                      val insertionNext = StringInsert("", lInserted.last, next.s, AssociativeInsert.InsertToRight)
                       (Seq(ListInsert(
                         StringType,
                         leftUntouched.init.toOriginalListExpr :+ insertionPrev.expr,
@@ -572,7 +572,7 @@ trait Lenses { self: ReverseProgram.type =>
                         insertionNext.expr +: rightUntouched.tail.toOriginalListExpr
                       ) combineWith insertionPrev.formula combineWith insertionNext.formula, ProgramFormula(infixExpr)), Formula())
                     } else if(startsWithInfix && !endsWithInfix) { // We merge the insertion with the right element
-                      val insertion = StringInsert("", lInserted.last, next.s, StringInsert.InsertToRight)
+                      val insertion = StringInsert("", lInserted.last, next.s, AssociativeInsert.InsertToRight)
                       (Seq(ListInsert(
                         StringType,
                         leftUntouched.toOriginalListExpr,
@@ -580,7 +580,7 @@ trait Lenses { self: ReverseProgram.type =>
                         (insertion.expr +: rightUntouched.tail.toOriginalListExpr)
                       ) combineWith insertion.formula, ProgramFormula(infixExpr)), Formula())
                     } else /*if(!startsWithInfix && endsWithInfix)*/ { // We merge the insertion with the right element
-                      val insertion = StringInsert(prev.s, lInserted.head, "", StringInsert.InsertToLeft)
+                      val insertion = StringInsert(prev.s, lInserted.head, "", AssociativeInsert.InsertToLeft)
                       (Seq(ListInsert(
                         StringType,
                         leftUntouched.init.toOriginalListExpr :+ insertion.expr,
@@ -752,9 +752,19 @@ trait Lenses { self: ReverseProgram.type =>
 
 
   /** Lense-like list concat, with the possibility of changing the mapping lambda. */
-  case object ListConcatReverser extends Reverser {
+  case object ListConcatReverser extends Reverser with AssociativeConcat[List[Expr], Expr] {
     import Utils._
+    import ProgramFormula.ListInsert
     val identifier = listconcat
+
+    def typeJump(a: List[Expr], b: List[Expr]): Int = if(a.length != 0 && b.length != 0) 1 else 0
+
+    def endsWith(a: List[Expr], b: List[Expr]): Boolean = a.endsWith(b)
+    def startsWith(a: List[Expr], b: List[Expr]): Boolean = a.startsWith(b)
+    def length(a: List[Expr]): Int = a.length
+    def take(a: List[Expr], i: Int): List[Expr] = a.take(i)
+    def drop(a: List[Expr], i: Int): List[Expr] = a.drop(i)
+    def empty: List[Expr] = Nil
 
     def startsWith(list: Expr, beginning: Expr): Boolean = (list, beginning) match {
       case (ADT(_, Seq(head, tail)), ADT(_, Seq())) => true
@@ -774,8 +784,8 @@ trait Lenses { self: ReverseProgram.type =>
 
     def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
       val newOutput = newOutputProgram.expr
-      val leftValue = originalArgsValues.head
-      val rightValue = originalArgsValues.tail.head
+      val leftValue@ListLiteral(leftValue_s, _) = originalArgsValues.head
+      val rightValue@ListLiteral(rightValue_s, _) = originalArgsValues.tail.head
 
       def defaultCase: Stream[ArgumentsFormula] = {
         val left = ValDef(FreshIdentifier("l", true), T(list)(tps.head), Set())
@@ -792,6 +802,12 @@ trait Lenses { self: ReverseProgram.type =>
 
       // Prioritize changes that touch only one of the two expressions.
       newOutput match {
+        case ListInsert.Expr(tpe, leftAfter, inserted, rightAfter) =>
+          associativeInsert(leftValue_s, rightValue_s, leftAfter, inserted, rightAfter,
+            AssociativeInsert.InsertAutomatic,
+            ListLiteral(_, tpe),
+            ListInsert(tpe, _, _, _))
+
         case ProgramFormula.TreeModification.Expr(tpeGlobal, tpeLocal, original@ADT(adt, Seq(hdOriginal, tlOriginal)), modified, path) =>
           val (index, remaining) = path.span(_ == Utils.tail)
           leftValue match {
@@ -861,12 +877,103 @@ trait Lenses { self: ReverseProgram.type =>
     }
   }
 
+  trait AssociativeConcat[A, C] {
+    /** The greatest number it returns, the greatest difference there is between the end of the first argument and the start of second.*/
+    def typeJump(a: A, b: A): Int
+
+    def endsWith(a: A, b: A): Boolean
+    def startsWith(a: A, b: A): Boolean
+    def length(a: A): Int
+    def take(a: A, i: Int): A
+    def drop(a: A, i: Int): A
+    def empty: A
+
+    def associativeInsert(leftValue_s: A, rightValue_s: A, leftAfter: A, inserted: A, rightAfter: A,
+                          direction: AssociativeInsert.InsertDirection,
+                          makeExpr: A => Expr,
+                          subproblem: (A, A, A) => ProgramFormula
+                         ): Stream[ArgumentsFormula] = {
+      val res: List[(ArgumentsFormula, (Int, Int))] = endsWith(rightValue_s, rightAfter).flatMap{ // the insertion may have happened on the right.
+        //  [  leftValue    ...     ][rightValue_s  ]
+        //  [ leftAfter ....            ][rightAfter]
+
+        // rightValue => (leftAfter \ leftValue) + inserted + rightAfter
+        val somethingLeft = length(leftValue_s) < length(leftAfter)
+        val newLeftAfter = if(somethingLeft) drop(leftAfter, length(leftValue_s)) else empty
+        val newRightAfter = rightAfter
+
+        val newInsert = subproblem(newLeftAfter, inserted, newRightAfter)
+
+        val newLeftValue = if(somethingLeft) { // Nothing deleted.
+          makeExpr(leftValue_s)
+        } else {
+          makeExpr(take(leftValue_s, length(leftAfter)))
+        }
+        val directionWeight = direction match {
+          case AssociativeInsert.InsertToRight => 0 // Best weight.
+          case AssociativeInsert.InsertToLeft => 1 // Worst weight
+          case AssociativeInsert.InsertAutomatic => typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
+        }
+        val overwriteWeight = length(rightAfter) - length(rightValue_s)
+
+        List((((Seq(ProgramFormula(newLeftValue), newInsert)), Formula()), (directionWeight, overwriteWeight))) /: Log.Right_insert
+      } ++
+        startsWith(leftValue_s, leftAfter).flatMap{ // the insertion happened on the left.
+          //  [  leftValue    ...     ][rightValue_s  ]
+          //  [ leftAfter ...   ][        rightAfter  ]
+
+          // leftValue => leftAfter + inserted + (rightAfter \ rightValue)
+
+          val newLeftAfter = leftAfter
+          val somethingRight = length(rightValue_s) < length(rightAfter)
+          val newRightAfter = if(somethingRight) take(rightAfter, length(rightAfter) - length(rightValue_s)) else empty
+
+          val newInsert = subproblem(newLeftAfter, inserted, newRightAfter)
+
+          val newRightValue = if(somethingRight) {
+            makeExpr(rightValue_s)
+          } else {
+            makeExpr(drop(rightValue_s, length(rightValue_s) - length(rightAfter)))
+          }
+          val spaceWeight = typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
+          val directionWeight = direction match {
+            case AssociativeInsert.InsertToRight => 1 // Worst weight
+            case AssociativeInsert.InsertToLeft => 0 // Best weight
+            case AssociativeInsert.InsertAutomatic => typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
+          }
+
+          val overwriteWeight = length(leftAfter) - length(leftValue_s)
+
+          List(((Seq(newInsert, ProgramFormula(newRightValue)), Formula()), (directionWeight, overwriteWeight))) /: Log.Left_insert
+        }
+
+      res.sortWith{ (x, y) =>
+        if(y._2._2 < 0 && x._2._2 == 0) { // If replaced parts on the right
+          false
+        } else if(x._2._2 < 0 && y._2._2 == 0) { // If replaced parts on the left
+          true
+        } else {
+          // No replaced parts, or both replaced.
+          // It's a simple insertion. First, try to attach to where the characters are more alike.
+          // Second, if equality, attach where the most characters have been removed.
+          x._2._1 < y._2._1 || (x._2._1 == y._2._1 && x._2._2 < y._2._2)
+        }}.map(_._1).toStream
+    }
+  }
+
   /** Lense-like list concat, with the possibility of changing the mapping lambda. */
-  case object StringConcatReverser extends Reverser {
+  case object StringConcatReverser extends Reverser with AssociativeConcat[String, Char] {
     import StringConcatExtended._
     import Utils._
     import ProgramFormula._
     val identifier = FreshIdentifier("tmpstringconcat")
+
+    def endsWith(a: String, b: String): Boolean = a.endsWith(b)
+    def startsWith(a: String, b: String): Boolean = a.startsWith(b)
+    def length(a: String): Int = a.length
+    def take(a: String, i: Int): String = a.substring(0, i)
+    def drop(a: String, i: Int): String = a.substring(i)
+    def empty: String = ""
 
     @inline def charType(a: Char): Int =
       if(a.isUpper) 1 else if(a.isLower) 2 else if(a.isSpaceChar) 5 else if(a == '\n' || a == '\r') 10 else 4 // 4 for punctuation.
@@ -926,78 +1033,12 @@ trait Lenses { self: ReverseProgram.type =>
         case StringInsert(leftAfter, inserted, rightAfter, direction) =>
           val StringLiteral(rightValue_s) = rightValue
           val StringLiteral(leftValue_s) = leftValue
-          val totalValue_s = leftValue_s + rightValue_s
-          // Put in first the one to which we removed the most chars.
 
-          // leftValue + rightValue ==> leftAfter + inserted + rightAfter
-          val res: List[(ArgumentsFormula, (Int, Int))] = (rightValue_s.endsWith(rightAfter)).flatMap{ // the insertion may have happened on the right.
-            //  [  leftValue    ...     ][rightValue_s  ]
-            //  [ leftAfter ....            ][rightAfter]
-
-            // rightValue => (leftAfter \ leftValue) + inserted + rightAfter
-            val newLeftAfter = if(leftValue_s.length < leftAfter.length) leftAfter.substring(leftValue_s.length) else ""
-            val newRightAfter = rightAfter
-
-            val newInsert = StringInsert(
-              newLeftAfter,
-              inserted,
-              newRightAfter, direction)
-            val newLeftValue = if(leftValue_s.length <= leftAfter.length) { // Nothing deleted.
-              leftValue
-            } else {
-              StringLiteral(leftValue_s.substring(0, leftAfter.length))
-            }
-            val directionWeight = direction match {
-              case StringInsert.InsertToRight => 0 // Best weight.
-              case StringInsert.InsertToLeft => 1 // Worst weight
-              case StringInsert.InsertAutomatic => typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
-            }
-            val overwriteWeight = rightAfter.length - rightValue_s.length
-
-            List((((Seq(ProgramFormula(newLeftValue), newInsert)), Formula()), (directionWeight, overwriteWeight))) /: Log.Right_insert
-          } ++
-          (leftValue_s.startsWith(leftAfter)).flatMap{ // the insertion happened on the left.
-            //  [  leftValue    ...     ][rightValue_s  ]
-            //  [ leftAfter ...   ][        rightAfter  ]
-
-            // leftValue => leftAfter + inserted + (rightAfter \ rightValue)
-
-            val newLeftAfter = leftAfter
-            val newRightAfter = if(rightValue_s.length < rightAfter.length) rightAfter.substring(0, rightAfter.length - rightValue_s.length) else ""
-
-            val newInsert = StringInsert(
-              newLeftAfter,
-              inserted,
-              newRightAfter, direction)
-
-            val newRightValue = if(rightValue_s.length <= rightAfter.length) {
-              rightValue
-            } else {
-              StringLiteral(rightValue_s.substring(rightValue_s.length - rightAfter.length))
-            }
-            val spaceWeight = typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
-            val directionWeight = direction match {
-              case StringInsert.InsertToRight => 1 // Worst weight
-              case StringInsert.InsertToLeft => 0 // Best weight
-              case StringInsert.InsertAutomatic => typeJump(newLeftAfter, inserted) + typeJump(inserted, newRightAfter)
-            }
-
-            val overwriteWeight = leftAfter.length - leftValue_s.length
-
-            List(((Seq(newInsert, ProgramFormula(newRightValue)), Formula()), (directionWeight, overwriteWeight))) /: Log.Left_insert
-          }
-
-          res.sortWith{ (x, y) =>
-            if(y._2._2 < 0 && x._2._2 == 0) { // If replaced parts on the right
-              false
-            } else if(x._2._2 < 0 && y._2._2 == 0) { // If replaced parts on the left
-              true
-            } else {
-              // No replaced parts, or both replaced.
-              // It's a simple insertion. First, try to attach to where the characters are more alike.
-              // Second, if equality, attach where the most characters have been removed.
-              x._2._1 < y._2._1 || (x._2._1 == y._2._1 && x._2._2 < y._2._2)
-            }}.map(_._1).toStream
+          associativeInsert(leftValue_s, rightValue_s, leftAfter, inserted, rightAfter,
+            direction,
+            StringLiteral,
+            (l: String, i: String, r: String) => StringInsert(l, i, r, direction)
+          )
         case pc@CloneTextMultiple(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
 
 

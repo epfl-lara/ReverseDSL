@@ -3,7 +3,7 @@ package perfect
 import inox.FreshIdentifier
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ProgramFormula.StringInsert
+import perfect.ProgramFormula.{ListInsert, StringInsert}
 import perfect.ReverseProgram.{Cache, evalWithCache, letm}
 
 /**
@@ -39,6 +39,8 @@ object Formula {
     val newExprs = exprs.map {
       case Equals(v: Variable, StringInsert.Expr(left, middle, right, direction)) =>
         Equals(v, StringLiteral(left + middle + right))
+      case Equals(v: Variable, ListInsert.Expr(tpe, left, middle, right)) =>
+        Equals(v, ListLiteral(left ++ middle ++ right, tpe))
       case e => e
     }
     if(newExprs != exprs) {
@@ -47,14 +49,14 @@ object Formula {
   }
 
   /** We remove maybes on values which are already known.
-    * Second we unwrap the maybe if the variable appears only in this maybe, modulo removing its occurres in a map used only once. */
+    * Second we unwrap the maybe if the variable appears only in this maybe, modulo removing its occurs in a map used only once. */
   protected def removeUselessMaybes(e: Formula): Formula = {
     val TopLevelAnds(exprs) = e.unknownConstraints
-    val known = e.known ++ exprs.flatMap{ // We also add Maps as known.
-      case Equals(v: Variable, fm: FiniteMap) if fm.pairs.forall(x => Utils.isValue(x._1)) =>
-        List(v.toVal -> fm)
+    val known = exprs.flatMap{
+      case Equals(v: Variable, e) =>
+        List(v -> e)
       case _ => Nil
-    }
+    }.toMap
     val varCount = exprOps.variablesOf(e.unknownConstraints).map{ v =>
       v -> exprOps.count{
         case v2: Variable if v2 == v => 1
@@ -63,14 +65,19 @@ object Formula {
           if(exprOps.count{ case v3: Variable if v3 == v2 => 1 case _ => 0}(e.unknownConstraints) == 1) {
             -exprOps.count{ case v4: Variable if v4 == v => 1 case _ => 0}(fm)
           } else 0
+        case Equals(v2: Variable, fm@ADT(tpe, args)) =>
+          // We do not count occurrences of the values of an (ADT used only once) because they are only definitions.
+          if(exprOps.count{ case v3: Variable if v3 == v2 => 1 case _ => 0}(e.unknownConstraints) == 1) {
+            -exprOps.count{ case v4: Variable if v4 == v => 1 case _ => 0}(fm)
+          } else 0
         case _ => 0
       }(e.unknownConstraints)
     }.toMap /: Log.varCount
 
     val exprs2 = exprs.flatMap {
-      case FunctionInvocation(Utils.original, Seq(), Seq(Equals(v: Variable, e: Expr))) if Utils.isValue(e) && (known contains v.toVal) =>
+      case FunctionInvocation(Utils.original, Seq(), Seq(Equals(v: Variable, e: Expr))) if Utils.isValue(e) && (known contains v) =>
         Nil
-      case FunctionInvocation(Utils.original, Seq(), Seq(Equals(e: Expr, v: Variable))) if Utils.isValue(e) && (known contains v.toVal) =>
+      case FunctionInvocation(Utils.original, Seq(), Seq(Equals(e: Expr, v: Variable))) if Utils.isValue(e) && (known contains v) =>
         Nil
       case FunctionInvocation(Utils.original, Seq(), Seq(eq@Equals(v: Variable, e: Expr))) if varCount(v) == 1 =>
         List(eq)

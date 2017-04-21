@@ -561,9 +561,9 @@ object ReverseProgram extends lenses.Lenses {
           val newVarsInConstraint = exprOps.variablesOf(newConstraint).map(_.toVal)
 
           for{ pf <- repair(program.subExpr(adt),
-            newOutProgram.subExpr(ADT(ADTType(constructor.id, constructor.tps), vds.map(_.toVariable)))) } yield {
-            pf.wrap(x => ADTSelector(x, selector)) combineWith Formula(
-              unknownConstraints = newConstraint)
+            newOutProgram.subExpr(ADT(ADTType(constructor.id, constructor.tps), vds.map(_.toVariable))) combineWith Formula(newConstraint)) } yield {
+            pf.wrap(x => ADTSelector(x, selector))/* combineWith Formula(
+              unknownConstraints = newConstraint)*/
           }
 
         case MapApply(map, key) => // Variant of ADT selection.

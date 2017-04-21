@@ -283,7 +283,7 @@ class XmlTest extends FunSuite with TestHelpers {
     pfWithoutSorting repairFrom newOutModification shouldProduce expectedOutModification
   }
   test("Hu 2004 without sorting insertion in data") {
-    val newOutInsertionData: Node = <addrbook>
+    /*val newOutInsertionData: Node = <addrbook>
       <index>
         <name>Masato Takeichi</name>
         <name>Zhenjiang Hu</name>
@@ -310,7 +310,43 @@ class XmlTest extends FunSuite with TestHelpers {
         <email>scm@mist.i.u-tokyo.ac.jp</email>
         <tel>+81-3-5841-7411</tel>
       </person>
-    </addrbook>
+    </addrbook>*/
+    implicit val symbols = Utils.defaultSymbols
+    val newOutInsertionData: ProgramFormula =
+      ProgramFormula.TreeModification(inoxTypeOf[Node],inoxTypeOf[List[Node]],initialOutWithoutSorting,
+        ProgramFormula.ListInsert.Expr(inoxTypeOf[Node],
+          List(<index>
+            <name>Masato Takeichi</name>
+            <name>Zhenjiang Hu</name>
+            <name>Shin-Cheng Mu</name>
+          </index>: Node,
+            <person>
+              <name>Masato Takeichi</name>
+              <email>takeichi@acm.org</email>
+              <tel>+81-3-5841-7430</tel>
+            </person>: Node,
+            <person>
+              <name>Zhenjiang Hu</name>
+              <email>hu@mist.i.u-tokyo.ac.jp</email>
+              <email>hu@ipl.t.u-tokyo.ac.jp</email>
+              <tel>+81-3-5841-7411</tel>
+            </person>: Node),
+          List(
+            <person>
+              <name>Mikael Mayer</name>
+              <email>mikael@mayer.tk</email>
+              <tel>+41-787-330-1924</tel>
+            </person>: Node
+          ),
+          List(
+            <person>
+              <name>Shin-Cheng Mu</name>
+              <email>scm@mist.i.u-tokyo.ac.jp</email>
+              <tel>+81-3-5841-7411</tel>
+            </person>: Node
+          )
+        ), List(Utils.children)
+      )
 
     val expectedOutInsertionData: Node = <addrbook>
       <index>
