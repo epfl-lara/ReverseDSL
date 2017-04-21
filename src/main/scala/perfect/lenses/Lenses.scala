@@ -1237,18 +1237,18 @@ trait Lenses { self: ReverseProgram.type =>
       import ImplicitTuples._
       val in@ListLiteral(inList, tpe) = originalArgsValues.head
       val lambdaComp = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
-      val tracingLambdaComp = \("in1"::_TTuple2(tpes.head, Int32Type), "in2"::_TTuple2(tpes.head, Int32Type))((in1, in2) =>
+      lazy val tracingLambdaComp = \("in1"::_TTuple2(tpes.head, Int32Type), "in2"::_TTuple2(tpes.head, Int32Type))((in1, in2) =>
         Application(lambdaComp, Seq(in1.getField(_1), in2.getField(_1)))
       )
-      val tracingIn = ListLiteral(inList.zipWithIndex.map{ case (e, i) => _Tuple2(tpes.head, Int32Type)(e, IntLiteral(i)) }, _TTuple2(tpes.head, Int32Type))
+      lazy val tracingIn = ListLiteral(inList.zipWithIndex.map{ case (e, i) => _Tuple2(tpes.head, Int32Type)(e, IntLiteral(i)) }, _TTuple2(tpes.head, Int32Type))
 
-      val expectedTracingOutput = evalWithCache(E(identifier)(_TTuple2(tpes.head, Int32Type))(tracingIn, tracingLambdaComp))
+      lazy val expectedTracingOutput = evalWithCache(E(identifier)(_TTuple2(tpes.head, Int32Type))(tracingIn, tracingLambdaComp))
 
-      val ListLiteral(expectedTracedList, _) = expectedTracingOutput
-      val indexOrder = expectedTracedList.map {
+      lazy val ListLiteral(expectedTracedList, _) = expectedTracingOutput
+      lazy val indexOrder = expectedTracedList.map {
         case ADT(_, Seq(_, IntLiteral(i))) => i
       }
-      val inverseMap = indexOrder.indices.toList.zip(indexOrder).toMap
+      lazy val inverseMap = indexOrder.indices.toList.zip(indexOrder).toMap
 
       // Bidirectionalization for free, we recover the position of the original elements.
       optVar(newOutput.expr).flatMap(newOutput.formula.findConstraintValue).getOrElse(newOutput.expr) match {
@@ -1262,6 +1262,12 @@ trait Lenses { self: ReverseProgram.type =>
             Stream((Seq(TreeModification(tpeGlobal, tpeLocal, in, modified, newArguments),
               ProgramFormula(lambdaComp)), Formula()))
           } else ??? // We tried to change one of the tails. Not supported.
+        case ListInsert.Expr(tpe, left, inserted, right) => // We care only about deleted elements.
+          if(left.length + right.length == inList.length) { // Only inserted elements. We insert them at the end of the original list.
+            Stream((Seq(ListInsert(tpe, inList, inserted, Nil),
+            ProgramFormula(lambdaComp)), Formula()))
+          } else ??? // TODO: Deletions
+
         case v =>
           ???
       }
