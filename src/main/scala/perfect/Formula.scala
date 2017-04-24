@@ -291,7 +291,6 @@ case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
             //println(s"input is of type ${input.getType}")
             val constraint = InoxConstraint(input === tupleWrap(freeVariables.map(_.toVariable)) && constraints)
             Log(s"Solving for $constraint")
-            ???
             constraint.toStreamOfInoxExpr(input)
         }
         streamOfSolutions.map {
