@@ -176,9 +176,11 @@ case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
           case equ@Equals(e: Expr, v: Variable) if (exprOps.variablesOf(e) -- seen).isEmpty =>
             ((x: Expr) => Let(v.toVal, e, x), v, equ)
         }.orElse(constraints.collectFirst[(Expr => Expr, Variable, Expr)]{
-          case equ@FunctionInvocation(Utils.original, Seq(), Seq(Equals(v: Variable, e: Expr))) if (exprOps.variablesOf(e) -- seen).isEmpty =>
+          case equ@FunctionInvocation(Utils.original, Seq(), Seq(Equals(v: Variable, e: Expr)))
+            if (exprOps.variablesOf(e) -- seen).isEmpty && !seen(v) =>
             ((x: Expr) => Let(v.toVal, e, x), v, equ)
-        }).flatMap{ fve => rec(constraints.filter(x => x != fve._3), seen + fve._2).map(
+        }).flatMap{ fve =>
+          rec(constraints.filter(x => x != fve._3), seen + fve._2).map(
           (g: Expr => Expr) => ((x: Expr) => fve._1(g(x))))
         }
         if(res.isEmpty) Log(s"Could not reduce $constraints knowing $seen")
