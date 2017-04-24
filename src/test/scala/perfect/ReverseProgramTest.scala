@@ -383,7 +383,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     }
   }
 
-  test("Propose the change between changing a variable and assing a new string") {
+  test("Propose the change between changing a variable and adding a new string") {
     val ap = valdef[String]("a")
 
     val pfun = 

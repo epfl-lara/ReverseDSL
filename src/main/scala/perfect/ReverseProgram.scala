@@ -21,6 +21,7 @@ object ReverseProgram extends lenses.Lenses {
   import InoxConvertible._
   lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
 
+  var experimentalUnifyLambda = false
   /** Returns the stream b if a is empty, else only a. */
   def ifEmpty[A](a: Stream[A])(b: =>Stream[A]): Stream[A] = {
     if(a.isEmpty) b else a
@@ -216,16 +217,16 @@ object ReverseProgram extends lenses.Lenses {
       case _ =>
     }
 
-    lazy val functionValue = program.functionValue
+    lazy val functionValue: Option[Expr] = program.getFunctionValue
 
-    if(!newOut.isInstanceOf[Variable]&& program.freeVars.isEmpty && !functionValue.isInstanceOf[FiniteMap]  && functionValue == newOut) return {
+    if(!newOut.isInstanceOf[Variable] && functionValue.nonEmpty && !functionValue.get.isInstanceOf[FiniteMap]  && functionValue.get == newOut) return {
       Log("@return original function");
       Stream(program.assignmentsAsOriginals())
     }
     //Log(s"functionValue ($functionValue) != newOut ($newOut)")
 
     //Log.prefix(s"@return ") :=
-    def maybeWrappedSolutions = function.getType match {
+    def maybeWrappedSolutions = if(functionValue.isEmpty) Stream.empty else (function.getType match {
         case a: ADTType if !newOut.isInstanceOf[Variable] =>
           function match {
             case l: Let => Stream.empty[ProgramFormula] // No need to wrap a let expression, we can always do this later. Indeed,
@@ -233,7 +234,7 @@ object ReverseProgram extends lenses.Lenses {
             case Application(Lambda(_, _), _) => Stream.empty[ProgramFormula] // Same argument
             case _ if ProgramFormula.ListInsert.unapply(newOutProgram).nonEmpty => Stream.empty[ProgramFormula]
             case _ =>
-              (maybeWrap(program, newOutProgram, functionValue) /:: Log.maybe_wrap) #::: (maybeUnwrap(program, newOutProgram, functionValue) /:: Log.maybe_unwrap)
+              (maybeWrap(program, newOutProgram, functionValue.get) /:: Log.maybe_wrap) #::: (maybeUnwrap(program, newOutProgram, functionValue.get) /:: Log.maybe_unwrap)
           }
         case StringType if !newOut.isInstanceOf[Variable] && program.canDoWrapping =>
           function match {
@@ -242,10 +243,10 @@ object ReverseProgram extends lenses.Lenses {
             case _ =>
               // Stream.empty
               // Can be a StringConcat with constants to add or to remove.
-              maybeWrapString(program, newOut, functionValue)// #::: maybeUnwrapString(program, newOut, functionValue)
+              maybeWrapString(program, newOut, functionValue.get)// #::: maybeUnwrapString(program, newOut, functionValue)
           }
         case _ => Stream.empty[ProgramFormula]
-      }
+      })
     def originalSolutions : Stream[ProgramFormula] =
       function match {
         // Values (including lambdas) should be immediately replaced by the new value
@@ -429,7 +430,7 @@ object ReverseProgram extends lenses.Lenses {
           // Error if the free variables in body are not present in output.
 
           def unify: Stream[ProgramFormula] = {
-            if(exprOps.variablesOf(fun).nonEmpty) {
+            if(experimentalUnifyLambda && exprOps.variablesOf(fun).nonEmpty) {
               newOut match {
                 case Lambda(vds2, body2) =>
                   val freshVariables1 = vds.map(vd => Variable(FreshIdentifier(vd.id.name, true), vd.tpe, vd.flags))
@@ -454,30 +455,33 @@ object ReverseProgram extends lenses.Lenses {
         case v@Variable(id, tpe, flags) =>
           newOutProgram match {
             case ProgramFormula.PasteVariable(left, v2, v_value, right, direction) =>
-              val StringLiteral(s) = functionValue
+              functionValue match {
+                case Some(StringLiteral(s)) =>
+                  def insertLeft = (if(left == s) {
+                    if(right != "") {
+                      Stream(ProgramFormula(v +& v2 +& StringLiteral(right)))
+                    } else {
+                      Stream(ProgramFormula(v +& v2))
+                    }
+                  } else Stream.empty) /:: Log.insertLeft
+                  def insertRight = (if(right == s) {
+                    if(left != "") {
+                      Stream(ProgramFormula(StringLiteral(left) +& v2 + v))
+                    } else {
+                      Stream(ProgramFormula(v +& v2))
+                    }
+                  } else Stream.empty) /:: Log.insertRight
 
-              def insertLeft = (if(left == s) {
-                if(right != "") {
-                  Stream(ProgramFormula(v +& v2 +& StringLiteral(right)))
-                } else {
-                  Stream(ProgramFormula(v +& v2))
-                }
-              } else Stream.empty) /:: Log.insertLeft
-              def insertRight = (if(right == s) {
-                if(left != "") {
-                  Stream(ProgramFormula(StringLiteral(left) +& v2 + v))
-                } else {
-                  Stream(ProgramFormula(v +& v2))
-                }
-              } else Stream.empty) /:: Log.insertRight
+                  def propagate = (if(left != s && right != s &&
+                    s.startsWith(left) && s.endsWith(right) &&
+                    s.length >= left.length + right.length ) {
+                    // We need to propagate this paste to higher levels.
+                    Stream(ProgramFormula(v, newOutFormula combineWith (v === newOutProgram.expr)))
+                  } else Stream.empty) /:: Log.propagate
+                  insertLeft #::: insertRight #::: propagate
 
-              def propagate = (if(left != s && right != s &&
-                  s.startsWith(left) && s.endsWith(right) &&
-                  s.length >= left.length + right.length ) {
-                // We need to propagate this paste to higher levels.
-                Stream(ProgramFormula(v, newOutFormula combineWith (v === newOutProgram.expr)))
-              } else Stream.empty) /:: Log.propagate
-              insertLeft #::: insertRight #::: propagate
+                case _ => Stream.empty
+              }
             case _ =>
               Stream(ProgramFormula(v, Formula(v === newOut) combineWith newOutFormula))
           }
@@ -522,29 +526,33 @@ object ReverseProgram extends lenses.Lenses {
                   )
                 } else { // after.length > 0
                   Log("afterLength > 0")
-                  val ListLiteral(functionValueList, tpe) = functionValue
-                  if(after.length == functionValueList.length) { // No deletion.
-                    Log("afterLength == functionValueList.length")
-                    for{ pf <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(after.head))
-                         pf2 <- repair(program.subExpr(argsIn(1)),
-                           ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail) combineWith newOutFormula) } yield {
-                      ProgramFormula(ListLiteral.concat(
-                        ListLiteral(inserted, tpe),
-                        ListLiteral(List(pf.expr), tpe),
-                        pf2.expr), pf.formula combineWith pf2.formula combineWith newOutFormula)
-                    }
-                  } else {
-                    Log("afterLength < functionValueList.length")
-                    assert(after.length < functionValueList.length) // some deletion happened.
-                    val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after) combineWith newOutFormula // Recursive problem if
-                    for{ pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
-                      pf.wrap{ x =>
-                        ListLiteral.concat(
-                          ListLiteral(inserted, tpe),
-                          x
-                        )
+                  functionValue match {
+                    case Some(ListLiteral(functionValueList, tpe)) =>
+                      if(after.length == functionValueList.length) { // No deletion.
+                        Log("afterLength == functionValueList.length")
+                        for{ pf <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(after.head))
+                             pf2 <- repair(program.subExpr(argsIn(1)),
+                               ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail) combineWith newOutFormula) } yield {
+                          ProgramFormula(ListLiteral.concat(
+                            ListLiteral(inserted, tpe),
+                            ListLiteral(List(pf.expr), tpe),
+                            pf2.expr), pf.formula combineWith pf2.formula combineWith newOutFormula)
+                        }
+                      } else {
+                        Log("afterLength < functionValueList.length")
+                        assert(after.length < functionValueList.length) // some deletion happened.
+                        val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after) combineWith newOutFormula // Recursive problem if
+                        for{ pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
+                          pf.wrap{ x =>
+                            ListLiteral.concat(
+                              ListLiteral(inserted, tpe),
+                              x
+                            )
+                          }
+                        }
                       }
-                    }
+
+                    case _ => Stream.empty
                   }
                 }
               } else { // before.length > 0

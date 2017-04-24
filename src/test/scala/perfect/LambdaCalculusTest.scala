@@ -134,28 +134,34 @@ class LambdaCalculusTest extends FunSuite with TestHelpers {
 
   test("Lambda calculus tupled repair 0+1 = 2") {
     val pfun = Add.tupled(Zero.tupled(), One.tupled())
+    ReverseProgram.experimentalUnifyLambda = true
     repairProgramList(pfun, Two.tupled(), 2).take(2).toList.map[Int, List[Int]] {
       case Add.tupled(Zero.tupled(), Two.tupled()) => 1
       case Add.tupled(One.tupled(), One.tupled()) => 2
       case e => fail("Unexpected result: " + e)
     }.toList.sum shouldEqual 3
+    ReverseProgram.experimentalUnifyLambda = false
   }
 
   test("Lambda calculus tupled repair 1+0 = 2") {
     val pfun = Add.tupled(One.tupled(), Zero.tupled())
+    ReverseProgram.experimentalUnifyLambda = true
     repairProgramList(pfun, Two.tupled(), 2).take(2).toList.map[Int, List[Int]] {
       case Add.tupled(Two.tupled(), Zero.tupled()) => 1
       case Add.tupled(One.tupled(), One.tupled()) => 2
       case e => fail("Unexpected result: " + e)
     }.toList.sum shouldEqual 3
+    ReverseProgram.experimentalUnifyLambda = false
   }
 
   test("Lambda calculus tupled repair 1+1 = 1") {
     val pfun = Add.tupled(One.tupled(), One.tupled())
+    ReverseProgram.experimentalUnifyLambda = true
     repairProgramList(pfun, One.tupled(), 2).take(2).toList.map[Int, List[Int]] {
       case Add.tupled(One.tupled(), Zero.tupled()) => 1
       case Add.tupled(Zero.tupled(), One.tupled()) => 2
       case e => fail("Unexpected result: " + e)
     }.toList.sum shouldEqual 3
+    ReverseProgram.experimentalUnifyLambda = false
   }
 }
