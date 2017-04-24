@@ -191,4 +191,9 @@ object Utils {
     if(that.isInstanceOf[Variable]) {
       Some(that.asInstanceOf[Variable])
     } else None
+
+  def explainTyping(e: Expr) = {
+    Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs).
+      explainTyping(e)(inox.trees.PrinterOptions.fromSymbols(Utils.defaultSymbols, ReverseProgram.context))
+  }
 }

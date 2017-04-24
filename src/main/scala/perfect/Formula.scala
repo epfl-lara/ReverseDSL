@@ -173,8 +173,8 @@ case class Formula(unknownConstraints: Expr = BooleanLiteral(true)) {
         val res = constraints.collectFirst[(Expr => Expr, Variable, Expr)]{
           case equ@Equals(v: Variable, e: Expr) if (exprOps.variablesOf(e) -- seen).isEmpty =>
             ((x: Expr) => Let(v.toVal, e, x), v, equ)
-          /*case equ@Equals(e: Expr, v: Variable) if (exprOps.variablesOf(e) -- seen).isEmpty =>
-            ((x: Expr) => Let(v.toVal, e, x), v, equ)*/
+          case equ@Equals(e: Expr, v: Variable) if (exprOps.variablesOf(e) -- seen).isEmpty =>
+            ((x: Expr) => Let(v.toVal, e, x), v, equ)
         }.orElse(constraints.collectFirst[(Expr => Expr, Variable, Expr)]{
           case equ@FunctionInvocation(Utils.original, Seq(), Seq(Equals(v: Variable, e: Expr))) if (exprOps.variablesOf(e) -- seen).isEmpty =>
             ((x: Expr) => Let(v.toVal, e, x), v, equ)

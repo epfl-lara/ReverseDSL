@@ -103,6 +103,25 @@ object ReverseProgram extends lenses.Lenses {
     }
   })
 
+  def maybeEvalWithCache(expr: Expr)(implicit cache: Cache, symbols: Symbols): Option[Expr] = {
+    if(cache.contains(expr)) {
+      Some(cache(expr))
+    } else {
+      import evaluators._
+      val funDef = mkFunDef(FreshIdentifier("main"))()(stp => (Seq(), expr.getType, _ => expr))
+      val p = InoxProgram(context, symbols)
+      val evaluator = LambdaPreservingEvaluator(p)
+      evaluator.eval(expr) match {
+        case EvaluationResults.Successful(e) =>
+          cache(expr) = e
+          Some(e)
+        case m => Log(s"Could not evaluate: $expr, got $m")
+          None
+      }
+    }
+  }
+
+
   /** Returns an evaluator which preserves lambda shapes */
   def LambdaPreservingEvaluator(p: InoxProgram) = {
     import evaluators._
@@ -199,7 +218,7 @@ object ReverseProgram extends lenses.Lenses {
 
     lazy val functionValue = program.functionValue
 
-    if(!newOut.isInstanceOf[Variable] && !functionValue.isInstanceOf[FiniteMap] && functionValue == newOut) return {
+    if(!newOut.isInstanceOf[Variable]&& program.freeVars.isEmpty && !functionValue.isInstanceOf[FiniteMap]  && functionValue == newOut) return {
       Log("@return original function");
       Stream(program.assignmentsAsOriginals())
     }
@@ -406,8 +425,30 @@ object ReverseProgram extends lenses.Lenses {
             }
 
           }
-        case lFun@Lambda(vd, body) =>
-          Stream(newOutProgram)
+        case fun@Lambda(vds, body) =>
+          // Error if the free variables in body are not present in output.
+
+          def unify: Stream[ProgramFormula] = {
+            if(exprOps.variablesOf(fun).nonEmpty) {
+              newOut match {
+                case Lambda(vds2, body2) =>
+                  val freshVariables1 = vds.map(vd => Variable(FreshIdentifier(vd.id.name, true), vd.tpe, vd.flags))
+                  val freshBody1 = exprOps.replaceFromSymbols(vds.zip(freshVariables1).toMap, body)
+                  val freshBody2 = exprOps.replaceFromSymbols(vds2.zip(freshVariables1).toMap, body2)
+                  for{ pf <- repair(program.subExpr(freshBody1), newOutProgram.subExpr(freshBody2)) } yield {
+                    pf.wrap { newBody =>
+                      val abstractedBody = exprOps.replaceFromSymbols(freshVariables1.map(_.toVal).zip(vds.map(_.toVariable)).toMap, pf.expr)
+                      Lambda(vds, abstractedBody)
+                    }
+                  }
+                case _ => Stream.empty
+              }
+            } else {
+              Stream.empty
+            }
+          }
+
+          unify #::: Stream(newOutProgram)
 
         // Variables are assigned the given value.
         case v@Variable(id, tpe, flags) =>
@@ -597,10 +638,10 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case Application(lambdaExpr, arguments) =>
-          val originalValue = (lambdaExpr match {
-            case v: Variable => currentValues.getOrElse(v.toVal, evalWithCache(letm(currentValues) in v))
-            case l: Lambda => l
-            case l => evalWithCache(letm(currentValues) in l)
+          val originalValueMaybe = (lambdaExpr match {
+            case v: Variable => currentValues.get(v.toVal).orElse(maybeEvalWithCache(letm(currentValues) in v))
+            case l: Lambda => Some(l)
+            case l => maybeEvalWithCache(letm(currentValues) in l)
           }) /: Log.Original_Value
 
           // Returns the new list of arguments plus a mapping from old to new values.
@@ -611,38 +652,134 @@ object ReverseProgram extends lenses.Lenses {
             (freshArgsNames, oldToFresh, freshToOld)
           }
 
-          originalValue match {
-            case l@Lambda(argNames, body) =>
+          originalValueMaybe match {
+            case Some(originalValue@Lambda(argNames, body)) =>
               val (freshArgsNames, oldToFresh, freshToOld) = freshenArgsList(argNames)
               val freshBody = exprOps.replaceFromSymbols(oldToFresh, body)
-              val argumentValues = freshArgsNames.zip(arguments.map(arg => evalWithCache(letm(currentValues) in arg))).toMap
-              val freshFormula = Formula(argumentValues)
-              val newpf = (program.subExpr(freshBody) combineWith freshFormula).wrappingEnabled
-              for {pf <- repair(newpf, newOutProgram)  /:: Log.prefix(s"For repair$stackLevel, recovered:\n")
-                   ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
-                   newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
-                   isSameBody = (newBody == body)              /: Log.isSameBody
-                   args <-
+              val argumentVals = arguments.map(arg => maybeEvalWithCache(letm(currentValues) in arg))
+              if(argumentVals.forall(_.nonEmpty)) {
+                val argumentValues = freshArgsNames.zip(argumentVals.map(_.get)).toMap
+                val freshFormula = Formula(argumentValues)
+                val newpf = (program.subExpr(freshBody) combineWith freshFormula).wrappingEnabled
+                for {pf <- repair(newpf, newOutProgram) /:: Log.prefix(s"For repair$stackLevel, recovered:\n")
+                     ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
+                     newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
+                     isSameBody = (newBody == body) /: Log.isSameBody
+                     args <-
                      combineArguments(program,
                        arguments.zip(freshArgsNames).map { case (arg, v) =>
                          val expected = v.toVariable
-                      (arg, newOutProgram.subExpr(expected) combineWith newBodyFreshFormula)
-                     })
-                   (newArguments, newArgumentsFormula) = args
-                   newLambda = if (isSameBody) l else Lambda(argNames, newBody)
-                   pfLambda <- lambdaExpr match {
-                     case v: Variable => Stream(ProgramFormula(v, (
-                       if(isSameBody) Formula() else
-                         Formula(Map(v.toVal -> newLambda)))))
-                     case l => repair(ProgramFormula(l, program.formula),
-                       newOutProgram.subExpr(newLambda) combineWith newBodyFreshFormula)
-                   }
-                   ProgramFormula(newAppliee, lambdaRepairFormula) = pfLambda
-                   finalApplication = Application(newAppliee, newArguments)           /: Log.prefix("finalApplication")
-              } yield {
-                val combinedFormula = newBodyFreshFormula combineWith lambdaRepairFormula combineWith newArgumentsFormula
-                Log.prefix("[return] ")  :=
-                ProgramFormula(finalApplication: Expr, combinedFormula)
+                         (arg, newOutProgram.subExpr(expected) combineWith newBodyFreshFormula combineWith Formula(E(original)(expected === argumentValues(v))))
+                       })
+                     (newArguments, newArgumentsFormula) = args
+                     newLambda = if (isSameBody) originalValue else Lambda(argNames, newBody)
+                     pfLambda <- lambdaExpr match {
+                       case v: Variable => Stream(ProgramFormula(v, (
+                         if (isSameBody) Formula() else
+                           Formula(Map(v.toVal -> newLambda)))))
+                       case l => repair(ProgramFormula(l, program.formula),
+                         newOutProgram.subExpr(newLambda) combineWith newBodyFreshFormula)
+                     }
+                     ProgramFormula(newAppliee, lambdaRepairFormula) = pfLambda
+                     finalApplication = Application(newAppliee, newArguments) /: Log.prefix("finalApplication")
+                } yield {
+                  val combinedFormula = newBodyFreshFormula combineWith lambdaRepairFormula combineWith newArgumentsFormula
+                  Log.prefix("[return] ") :=
+                    ProgramFormula(finalApplication: Expr, combinedFormula)
+                }
+              } else {
+                // We can influcence only the variables's values which do not appear in output
+                // We try to set up all known variables to their values except for one.
+                val originalVariables = program.freeVars.filter(x => program.formula.findConstraintValue(x.toVariable).nonEmpty)
+                Log(s"Some argument values are not known. We only try unification. Variables = $originalVariables")
+                // We try to evaluate the function or evaluate all the arguments.
+                lambdaExpr match {
+                  case v: Variable if (originalVariables contains v.toVal) &&
+                    !arguments.exists(arg => exprOps.exists{ case v2: Variable if v2 == v => true  case _ => false}(arg)) => // The variable should not be used in arguments.
+
+                    def modifyFunction: Stream[ProgramFormula] = {
+                      if (originalVariables.size == 1) { // No need to evaluate the arguments, we just unify.
+
+                        /** Returns an arrangment of variables v such that the goal is build only out of v's*/
+                        def puzzle(v: Seq[ValDef], pieces: Seq[Expr], goal: Expr): Stream[Expr] = {
+                          pieces.toStream.zip(v.toStream).collect[Expr, Stream[Expr]]{
+                            case (piece, v) if piece == goal => v.toVariable
+                          } #::: (goal match {
+                            case Application(a, Seq(b)) =>
+                              for {va <- puzzle(v, pieces, a)
+                                   vb <- puzzle(v, pieces, b) } yield {
+                                Application(va, Seq(vb)): Expr
+                              }
+                            case _ =>
+                              Stream.empty[Expr]
+                          })
+                        }
+                        // Need to see if we can rearrange the arguments to produce the RHS.
+                        for{ solution <- puzzle(argNames, arguments, newOut) } yield {
+                          program.assignmentsAsOriginals() combineWith Formula(v ===
+                            Lambda(argNames, solution)
+                          )
+                        }
+                      } else {
+                        // We try to evaluate everything else so that we only have unification to do.
+                        val newArguments = arguments.map { arg =>
+                          exprOps.preMap{
+                            case Application(v: Variable, args2) if originalVariables contains v.toVal =>
+                              maybeEvalWithCache(letm(currentValues) in v) match {
+                                case Some(Lambda(nArg, nBody)) =>
+                                  Some(exprOps.replaceFromSymbols(nArg.map(_.toVariable).zip(args2).toMap, nBody))
+                                case _ => None
+                              }
+                            case v: Variable if originalVariables contains v.toVal => maybeEvalWithCache(letm(currentValues) in v)
+                            case _ => None
+                          }(arg)
+                        }
+                        if(newArguments != arguments) {
+                          for{ pf <- repair(program.subExpr(Application(v, newArguments)), newOutProgram) } yield {
+                            ProgramFormula(function, pf.formula)
+                          }
+                        } else {
+                          Log(s"Warning: We could not change the arguments $arguments")
+                          Stream.empty
+                        }
+                      }
+                    }
+
+                    def modifyArguments: Stream[ProgramFormula] = {
+                      if (originalVariables.size >= 2) {
+                        Log("Modifying arguments:")
+                        // Second we keep the original function and try to modify the arguments
+                        val updatedBody = exprOps.replaceFromSymbols(argNames.zip(arguments).toMap, body)
+                        for {pf <- repair(program.subExpr(updatedBody), newOutProgram)} yield {
+                          ProgramFormula(function, pf.formula combineWith Formula(E(original)(v === originalValue)))
+                        }
+                      } else Stream.empty
+                    }
+
+                    modifyFunction #::: modifyArguments
+                  case _ => Stream.empty
+                }
+                /*val originalValues = arguments.map(arg => maybeEvalWithCache(letm(currentValues) in arg).getOrElse{ throw new Exception(s"Could not evaluate $arg")})
+                for{exception <- originalVariables
+
+                }
+
+                Stream( program.assignmentsAsOriginals() combineWith Formula(newOutProgram.expr === program.expr) )*/
+              }
+            case None =>
+              // We can only do something if the function call is the same as the other one.
+              newOut match {
+                case Application(v, args) if v == lambdaExpr =>
+                  // In this case, all the arguments have to be equal and we return only the formula.
+                  for {
+                    formulas <- inox.utils.StreamUtils.cartesianProduct(arguments.zip(args).map {
+                      case (arg, newArg) =>
+                        repair(program.subExpr(arg), newOutProgram.subExpr(newArg)).map(_.formula)
+                    })
+                    formula = Formula(formulas)
+                  } yield {
+                    ProgramFormula(function, formula)
+                  }
               }
             case _ => throw new Exception(s"Don't know how to handle this case : $function of type ${function.getClass.getName}")
           }
@@ -752,7 +889,7 @@ object ReverseProgram extends lenses.Lenses {
     } else {
       interleave { maybeWrappedSolutions } { originalSolutions }
     }) #::: {
-      ???
+//      ???
       Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOutProgram):\n~>")
   }
 
