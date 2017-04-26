@@ -19,12 +19,12 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     val va = variable[String]("a")
     val vb = variable[String]("b")
     val vc = variable[String]("c")
-    val f = Formula(BooleanLiteral(true) && (vb +& "42") === vc && va === (vc +& vb) && vb === "17")
+    val f = Formula(Map(vc -> StrongValue(vb +& "42"), va -> StrongValue(vc +& vb), vb -> OriginalValue(StringLiteral("17"))))
     f.assignments match {
       case None => fail(s"Could not extract assignments from $f")
       case Some(f) => f(va) shouldEqual Let(vb.toVal, "17", Let(vc.toVal, vb +& "42", Let(va.toVal, vc +& vb, va)))
     }
-    val f2 = Formula(BooleanLiteral(true) && (vb +& "42") === va && va === (vc +& vb) && vb === "17")
+    val f2 = Formula(Map(vc -> StrongValue(vb +& "42"), vb -> StrongValue(vc +& va), va -> OriginalValue(StringLiteral("17"))))
     f2.assignments shouldEqual None
   }
   test("Wrap") {

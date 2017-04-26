@@ -141,23 +141,25 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   val lambda = \("v"::String)(v =>
     _Element("div", _List[WebElement](_WebElement(_TextNode(v))), _List[WebAttribute](), _List[WebStyle]()))
 
-  for((pfun, msg) <- Seq(
-    (Application(lambda, Seq("Hello world")),
-      "change an applied lambda's argument"),
-    (let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))),
-      "Change a variable lambda's argument")
-  )) test(msg) {
-      val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
-      val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
-      checkProg(expected1, pfun)
-      val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-      pfun2 match {
-        case Let(_, _, Application(_, Seq(StringLiteral(s)))) if msg == "Change a variable lambda's argument"
-          => s shouldEqual "We are the children"
-        case Application(_, Seq(StringLiteral(s))) if msg == "change an applied lambda's argument"
-          => s shouldEqual "We are the children"
-      }
+  def changeLambdasArgument(pfun: Expr, variable: Boolean) = {
+    val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
+    val expected2 = Element("div", WebElement(TextNode("We are the children"))::Nil)
+    checkProg(expected1, pfun)
+    val pfun2 = pfun repairFrom expected2 shouldProduce expected2
+    pfun2 match {
+      case Let(_, _, Application(_, Seq(StringLiteral(s)))) if variable
+      => s shouldEqual "We are the children"
+      case Application(_, Seq(StringLiteral(s))) if !variable
+      => s shouldEqual "We are the children"
     }
+  }
+
+  test("change an applied lambda's argument") {
+    changeLambdasArgument(Application(lambda, Seq("Hello world")), false)
+  }
+  test("Change a variable lambda's argument") {
+    changeLambdasArgument(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))), true)
+  }
 
   for((pfun, msg) <- Seq(
     (Application(lambda, Seq("Hello world")),
@@ -473,7 +475,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
     val pfStr4 = StringInsert("- ", "B", "", AssociativeInsert.InsertAutomatic)
     Map(List("A","","C"), av => "- " +& av) repairFrom
-    ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr4.expr), StringType), List("- C")), pfStr4.formula.unknownConstraints) shouldProduce
+    ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr4.expr), StringType), List("- C")), pfStr4.formula) shouldProduce
     _List[String]("- A", "- B", "- C")
 
     val pfun = Map(List("Margharita", "Salami", "Royal"), av => "Pizza " +& av)
@@ -486,19 +488,19 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
     val pfStr2 = StringInsert("", "*", " C", AssociativeInsert.InsertAutomatic)
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-    ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula.unknownConstraints) shouldProduce
+    ProgramFormula(ListLiteral.concat(List("- A", "- B"), ListLiteral(List(pfStr2.expr), StringType), List("- D")), pfStr2.formula) shouldProduce
     _List[String]("* A", "* B", "* C", "* D")
 
 
 
     val pfStr3 = StringInsert("- B", "o", "", AssociativeInsert.InsertAutomatic)
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-    ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3.expr), StringType), List("- C", "- D")), pfStr3.formula.unknownConstraints) shouldProduce
+    ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3.expr), StringType), List("- C", "- D")), pfStr3.formula) shouldProduce
     _List[String]("- A", "- Bo", "- C", "- D")
 
     val pfStr3b = StringInsert("- ", "o", "B", AssociativeInsert.InsertAutomatic)
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-      ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3b.expr), StringType), List("- C", "- D")), pfStr3b.formula.unknownConstraints) shouldProduce
+      ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3b.expr), StringType), List("- C", "- D")), pfStr3b.formula) shouldProduce
       _List[String]("- A", "- oB", "- C", "- D")
 
 

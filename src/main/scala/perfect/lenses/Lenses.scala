@@ -74,7 +74,7 @@ trait Lenses { self: ReverseProgram.type =>
             case _ =>
               val newVar = Variable(id.freshen, lstType, flags)
               Stream(((Seq(ProgramFormula(newVar), ProgramFormula(lambda)),
-                newOutputProgram.formula combineWith (FunctionInvocation(identifier, tpes, Seq(newVar, lambda)) === newOutput)
+                newOutputProgram.formula combineWith Formula(Map(), (FunctionInvocation(identifier, tpes, Seq(newVar, lambda)) === newOutput))
               )))
           }
 
@@ -129,7 +129,7 @@ trait Lenses { self: ReverseProgram.type =>
           val unknown = ValDef(FreshIdentifier("unknown", true), argType)
           val unknownVar = unknown.toVariable
           val (Seq(in), newFormula) =
-            prevIn.map(x => (Seq(x._1), x._2)).getOrElse {(Seq(unknownVar), Formula(unknownVar === valueByDefault))}
+            prevIn.map(x => (Seq(x._1), x._2)).getOrElse {(Seq(unknownVar), Formula(unknownVar -> OriginalValue(valueByDefault)))}
           Log(s"in:$in\nnewformula:$newFormula")
           Log.prefix(s"fRev($prevIn, $out)=") :=
           repair(ProgramFormula(Application(lambda, Seq(in)), newFormula).wrappingLowPriority(), newOutput.subExpr(out)).flatMap {
@@ -212,8 +212,8 @@ trait Lenses { self: ReverseProgram.type =>
             // The valueByDefault is just a copy of neighbor values if it exists.
 
             val (Seq(expr), newFormula) = {
-              val unknown = ValDef(FreshIdentifier("unknown"), lambda.args.head.getType)
-              (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> valueByDefault)))
+              val unknown = Variable(FreshIdentifier("unknown"), lambda.args.head.getType, Set())
+              (Seq(unknown), Formula(unknown -> OriginalValue(valueByDefault)))
             }
             inserted.map { i =>
               if(i == StringLiteral("") && tpe == inputType) { // An empty string ltteral was added. First we suppose that it was inserted in the original elements
@@ -721,8 +721,8 @@ trait Lenses { self: ReverseProgram.type =>
           Log(s"Flatmap.fRev: $prevIn, $out")
           val (Seq(in), newFormula) =
             prevIn.map(x => (Seq(x._1), x._2)).getOrElse {
-              val unknown = ValDef(FreshIdentifier("unknown"),lambda.args.head.getType)
-              (Seq(unknown.toVariable), Formula(Map[ValDef, Expr](unknown -> uniqueUnknownValue)))
+              val unknown = Variable(FreshIdentifier("unknown"),lambda.args.head.getType, Set())
+              (Seq(unknown), Formula(unknown -> OriginalValue(uniqueUnknownValue)))
             }
           Log(s"flatmap in:$in\nnewformula:$newFormula")
           Log.res :=
@@ -799,16 +799,16 @@ trait Lenses { self: ReverseProgram.type =>
       val rightValue@ListLiteral(rightValue_s, _) = originalArgsValues.tail.head
 
       def defaultCase: Stream[ArgumentsFormula] = {
-        val left = ValDef(FreshIdentifier("l", true), T(list)(tps.head), Set())
-        val right = ValDef(FreshIdentifier("r", true), T(list)(tps.head), Set())
+        val left = Variable(FreshIdentifier("l", true), T(list)(tps.head), Set())
+        val right = Variable(FreshIdentifier("r", true), T(list)(tps.head), Set())
         Log(s"List default case: ${left.id} + ${right.id} == $newOutput")
 
-        val f = Formula(
-          newOutput === FunctionInvocation(listconcat, tps, Seq(left.toVariable, right.toVariable)) &&
-          not(left.toVariable === leftValue) && not(right.toVariable === rightValue)
+        val f = Formula(Map(),
+          newOutput === FunctionInvocation(listconcat, tps, Seq(left, right)) &&
+          not(left === leftValue) && not(right === rightValue)
         )
 
-        Stream((Seq(ProgramFormula(left.toVariable), ProgramFormula(right.toVariable)), f))
+        Stream((Seq(ProgramFormula(left, left -> OriginalValue(leftValue)), ProgramFormula(right, right -> OriginalValue(rightValue))), f))
       }
 
       // Prioritize changes that touch only one of the two expressions.
@@ -1029,14 +1029,23 @@ trait Lenses { self: ReverseProgram.type =>
       }
 
       def defaultCase: Stream[ArgumentsFormula] = {
-        val left = ValDef(FreshIdentifier("l", true), StringType, Set())
-        val right = ValDef(FreshIdentifier("r", true), StringType, Set())
+        val left = Variable(FreshIdentifier("l", true), StringType, Set())
+        val right = Variable(FreshIdentifier("r", true), StringType, Set())
         Log(s"String default case: ${left.id} + ${right.id} == $newOutput:")
 
-        val f = Formula(newOutput === left.toVariable +& right.toVariable)
+        val f = Formula(Map(
+          left -> OriginalValue(leftValue),
+          right -> OriginalValue(rightValue)))//, not(left === leftValue) || not(right === rightValue))
+        if(newOutput.isInstanceOf[Variable]) {
+          Stream((Seq(
+            ProgramFormula(left, left -> OriginalValue(leftValue)),
+            ProgramFormula(right, right -> OriginalValue(rightValue))),
+            f combineWith Formula(
+              newOutput.asInstanceOf[Variable] -> StrongValue(left +& right))))
+        } else
         Stream((Seq(
-          ProgramFormula(left.toVariable, E(original)(left.toVariable === leftValue)),
-          ProgramFormula(right.toVariable, E(original)(right.toVariable === rightValue))), f))
+          ProgramFormula(left, left -> OriginalValue(leftValue)),
+          ProgramFormula(right, right -> OriginalValue(rightValue))), f combineWith Formula(Map(), newOutput === left +& right)))
       }
 
       // Prioritize changes that touch only one of the two expressions.
@@ -1081,7 +1090,7 @@ trait Lenses { self: ReverseProgram.type =>
               val leftClone = CloneText(left, leftCloned, "", leftVar)
               val rightVar = CloneText.Var(rightCloned, Seq(variable.id.name, leftVar.id.name))
               val rightClone = CloneText("", rightCloned, right, rightVar)
-              List((Seq(leftClone, rightClone), Formula(E(Utils.insertvar)(variable === leftVar +& rightVar))))
+              List((Seq(leftClone, rightClone), Formula(variable -> InsertVariable(leftVar +& rightVar))))
             } else Nil
           }
           (cloneToLeft ++ cloneToRight ++ cloneBoth).toStream
@@ -1119,7 +1128,7 @@ trait Lenses { self: ReverseProgram.type =>
           }
           (pasteToLeft ++ pasteToRight).sortBy(_._2).map(_._1).toStream
         case ProgramFormula(StringLiteral(s), _) =>
-          (rightCase(s) .toList++ leftCase(s).toList).sortBy(_._2).map(_._1).toStream #::: defaultCase
+          ifEmpty((rightCase(s) .toList++ leftCase(s).toList).sortBy(_._2).map(_._1).toStream) { defaultCase }
         case ProgramFormula(StringConcat(StringLiteral(left), right), _) => // TODO !!
           val leftValue_s = asStr(leftValue)
           if(leftValue_s.startsWith(left)) {
@@ -1137,6 +1146,17 @@ trait Lenses { self: ReverseProgram.type =>
           } else {
             ???
           }
+        case ProgramFormula(v: Variable, formula) if formula.constraints == BooleanLiteral(true) =>
+          formula.known.get(v) match {
+            case Some(StrongValue(e)) =>
+              put(tps)(Seq(leftValue, rightValue), ProgramFormula(e, formula))
+            case Some(OriginalValue(StringLiteral(e))) =>
+              if(e == lv + rv) { // Nothing changed, we return original expressions.
+                Stream((Seq(ProgramFormula(leftValue), ProgramFormula(rightValue)), Formula()))
+              } else defaultCase
+            case _ => defaultCase
+          }
+
         case _ =>
           defaultCase
       }

@@ -3,7 +3,6 @@ import inox.FreshIdentifier
 import legacy._
 import org.scalatest.FunSuite
 import perfect.WebTrees.Element
-
 import org.scalatest._
 import matchers._
 import Matchers.{=== => _, _}
@@ -14,6 +13,7 @@ import inox._
 import inox.evaluators.EvaluationResults
 import inox.trees.{not => inoxNot, _}
 import inox.trees.dsl._
+import perfect.ProgramFormula.{StringInsert, AssociativeInsert}
 
 /**
   * Created by Mikael on 22/03/2017.
@@ -72,6 +72,19 @@ class BagMapSetTest extends FunSuite with TestHelpers {
     checkProg("Bonjour Mikael, comment tu vas, Mikael", pfun)
     checkProg("Bonjour Ravi, comment tu vas, Ravi",
       repairProgram(pfun, "Bonjour Ravi, comment tu vas, Mikael")) match {
+      case Let(firstNameVal, StringLiteral(name), Let(_, FiniteMap(pairs, default, _, _), _)) =>
+        name shouldEqual "Ravi"
+        val fv = firstNameVal.toVariable
+        pairs.toList shouldEqual List[(Expr, Expr)](
+          "hello" -> ("Bonjour " +& fv),
+          "howareu" -> (", comment tu vas, " +& fv),
+          "useless1" -> "useless1",
+          "useless2" -> "useless2",
+          "useless3" -> "useless3"
+        )
+    }
+    checkProg("Bonjour Ravi, comment tu vas, Ravi",
+      repairProgram(pfun, StringInsert("Bonjour ", "Ravi", ", comment tu vas, Mikael", AssociativeInsert.InsertAutomatic))) match {
       case Let(firstNameVal, StringLiteral(name), Let(_, FiniteMap(pairs, default, _, _), _)) =>
         name shouldEqual "Ravi"
         val fv = firstNameVal.toVariable

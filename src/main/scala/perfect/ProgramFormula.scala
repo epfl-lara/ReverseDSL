@@ -3,7 +3,7 @@ package perfect
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ReverseProgram.{Cache, evalWithCache, letm}
+import perfect.ReverseProgram.{Cache, evalWithCache}
 import perfect.StringConcatExtended._
 
 /**
@@ -16,7 +16,7 @@ object ProgramFormula {
   // ProgramFormula(leftTreeStr +& "The Insertion" +& rightTreeStr,
   //   tree == leftTreeStr +& rightTreeStr && leftTreeStr == "String to the left && rightTreeStr = "String to the right"
 
-  def apply(e: Expr, f: Expr): ProgramFormula = ProgramFormula(e, Formula(f))
+  def apply(e: Expr, f: (Variable, KnownValue)): ProgramFormula = ProgramFormula(e, Formula(Map(f)))
 
   trait CustomProgramFormula {
     def funDef: FunDef
@@ -380,39 +380,43 @@ object ProgramFormula {
 
     def assignmentFormula(textVarRights: List[(String, Variable, String)]): Formula = {
       (Formula() /: textVarRights) {
-        case (f, (middle, v, right)) => f combineWith Formula(E(insertvar)(v === StringLiteral(middle)))
+        case (f, (middle, v, right)) => f combineWith Formula(v -> InsertVariable(StringLiteral(middle)))
       }
     }
 
     def merge(left1: String, textVarRight1: List[(String, Variable, String)],
               left2: String, textVarRight2: List[(String, Variable, String)]): Option[ProgramFormula] = {
-      (textVarRight1, textVarRight2) match {
-        case (Nil, Nil) if left1 == left2 =>
-          Some(apply(left1, Nil))
-        case (Nil, textVarRight2) if left1.startsWith(left2) =>
-          Some(apply(left2, textVarRight2))
-        case (textVarRight1, Nil) if left2.startsWith(left1) =>
-          Some(apply(left1, textVarRight1))
-        case ((middle1, v1, right1)::tail1, (middle2, v2, right2)::tail2) =>
-          if(left1.length < left2.length) {
-            if(left2.startsWith(left1+middle1)) {
-              // We can insert the first variable in place of left2.
-              val updatedLeft2 = left2.substring(left1.length+middle1.length)
-              val updatedRight1 = if(updatedLeft2.length < right1.length) updatedLeft2 else right1
-              merge(updatedRight1, tail1, updatedLeft2, textVarRight2).map{
-                case CloneTextMultiple(leftNew, textVarRightNew) =>
-                  CloneTextMultiple(left1, (middle1, v1, leftNew)::textVarRightNew)
-              }
-            } else None
-          } else if(left1.length > left2.length) {
-            merge(left2, textVarRight2, left1, textVarRight1)
-          } else { // We don't know how to merge these two.
-            None
-          }
-      }
+      Expr.merge(left1, textVarRight1, left2, textVarRight2).map(x => ProgramFormula(x))
     }
 
     object Expr {
+      def merge(left1: String, textVarRight1: List[(String, Variable, String)],
+                left2: String, textVarRight2: List[(String, Variable, String)]): Option[Expr] = {
+        (textVarRight1, textVarRight2) match {
+          case (Nil, Nil) if left1 == left2 =>
+            Some(apply(left1, Nil))
+          case (Nil, textVarRight2) if left1.startsWith(left2) =>
+            Some(apply(left2, textVarRight2))
+          case (textVarRight1, Nil) if left2.startsWith(left1) =>
+            Some(apply(left1, textVarRight1))
+          case ((middle1, v1, right1)::tail1, (middle2, v2, right2)::tail2) =>
+            if(left1.length < left2.length) {
+              if(left2.startsWith(left1+middle1)) {
+                // We can insert the first variable in place of left2.
+                val updatedLeft2 = left2.substring(left1.length+middle1.length)
+                val updatedRight1 = if(updatedLeft2.length < right1.length) updatedLeft2 else right1
+                merge(updatedRight1, tail1, updatedLeft2, textVarRight2).map{
+                  case CloneTextMultiple.Expr(leftNew, textVarRightNew) =>
+                    CloneTextMultiple.Expr(left1, (middle1, v1, leftNew)::textVarRightNew)
+                }
+              } else None
+            } else if(left1.length > left2.length) {
+              merge(left2, textVarRight2, left1, textVarRight1)
+            } else { // We don't know how to merge these two.
+              None
+            }
+        }
+      }
       def apply(left: String, textVarRight: List[(String, Variable, String)]): Expr = {
         E(ClonedMultiple)(
           StringLiteral(left),
@@ -534,8 +538,8 @@ object ProgramFormula {
 }
 
 case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
-  lazy val freeVars: Set[ValDef] = exprOps.variablesOf(expr).map(_.toVal)
-  lazy val unchanged: Set[ValDef] = freeVars -- formula.varsToAssign
+  lazy val freeVars: Set[Variable] = exprOps.variablesOf(expr)
+  lazy val unchanged: Set[Variable] = freeVars -- formula.varsToAssign
 
   override def toString = expr.toString + s" [$formula]" + (if(canDoWrapping) " (wrapping enabled)" else "") + (if(isWrappingLowPriority) " (avoid wrap)" else "")
   var canDoWrapping = false
@@ -598,12 +602,12 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
     givenValue match {
       case Some(e) => e
       case None =>
-        val res =
-          if((freeVars -- formula.known.keySet).isEmpty) {
-            evalWithCache(letm(formula.known) in expr)
-          } else {
+        val res = {
+          if((freeVars -- formula.known.keySet).nonEmpty) {
             throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known (only ${formula.known.keySet} are).\n$this")
           }
+          formula.assignments.map(wrapper => evalWithCache(wrapper(expr))).get
+        }
         givenValue = Some(res)
         res
     }
@@ -634,7 +638,7 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
   /** Returns the original assignments marked as original
     * Require known to be set. */
   def assignmentsAsOriginals(): ProgramFormula = {
-    this.copy(formula = Formula(and(formula.known.toSeq.map{ case (k, v) => E(Utils.original)(k.toVariable === v) } :_*)))
+    this.copy(formula = Formula(formula.known.map{ case (k, StrongValue(e)) => (k, OriginalValue(e)) case kv => kv}))
   }
 
   /** Augment this expr with the given formula */
@@ -644,18 +648,15 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
 
   /** Removes all insertVar from the formula and inserts them into the program.*/
   def insertVariables(): ProgramFormula = {
-    val TopLevelAnds(ands) = formula.unknownConstraints
-    val (insertedV, remaining) = ands.partition{
-      case FunctionInvocation(Utils.insertvar, Seq(), Seq(Equals(v: Variable, e: Expr))) =>
-        true
-      case _ => false
+    val inserted: Map[Variable, KnownValue] = formula.known.collect[(Variable, KnownValue), Map[Variable, KnownValue]]{
+      case (v, InsertVariable(e)) => (v, StrongValue(e))
     }
-    val inserted = insertedV collect {
-      case FunctionInvocation(Utils.insertvar, Seq(), Seq(m@Equals(v: Variable, e: Expr))) => m
+    val remaining = formula.known.filter{
+      case (v, InsertVariable(e)) => false
+      case _ => true
     }
-    val newFormula = if(insertedV.isEmpty) formula else Formula(and(remaining: _*))
-    val newInserted = Formula(and(inserted :_*))
-    val assignment = newInserted.assignments
+    val newFormula = if(inserted.isEmpty) formula else formula.copy(known = remaining)
+    val assignment = Formula(inserted).assignments
 
     if(inserted.nonEmpty && assignment.nonEmpty) {
       ProgramFormula(assignment.get(expr), newFormula)
