@@ -196,4 +196,14 @@ object Utils {
     Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs).
       explainTyping(e)(inox.trees.PrinterOptions.fromSymbols(Utils.defaultSymbols, ReverseProgram.context))
   }
+
+  /** Try to get rid of cloned variables. It if success, returns the existing variable and the new program. */
+  def simplifyClones(e: Expr, cloned: Variable): Option[(Variable, Expr)] = (e match {
+    case Let(clonedVd, v: Variable, body2) if clonedVd.toVariable == cloned =>
+      Some((v, exprOps.replaceFromSymbols(Map(clonedVd -> v), body2)))
+    case Let(clonedVd, k, Let(v, `cloned`, body2)) if clonedVd.toVariable == cloned =>
+      Some((v.toVariable, Let(v, k, exprOps.replaceFromSymbols(Map(clonedVd -> v.toVariable),body2))))
+    case Let(a, b, c) => simplifyClones(c, cloned).map{ case (v, cp) => (v, Let(a, b, cp) )}
+    case _ => None
+  }) /: Log.prefix(s"simplifyClones($e, $cloned) :=")
 }

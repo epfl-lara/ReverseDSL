@@ -1,7 +1,5 @@
 package legacy
 
-import shapeless.{:: => #:}
-
 import scala.language.dynamics
 import perfect.WebTrees._
 

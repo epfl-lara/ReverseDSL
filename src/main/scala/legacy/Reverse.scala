@@ -5,7 +5,6 @@ import perfect.ImplicitTuples._
 import legacy.ImplicitTuples._
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
-import shapeless.HList
 import inox._
 import inox.trees._
 import inox.trees.dsl._

@@ -417,10 +417,26 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
-  //test("Clone an existing variable") { // can we return the original variable instead of inserting a new one?
-  //  val pfun:Expr = "I am " +& mikael +& " the great"
-  //  pfun repairFrom CloneTextMultiple("Test", Nil) shouldProduce StringLiteral("Test")
-  //}
+  test("Clone an existing variable") { // can we return the original variable instead of inserting a new one?
+    val pfun:Expr = let("mikael"::StringType, "Mikael")(mikael => "I am " +& mikael +& " the great ")
+
+    val cloneVar = variable[String]("clone")
+
+    Log.activate = true
+    val pfun2 = pfun repairFrom CloneText("I am ", "Mikael", " the great ", cloneVar) shouldProduce StringLiteral("I am Mikael the great ")
+
+    pfun2 match {
+      case Let(cloned, v, body) =>
+        val pfun3 = updateBody(pfun2) {
+          case c1 +& mikael +& c2 => c1 +& mikael +& c2 +& cloned.toVariable
+        }
+        Utils.simplifyClones(pfun3, cloned.toVariable) match {
+          case Some((cl, Let(cloned, v, c1 +& clonedV +& c2 +& clonedV2)))
+            if cloned.toVariable == clonedV && clonedV2 == clonedV && clonedV == cl =>
+        }
+    }
+
+  }
 
   test("Clone basic") {
     val pfun:Expr = "Test"
