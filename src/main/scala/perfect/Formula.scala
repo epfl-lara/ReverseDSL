@@ -153,6 +153,14 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
           case Some(OriginalValue(e)) => (known + (v -> s), nc) // We replace the original value with the strong one
           case Some(StrongValue(e2)) if e2 == e => (known, nc)
           case Some(StrongValue(e2: Variable)) if !(known contains e2) => (known + (e2 -> StrongValue(v)), nc)
+          case Some(StrongValue(e2)) if (exprOps.variablesOf(e2).isEmpty && e.isInstanceOf[Variable] && // Particular merging case quite useful.
+            !(this.known contains e.asInstanceOf[Variable]) &&
+            other.known.get(e.asInstanceOf[Variable]).exists(_.isInstanceOf[OriginalValue])) /* /:
+            Log.prefix(s"shortcut ($e2 is value: ${Utils.isValue(e2)}) (e = $e is variable: ${e.isInstanceOf[Variable]}) " +
+              s"(this.known contains e: ${e.isInstanceOf[Variable] && !(known contains e.asInstanceOf[Variable])})" +
+              s"(${other.known} contains e as original: ${e.isInstanceOf[Variable] &&  other.known.get(e.asInstanceOf[Variable]).exists(_.isInstanceOf[OriginalValue])}):")*/
+            =>
+            (known + (e.asInstanceOf[Variable] -> StrongValue(e2)) + (v -> s), nc)
           case Some(StrongValue(e2@CloneTextMultiple.Expr(left, tvr))) =>
             e match {
               case CloneTextMultiple.Expr(left2, tvr2) =>

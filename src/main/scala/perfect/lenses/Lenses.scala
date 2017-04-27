@@ -1150,10 +1150,6 @@ trait Lenses { self: ReverseProgram.type =>
           formula.known.get(v) match {
             case Some(StrongValue(e)) =>
               put(tps)(Seq(leftValue, rightValue), ProgramFormula(e, formula))
-            case Some(OriginalValue(StringLiteral(e))) =>
-              if(e == lv + rv) { // Nothing changed, we return original expressions.
-                Stream((Seq(ProgramFormula(leftValue), ProgramFormula(rightValue)), Formula()))
-              } else defaultCase
             case _ => defaultCase
           }
 
