@@ -5,6 +5,7 @@ import inox.trees.dsl._
 import org.scalatest._
 import matchers._
 import Matchers.{=== => _, _}
+import perfect.ProgramFormula.CloneTextMultiple
 
 /**
   * Created by Mikael on 27/03/2017.
@@ -416,10 +417,15 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
-  test("Clone an existing variable") {
+  //test("Clone an existing variable") { // can we return the original variable instead of inserting a new one?
+  //  val pfun:Expr = "I am " +& mikael +& " the great"
+  //  pfun repairFrom CloneTextMultiple("Test", Nil) shouldProduce StringLiteral("Test")
+  //}
 
+  test("Clone basic") {
+    val pfun:Expr = "Test"
+    pfun repairFrom CloneTextMultiple("Test", Nil) shouldProduce StringLiteral("Test")
   }
-
 
   test("Clone accross a StringConcat of constants") {
     val pfun = ("I like" +& " to ") +& ("move" +& " it!")
@@ -497,6 +503,38 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         move1 shouldEqual move2
         move.id shouldEqual move1.id
     }
+  }
+
+  def updateBody(e: Expr)(f: Expr => Expr): Expr = e match {
+    case Let(a, b, c) => Let(a, b, updateBody(c)(f))
+    case c => f(c)
+  }
+
+  test("Clone accross a StringConcat of same variables but wider") {
+    val pfun = let("move"::String, "move it ")(move => move +& move)
+
+    val ct@CloneTextMultiple(_, (_, cloned, _)::Nil) = CloneText("move", " it move ", "it ")
+    val pfun2 = pfun repairFrom ct shouldProduce StringLiteral("move it move it ")
+
+    val pfun3 = updateBody(pfun2){
+      case moveVar +& moveVar2 => moveVar +& moveVar2 +& cloned
+    }
+    pfun3 shouldProduce StringLiteral("move it move it  it move ")
+    pfun3 repairFrom StringInsert("move it move i","f","  it move ", AssociativeInsert.InsertAutomatic) shouldProduce
+      StringLiteral("move if move if  if move ")
+  }
+
+  test("Clone accross a StringConcat of same variables with identical overlap") {
+    val pfun = let("move"::String, "mov it ")(move => move +& move +& move)
+
+    val ct@CloneTextMultiple(_, (_, cloned, _)::Nil) = CloneText("mov ", "it mov it mov ", "it ")
+    val pfun2 = pfun repairFrom ct shouldProduce StringLiteral("mov it mov it mov it ")
+    val pfun3 = updateBody(pfun2){
+      case moveVar +& moveVar2 +& moveVar3 => moveVar +& moveVar2 +& moveVar3 +& cloned
+    }
+    pfun3 shouldProduce StringLiteral("mov it mov it mov it it mov it mov ")
+    pfun3 repairFrom StringInsert("mov it mov ","a","t mov it it mov it mov ", AssociativeInsert.InsertAutomatic) shouldProduce
+      StringLiteral("mov at mov at mov at at mov at mov ")
   }
 
 

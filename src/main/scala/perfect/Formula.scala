@@ -165,7 +165,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
             e match {
               case CloneTextMultiple.Expr(left2, tvr2) =>
                 CloneTextMultiple.Expr.merge(left, tvr, left2, tvr2) match {
-                  case Some(cm) => (known + (v -> StrongValue(cm)), nc)
+                  case Some((cm, news)) => (known + (v -> StrongValue(cm)) ++ news, nc)
                   case None => default(e2)
                 }
                 case _ => default(e2)
