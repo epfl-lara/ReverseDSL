@@ -5,6 +5,8 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
+import perfect.ProgramFormula.StringInsert
+
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 /**
@@ -1041,6 +1043,7 @@ object ReverseProgram extends lenses.Lenses {
       Log("@return unwrapped")
       return Stream(program.assignmentsAsOriginals())
     }
+    val StringLiteral(t) = functionValue
 
     object StringConcats {
       def unapply(e: Expr): Some[List[Expr]] = e match {
@@ -1049,34 +1052,35 @@ object ReverseProgram extends lenses.Lenses {
       }
     }
 
+    def wrapToRight(s: String) = {
+      val StringConcats(atoms) = function
+      if(atoms.lastOption.exists(x => x.isInstanceOf[StringLiteral])) { // We don't wrap in a new string if the last concatenation is a StringLiteral
+        Stream.empty
+      } else {
+        Stream(ProgramFormula(StringConcat(function, StringLiteral(s))))
+      }
+    }
+
+    def wrapToLeft(s: String) = {
+      val StringConcats(atoms) = function
+      if(atoms.headOption.exists(x => x.isInstanceOf[StringLiteral])) { // We don't wrap in a new string if the last concatenation is a StringLiteral
+        Stream.empty
+      } else {
+        Stream(ProgramFormula(StringConcat(StringLiteral(s), function)))
+      }
+    }
+
     newOut match {
       case StringLiteral(s) =>
         function match {
           case StringLiteral(_) => Stream.empty // We can always replace the StringLiteral later
-          //case StringConcat(_, _) => Stream.empty // We can always add the constant to a sub-expression, to avoid duplicate programs
-          case _ =>
-            functionValue match {
-              case StringLiteral(t) =>((
-                if(s.startsWith(t)) {
-                  val StringConcats(atoms) = function
-                  if(atoms.lastOption.exists(x => x.isInstanceOf[StringLiteral])) { // We don't wrap in a new string if the last concatenation is a StringLiteral
-                    Stream.empty
-                  } else {
-                    Stream(ProgramFormula(StringConcat(function, StringLiteral(s.substring(t.length)))))
-                  }
-                } else Stream.empty) #::: (
-                if(s.endsWith(t)) {
-                  val StringConcats(atoms) = function
-                  if(atoms.headOption.exists(x => x.isInstanceOf[StringLiteral])) { // We don't wrap in a new string if the last concatenation is a StringLiteral
-                    Stream.empty
-                  } else {
-                    Stream(ProgramFormula(StringConcat(StringLiteral(s.substring(0, s.length - t.length)), function)))
-                  }
-                } else Stream.empty
-                )) /:: Log.prefix("@return wrapped: ")
-              case _ => Stream.empty
-            }
+          case _ => (
+            (if(s.startsWith(t)) wrapToRight(s.substring(t.length)) else Stream.empty) #:::
+            (if(s.endsWith(t)) wrapToLeft(s.substring(0, s.length - t.length)) else Stream.empty)
+            ) /:: Log.prefix("@return wrapped: ")
         }
+      case StringInsert.Expr("", inserted, right, direction) if t == right => wrapToLeft(inserted)
+      case StringInsert.Expr(left, inserted, "", direction) if t == left => wrapToRight(inserted)
       case _ => Stream.empty
     }
   }

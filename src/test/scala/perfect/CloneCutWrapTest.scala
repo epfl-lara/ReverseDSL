@@ -435,7 +435,16 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
             if cloned.toVariable == clonedV && clonedV2 == clonedV && clonedV == cl =>
         }
     }
+  }
 
+  test("Add space after clone") {
+    val pfun:Expr = let("move_it"::StringType, "move it")(move_it => "I like to "+&move_it)
+    Log.activate = true
+
+    repairProgramList(pfun, StringInsert.Expr("I like to move it", " ", "", AssociativeInsert.InsertAutomatic), 2).map{
+      case Let(p, StringLiteral("move it"), body) => 1
+      case Let(p, StringLiteral("move it "), body) => 2
+    }.sum shouldEqual 3
   }
 
   test("Clone basic") {
