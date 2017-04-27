@@ -61,6 +61,12 @@ object ImplicitTuples {
   val tuple22: Identifier = FreshIdentifier("Tuple22")
   val _tupleTypes = List(tuple2, tuple3, tuple4, tuple5, tuple6, tuple7, tuple8, tuple9, tuple10, tuple11, tuple12,
     tuple13, tuple14, tuple15, tuple16, tuple17, tuple18, tuple19, tuple20, tuple21, tuple22)
+  object ITupleType {
+    def unapply(i: Identifier): Option[Int] = {
+      val k = _tupleTypes.indexWhere(_ == i)
+      if(k == -1) None else Some(k)
+    }
+  }
 
   val _1 : Identifier = FreshIdentifier("_1")
   val _2 : Identifier = FreshIdentifier("_2")
@@ -86,6 +92,12 @@ object ImplicitTuples {
   val _22: Identifier = FreshIdentifier("_22")
   val _tupleIdentifiers: List[Identifier] = List(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22)
   /* The type `T(list)(tp)` is a shorthand for `ADTType(list, Seq(tp))`. */
+  object TupleSelector {
+    def unapply(i: Identifier): Option[Int] = {
+      val k = _tupleIdentifiers.indexWhere(_ == i)
+      if(k == -1) None else Some(k)
+    }
+  }
 
   type ADTConstructor = inox.trees.dsl.trees.ADTConstructor
 
