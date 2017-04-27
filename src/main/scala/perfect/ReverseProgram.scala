@@ -508,7 +508,17 @@ object ReverseProgram extends lenses.Lenses {
                 }
               }) {
                 val constraint = newOut === function // We want to avoid at maximum having to solve constraints.
-                Stream(ProgramFormula(function, Formula(Map(), newOut === function)))
+                Stream(ProgramFormula(function, Formula(Map(), constraint)))
+              } #::: {
+                // Handle insertion between two non-constants as a possible constant at the last resort.
+                newOutProgram match {
+                  case ProgramFormula.StringInsert(left, inserted, right, direction)
+                    if !expr1.isInstanceOf[StringLiteral] && !expr2.isInstanceOf[StringLiteral] &&
+                      maybeEvalWithCache(functionFormula.assignments.get(expr1)) == Some(StringLiteral(left)) &&
+                      maybeEvalWithCache(functionFormula.assignments.get(expr2)) == Some(StringLiteral(right))
+                  => Stream(program.subExpr(expr1 +& StringLiteral(inserted) +& expr2).assignmentsAsOriginals())
+                  case _ => Stream.empty[ProgramFormula]
+                }
               }
           }
 
