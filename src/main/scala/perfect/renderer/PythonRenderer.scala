@@ -3,10 +3,18 @@ package renderer
 
 import inox.trees._
 
+object Python extends Enumeration {
+  type Version = Value
+  val `2`, `3.6` = Value
+}
+
+object Python2Renderer extends PythonRenderer(Python.`2`)
+object Python3_6Renderer extends PythonRenderer(Python.`3.6`)
+
 /**
   * Created by Mikael on 27/03/2017.
   */
-object PythonRenderer extends inox.ast.Printer {
+class PythonRenderer(version: Python.Version) extends inox.ast.Printer {
   val trees = inox.trees
   import ImplicitTuples._
 
@@ -68,17 +76,17 @@ object PythonRenderer extends inox.ast.Printer {
       p"new $adt($args)"
     case MapApply(a, i) =>
       p"$a[$i]"
-    /*case StringConcats(ss) if ss.exists(_.isInstanceOf[StringLiteral]) => // Use tick printing.
-      p"`"
+    case StringConcats(ss) if ss.exists(_.isInstanceOf[StringLiteral]) && version >= Python.`3.6` => // Use tick printing.
+      p"f$q$q$q"
       for(s <- ss) {
         s match {
           case StringLiteral(v) =>
-            val escaped = v.replaceAllLiterally("\\", "\\\\").replaceAllLiterally("`", "\\`") // We can keep newlines !
+            val escaped = v.replaceAllLiterally("\\", "\\\\").replaceAllLiterally("{", "\\{") // We can keep newlines !
             ctx.sb append escaped // We appen the string raw.
-          case e => p"$${$e}"
+          case e => p"{$e}"
         }
       }
-      p"`"*/
+      p"$q$q$q"
 
     case StringConcat(StringConcat(a, sl@StringLiteral(s)), b) if s.endsWith("\n") => // Is not used anymore normally
       p"""$a + $sl + \
@@ -90,9 +98,9 @@ object PythonRenderer extends inox.ast.Printer {
     case IsInstanceOf(e, cct) => p"$e.tag == $q$cct$q"
     case FunctionInvocation(id, tps, args) =>
       p"$id($args)"
-    case StringLiteral(v) =>
-      val escaped = v.replaceAllLiterally("\\", "\\\\").replaceAllLiterally("`", "\\`") // We can keep newlines !
-      p"$t$escaped$t"
+    /*case StringLiteral(v) =>
+      val escaped = v.replaceAllLiterally("\\", "\\\\") // We can keep newlines !
+      p"$q$q$q$escaped$q$q$q"*/
     case _ => super.ppBody(tree)
   }
 }
