@@ -5,6 +5,7 @@ import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
 import inox.InoxProgram
+import perfect.ProgramFormula.CloneText
 
 object Utils {
   /** Inner variables first */
@@ -201,9 +202,67 @@ object Utils {
   def simplifyClones(e: Expr, cloned: Variable): Option[(Variable, Expr)] = (e match {
     case Let(clonedVd, v: Variable, body2) if clonedVd.toVariable == cloned =>
       Some((v, exprOps.replaceFromSymbols(Map(clonedVd -> v), body2)))
-    case Let(clonedVd, k, Let(v, `cloned`, body2)) if clonedVd.toVariable == cloned =>
-      Some((v.toVariable, Let(v, k, exprOps.replaceFromSymbols(Map(clonedVd -> v.toVariable),body2))))
+    case Let(clonedVd, k, body) if clonedVd.toVariable == cloned
+      && (exprOps.count{
+        case Let(v, `cloned`, _) => 1
+        case _ => 0
+      }(body)) == 1
+      =>
+      val optV = exprOps.collect{
+        case Let(v, `cloned`, _) => Set(v.toVariable)
+        case _ => Set[Variable]()
+      }(body).headOption
+
+      optV.map( (v: Variable) =>
+        (v, exprOps.preMap{
+          case Let(v, `cloned`, body2) => Some(Let(v, k, body2))
+          case `cloned` => Some(v)
+          case _ => None
+        }(body))
+      )
     case Let(a, b, c) => simplifyClones(c, cloned).map{ case (v, cp) => (v, Let(a, b, cp) )}
     case _ => None
   }) /: Log.prefix(s"simplifyClones($e, $cloned) :=")
+
+  /** Returns a unique name based on the default name and a suffix using alphabet letter to avoid conflicts. */
+  def uniqueName(default: String, conflicts: Set[String]): String = {
+    var finalName = default
+    var suffix = ""
+    while(conflicts(finalName + suffix.reverse)) {
+      val zs = suffix.takeWhile(c => c == 'z')
+      val not_zs = suffix.drop(zs.length)
+      val after_zs = if(not_zs.isEmpty) "a" else {
+        (not_zs(0) + 1).toChar + not_zs.substring(1)
+      }
+      suffix = "a"*zs.length + after_zs
+    }
+    finalName + suffix.reverse
+  }
+
+  /** If two variables have the same name, replace the second by a unique name */
+  def renameConflicts(e: Expr): (Expr, Map[Variable, Variable]) = {
+    var renamings = Map[Variable, Variable]()
+    val newExpr = exprOps.preMap{
+      case Let(vd, vdValue, body) =>
+        val conflicts = exprOps.count{
+          case Let(vd2, e2, k2) =>
+            if(vd2.toVariable.toString == vd.toVariable.toString) 1 else 0
+          case _ => 0
+        }(body)
+        if(conflicts == 0) {
+          None
+        } else {
+          val toavoid = exprOps.collect[String]{
+            case Let(vd2, e2, k2) => Set(vd2.toVariable.id.name)
+            case _ => Set()
+          }(body)
+          val newV = Variable(FreshIdentifier(uniqueName(vd.id.name, toavoid)), vd.tpe, vd.flags)
+          val newBody = exprOps.replaceFromSymbols(Map(vd -> newV), body)
+          renamings += (vd.toVariable -> newV)
+          Some(Let(newV.toVal, vdValue, newBody))
+        }
+      case _ => None
+    }(e)
+    (newExpr, renamings)
+  }
 }
