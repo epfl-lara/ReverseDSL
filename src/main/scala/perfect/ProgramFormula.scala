@@ -562,6 +562,7 @@ object ProgramFormula {
             Application(Lambda(valdefs, ADTSelector(ADT(_, Seq(before, after)), `_2`)), varValues)
           )) =>
             Some((before, valdefs.toList.map(_.toVariable).zip(varValues), after))
+          case _ => None
         }
       }
     }
