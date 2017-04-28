@@ -255,6 +255,25 @@ object ReverseProgram extends lenses.Lenses {
         case l: Literal[_] =>
           import ProgramFormula._
           newOut match {
+            case PatternMatch.Expr(before, variables) =>
+              before match {
+                case lBefore: Literal[_] =>
+                  Stream(ProgramFormula(lBefore))
+                case vBefore: Variable =>
+                  val value = variables.collectFirst{
+                    case (v, value) if v == vBefore => value
+                  }
+                  value.toStream.map(value =>
+                    ProgramFormula(vBefore, Formula(vBefore -> InsertVariable(value)))
+                  )
+                case StringConcat(a, b) =>
+                  val newFormula = Formula(exprOps.variablesOf(before).map(v => v -> InsertVariable(variables.collectFirst{
+                    case (v2, value) if v2 == v => value
+                  }.get)).toMap)
+                  Stream(ProgramFormula(before, newFormula))
+                case op => throw new Exception("Operation not supported in pattern matching: " + op)
+              }
+
             case CloneTextMultiple.Expr(left, textVarRights) =>
               val middleExpr = CloneTextMultiple.createExpr(left, textVarRights)
               def first = if(program.canDoWrapping) { // Insert let-expressions the closest to the use.
@@ -523,8 +542,53 @@ object ReverseProgram extends lenses.Lenses {
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
           newOut match {
-            case ProgramFormula.PatternMatch.Expr(before, variables, after) =>
-              ???
+            case ProgramFormula.PatternMatch.Expr(pattern, variables) =>
+              pattern match {
+                case ADT(adtType2, argsIn2) if adtType2 == adtType =>
+                  val argumentsRepaired = for{ (argIn, argIn2) <- argsIn.zip(argsIn2) } yield {
+                    repair(program.subExpr(argIn),
+                      newOutProgram.subExpr(
+                        ProgramFormula.PatternMatch.Expr(
+                          argIn2, variables
+                        )
+                      )
+                    )
+                  }
+                  for{ res <- regroupArguments(argumentsRepaired)
+                       (newArgs, formula) = res
+                  } yield {
+                    ProgramFormula(ADT(adtType, newArgs), formula)
+                  }
+
+                case v: Variable if variables.indexWhere(_._1 == v) >= 0 =>
+                  val value = variables.collectFirst{ case (`v`, value) => value  }.get
+                  // Normally the value equals functionValue, so no need to call it.
+                  Stream(ProgramFormula(v, Formula(v -> InsertVariable(value))))
+
+                case _ => throw new Exception("Did not expect something else than an ADT of same type or variable here")
+              }
+
+            case ProgramFormula.PatternReplace.Expr(before, variables, after) =>
+              before match {
+                case ADT(adtType2, argsIn2) if adtType2 == adtType =>
+                  val argsMatched = argsIn.zip(argsIn2).map{
+                    case (expr, pattern) =>
+                      repair(
+                        program.subExpr(expr),
+                        newOutProgram.subExpr(
+                          ProgramFormula.PatternMatch.Expr(
+                            pattern, variables
+                          )))
+                  }
+                  for{ argumentsCombined <-regroupArguments(argsMatched)
+                       (_, formula) = argumentsCombined
+                  } yield ProgramFormula(after, formula)
+
+                case v: Variable =>
+                  ???
+
+                case _ => throw new Exception("Did not expect something else than an ADT of same type or variable here")
+              }
             case ProgramFormula.ListInsert.Expr(tpe, before, inserted, after) =>
               Log("ListInsert")
               if(before.length == 0) { // Insertion happens before this element
@@ -920,9 +984,15 @@ object ReverseProgram extends lenses.Lenses {
       Log(s" repairing argument $arg should equal $expected")
       repair(ProgramFormula(arg, pf.formula), expected)
     }
-    for ( r <- inox.utils.StreamUtils.cartesianProduct(argumentsReversed)) yield {
-     (r.map(_.expr),
-       (Formula() /: r) { case (f, pfr) => f combineWith pfr.formula })//r.map(_.formula))
+    regroupArguments(argumentsReversed)
+  }
+
+  // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
+  private def regroupArguments(arguments: Seq[Stream[ProgramFormula]])
+                            (implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
+    inox.utils.StreamUtils.cartesianProduct(arguments).map{
+      pfs =>
+        (pfs.map(_.expr), (Formula() /: pfs) { case (f, pfr) => f combineWith pfr.formula })
     }
   }
 

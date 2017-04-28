@@ -265,4 +265,18 @@ object Utils {
     }(e)
     (newExpr, renamings)
   }
+
+  /** Inline variables which can be inlined. */
+  def inlineVariables(e: Expr, variables: List[Variable]): Expr = {
+    exprOps.postMap{
+      case let@Let(vd, expr, body) if (variables contains vd.toVariable) &&
+        exprOps.count{
+          case v: Variable if vd.toVariable == v => 1
+          case _ => 0
+        }(body) <= 1
+      =>
+        Some(exprOps.replaceFromSymbols(Map(vd -> expr), body)) /: Log.prefix(s"inlineVariables($vd = $expr, $variables) = ")
+      case _ => None
+    }(e)
+  } /: Log.prefix(s"inlineVariables($e, $variables) = ")
 }

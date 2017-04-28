@@ -38,7 +38,7 @@ class WebTest extends FunSuite with TestHelpers {
       val pfun = _Element("div", _List[WebElement](
         _WebElement(_TextNode("This is some text"))
       ))
-      val repaired = PatternMatch.Expr.Build(
+      val repaired = PatternReplace.Expr.Build(
         ("t" :: StringType, "This "),
         ("is_some" :: StringType, "is some"),
         ("text" :: StringType, " text")) { case Seq(t, is_some, text) =>
@@ -51,7 +51,11 @@ class WebTest extends FunSuite with TestHelpers {
             _WebElement(_TextNode(text))
           )))
       }
-      pfun repairFrom repaired shouldEqual
+
+      val PatternReplace.Expr(_, varVals, _) = repaired
+      val variables = varVals.map(_._1)
+
+      Utils.inlineVariables(pfun repairFrom repaired, variables) shouldEqual
         _Element("div", _List[WebElement](
           _WebElement(_TextNode("This ")),
           _WebElement(Bold(_TextNode("is some"))),
@@ -67,10 +71,10 @@ class WebTest extends FunSuite with TestHelpers {
       )))
     val original = eval(pfun)
 
-    val repaired = PatternMatch.Expr.Build(
-      ("t"::StringType, "This "),
-      ("is_some"::StringType, "is some"),
-      ("text"::StringType, " text")){ case Seq(t, is_some, text) =>
+    val repaired = PatternReplace.Expr.Build(
+      ("t" :: StringType, "This "),
+      ("is_some" :: StringType, "is some"),
+      ("text" :: StringType, " text")) { case Seq(t, is_some, text) =>
       (_Element("div", _List[WebElement](
         _WebElement(_TextNode(t +& is_some +& text))
       )),
@@ -80,8 +84,10 @@ class WebTest extends FunSuite with TestHelpers {
           _WebElement(_TextNode(text))
         )))
     }
+    val PatternReplace.Expr(_, varVals, _) = repaired
+    val variables = varVals.map(_._1)
 
-    val (someV, textV, body) = pfun repairFrom repaired match {
+    val (someV, textV, body) = Utils.inlineVariables(pfun repairFrom repaired, variables) match {
       case Let(someVd, StringLiteral("some"), Let(textVd, StringLiteral(" text"), Let(sometextvd, someV +& textV, body))) =>
         (someVd.toVariable, textVd.toVariable, body)
       case Let(textVd, StringLiteral(" text"), Let(someVd, StringLiteral("some"), Let(sometextvd, someV +& textV, body))) =>

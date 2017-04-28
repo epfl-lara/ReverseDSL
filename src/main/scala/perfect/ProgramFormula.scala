@@ -532,8 +532,52 @@ object ProgramFormula {
     }
   }
 
+  /** Will replace CloneTextMultiple one day. */
   object PatternMatch extends CustomProgramFormula {
-    private val PMId = FreshIdentifier("pattern")
+    private val PMId = FreshIdentifier("matcher")
+
+    def apply(before: Expr, variables: List[(Variable, Expr)])(implicit symbols: Symbols) =
+      ProgramFormula(Expr(before, variables))
+    def unapply(e: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)])] = {
+      Expr.unapply(e.expr)
+    }
+
+    object Expr {
+      import ImplicitTuples._
+
+      def Build(names: (ValDef, Expr)*)(f: Seq[Variable] => Expr)(implicit symbols: Symbols): Expr = {
+        val variables = names.toList.map(n => n._1.toVariable)
+        val before = f(variables)
+        apply(before, variables.zip(names.map(_._2)))
+      }
+
+      def apply(before: Expr, variables: List[(Variable, Expr)])(implicit symbols: Symbols) : Expr = {
+        E(PMId)(before.getType)(Application(
+          Lambda(variables.map(_._1.toVal), before)
+          , variables.map(_._2)))
+      }
+
+      def unapply(e: Expr)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)])] = {
+        e match {
+          case FunctionInvocation(PMId, Seq(_), Seq(
+          Application(Lambda(valdefs, before), varValues)
+          )) =>
+            Some((before, valdefs.toList.map(_.toVariable).zip(varValues)))
+          case _ => None
+        }
+      }
+    }
+
+    def funDef = mkFunDef(PMId)("A"){ case Seq(tA) =>
+      (Seq("id"::tA), tA,
+        { case Seq(id) =>
+          id // Dummy
+        })
+    }
+  }
+
+  object PatternReplace extends CustomProgramFormula {
+    private val PMId = FreshIdentifier("replace")
 
     def apply(before: Expr, variables: List[(Variable, Expr)], after: Expr)(implicit symbols: Symbols) =
       ProgramFormula(Expr(before, variables, after))
