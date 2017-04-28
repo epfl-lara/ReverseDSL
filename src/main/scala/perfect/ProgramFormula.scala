@@ -642,6 +642,10 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
     givenValue = Some(e)
     this
   }
+  def withComputedValue(e: Option[Expr]): this.type = {
+    givenValue = givenValue.orElse(e)
+    this
+  }
 
   // Can be set-up externally to bypass the computation of the function value.
   // Must be set before a call to functionValue using .withComputedValue

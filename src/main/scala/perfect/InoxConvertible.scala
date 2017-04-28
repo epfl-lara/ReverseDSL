@@ -353,10 +353,34 @@ object InoxConvertible {
     case Nil => _Nil[A]
     case head +: tail => _Cons[A](head, _List[A](tail: _*))
   }
+  object _List {
+    def unapplySeq(e: Expr): Option[Seq[Tree]] = e match {
+      case ADT(ADTType(Utils.nil, Seq(tpe)), Seq())  => Some(Seq(tpe))
+      case ADT(ADTType(Utils.cons, Seq(tpe)), Seq(head, tail)) =>
+        unapplySeq(tail) match {
+          case Some(tpeElements) => Some(tpe +: tpeElements.tail)
+          case _ => None
+        }
+    }
+  }
   def _TextNode(value: Expr) = ADT(ADTType(Utils.textNode, Seq()), Seq(value))
-  def _Element(tag: Expr, children: Expr, attributes: Expr, styles: Expr) =
-    ADT(ADTType(Utils.element, Seq()), Seq(tag, children, attributes, styles))
-  def _WebElement(inner: Expr) = ADT(ADTType(Utils.webElement, Seq()), Seq(inner))
+  object _Element {
+    def apply(tag: Expr, children: Expr, attributes: Expr=_List[WebAttribute](), styles: Expr=_List[WebStyle]()) =
+      ADT(ADTType(Utils.element, Seq()), Seq(tag, children, attributes, styles))
+    def unapply(e: Expr): Option[(Expr, Expr, Expr, Expr)] = e match {
+      case ADT(ADTType(Utils.element, Seq()), Seq(tag, children, attributes, styles)) =>
+        Some((tag, children, attributes, styles))
+      case _ => None
+    }
+  }
+  object _WebElement{
+    def apply(inner: Expr) = ADT(ADTType(Utils.webElement, Seq()), Seq(inner))
+    def unapply(e: Expr): Option[Expr] = e match {
+      case ADT(ADTType(Utils.webElement, Seq()), Seq(inner)) => Some(inner)
+      case _ => None
+    }
+  }
+
   def _WebAttribute(key: Expr, value: Expr) = ADT(ADTType(Utils.webAttribute, Seq()), Seq(key, value))
   def _WebStyle(key: Expr, value: Expr) = ADT(ADTType(Utils.webStyle, Seq()), Seq(key, value))
   def _Some[A: InoxConvertible](e: Expr) = ADT(ADTType(Utils.some, Seq(inoxTypeOf[A])), Seq(e))

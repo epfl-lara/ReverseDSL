@@ -540,10 +540,12 @@ object ReverseProgram extends lenses.Lenses {
                   Log("afterLength > 0")
                   functionValue match {
                     case Some(ListLiteral(functionValueList, tpe)) =>
+                      val newTail = ListLiteral(functionValueList.tail, tpe)
+
                       if(after.length == functionValueList.length) { // No deletion.
                         Log("afterLength == functionValueList.length")
-                        for{ pf <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(after.head))
-                             pf2 <- repair(program.subExpr(argsIn(1)),
+                        for{ pf <- repair(program.subExpr(argsIn(0)).withComputedValue(functionValueList.head), newOutProgram.subExpr(after.head))
+                             pf2 <- repair(program.subExpr(argsIn(1)).withComputedValue(newTail),
                                ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail) combineWith newOutFormula) } yield {
                           ProgramFormula(ListLiteral.concat(
                             ListLiteral(inserted, tpe),
@@ -554,7 +556,7 @@ object ReverseProgram extends lenses.Lenses {
                         Log("afterLength < functionValueList.length")
                         assert(after.length < functionValueList.length) // some deletion happened.
                         val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after) combineWith newOutFormula // Recursive problem if
-                        for{ pf <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
+                        for{ pf <- repair(program.subExpr(argsIn(1)).withComputedValue(newTail), updatedOutProgram)} yield {
                           pf.wrap{ x =>
                             ListLiteral.concat(
                               ListLiteral(inserted, tpe),
@@ -581,10 +583,15 @@ object ReverseProgram extends lenses.Lenses {
 
             case v: Variable =>
               Stream(newOutProgram)
-            case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != newOut => // Same type ! Maybe the arguments will change or move.
+            case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != Some(newOut) => // Same type ! Maybe the arguments will change or move.
               Log("ADT 2")
-              val seqOfStreamSolutions = argsIn.zip(argsOut).map { case (aFun, aVal) =>
-                repair(ProgramFormula(aFun, program.formula), newOutProgram.subExpr(aVal))
+              val argsInValue = functionValue match {
+                case Some(ADT(ADTType(_, _), argsInValue)) => argsInValue.map(x => Some(x))
+                case _ => argsIn.map(_ => None)
+              }
+
+              val seqOfStreamSolutions = (argsIn.zip(argsInValue)).zip(argsOut).map { case ((aFun, aFunVal), newOutArg) =>
+                repair(ProgramFormula(aFun, program.formula).withComputedValue(aFunVal), newOutProgram.subExpr(newOutArg))
               }
               val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
               for {seq <- streamOfSeqSolutions

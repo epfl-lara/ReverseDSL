@@ -422,7 +422,6 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
 
     val cloneVar = variable[String]("clone")
 
-    Log.activate = true
     val pfun2 = pfun repairFrom CloneText("I am ", "Mikael", " the great ", cloneVar) shouldProduce StringLiteral("I am Mikael the great ")
 
     pfun2 match {
@@ -439,7 +438,6 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
 
   test("Add space after clone") {
     val pfun:Expr = let("move_it"::StringType, "move it")(move_it => "I like to "+&move_it)
-    Log.activate = true
 
     repairProgramList(pfun, StringInsert.Expr("I like to move it", " ", "", AssociativeInsert.InsertAutomatic), 2).map{
       case Let(p, StringLiteral("move it"), body) => 1
