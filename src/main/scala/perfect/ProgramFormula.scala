@@ -315,13 +315,12 @@ object ProgramFormula {
     }
   }
 
-  /** Inserts a variable for a given selected text.*/
-  object CloneText extends CustomProgramFormula  { ct =>
+  /** Inserts a variable for a given selected text. Simpler than CloneTextMultiple. */
+  object CloneText  { ct =>
     private val Cloned = FreshIdentifier("cloned")
 
     def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set())): ProgramFormula = {
       val variable = if(insertedVar.id.name == "") Var(text) else insertedVar
-      //ProgramFormula(E(Cloned)(StringLiteral(left), StringLiteral(text), StringLiteral(right), variable))
       CloneTextMultiple(left, List((text, variable, right)))
     }
     object Var {
@@ -330,34 +329,9 @@ object ProgramFormula {
         val word = text.split("\\W+")
           .filter(x => x.nonEmpty && x.charAt(0).isLetter).mkString("_").take(15).toLowerCase()
         val default = if(word.isEmpty) "x" else word
-        var finalName = default
-        var suffix = ""
-        while(conflicts.exists(_ == finalName + suffix.reverse)) {
-          val zs = suffix.takeWhile(c => c == 'z')
-          val not_zs = suffix.drop(zs.length)
-          val after_zs = if(not_zs.isEmpty) "a" else {
-            (not_zs(0) + 1).toChar + not_zs.substring(1)
-          }
-          suffix = "a"*zs.length + after_zs
-        }
-        Variable(FreshIdentifier(finalName + suffix.reverse), StringType, Set())
+        val finalName = Utils.uniqueName(default, conflicts.toSet)
+        Variable(FreshIdentifier(finalName), StringType, Set())
       }
-    }
-
-    /*def unapply(f: ProgramFormula): Option[(String, String, String, Variable)] = {
-      f.expr match {
-        case FunctionInvocation(Cloned, Seq(), Seq(StringLiteral(left), StringLiteral(cloned), StringLiteral(right), v: Variable)) =>
-          Some((left, cloned, right, v))
-        case _ => None
-      }
-    }*/
-
-    def funDef = mkFunDef(Cloned)(){ case _ =>
-      (Seq("left"::StringType, "cloned"::StringType, "right"::StringType, "varname"::StringType),
-        StringType,
-        { case Seq(left, cloned, right, varname) =>
-            left +& cloned +& right // Dummy
-        })
     }
   }
 
@@ -558,6 +532,48 @@ object ProgramFormula {
     }
   }
 
+  object PatternMatch extends CustomProgramFormula {
+    private val PMId = FreshIdentifier("pattern")
+
+    def apply(before: Expr, variables: List[(Variable, Expr)], after: Expr)(implicit symbols: Symbols) =
+      ProgramFormula(Expr(before, variables, after))
+    def unapply(e: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)], Expr)] = {
+      Expr.unapply(e.expr)
+    }
+
+    object Expr {
+      import ImplicitTuples._
+
+      def Build(names: (ValDef, Expr)*)(f: Seq[Variable] => (Expr, Expr))(implicit symbols: Symbols): Expr = {
+        val variables = names.toList.map(n => n._1.toVariable)
+        val (before, after) = f(variables)
+        apply(before, variables.zip(names.map(_._2)), after)
+      }
+
+      def apply(before: Expr, variables: List[(Variable, Expr)], after: Expr)(implicit symbols: Symbols) : Expr = {
+        E(PMId)(after.getType)(Application(
+          Lambda(variables.map(_._1.toVal), _Tuple2(before.getType, after.getType)(before, after).getField(_2))
+          , variables.map(_._2)))
+      }
+
+      def unapply(e: Expr)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)], Expr)] = {
+        e match {
+          case FunctionInvocation(PMId, Seq(_), Seq(
+            Application(Lambda(valdefs, ADTSelector(ADT(_, Seq(before, after)), `_2`)), varValues)
+          )) =>
+            Some((before, valdefs.toList.map(_.toVariable).zip(varValues), after))
+        }
+      }
+    }
+
+    def funDef = mkFunDef(PMId)("A"){ case Seq(tA) =>
+      (Seq("id"::tA), tA,
+        { case Seq(id) =>
+            id // Dummy
+        })
+    }
+  }
+
   /** Paste a previously cloned variable. Like  StringInsert but with a variable inside it. */
   object PasteVariable extends Enumeration with CustomProgramFormula  {
     private val Paste = FreshIdentifier("pastevariable")
@@ -618,8 +634,8 @@ object ProgramFormula {
     TreeUnwrap,
     StringInsert,
     ListInsert,
-    CloneText,
     CloneTextMultiple,
+    PatternMatch,
     PasteVariable
   )
 
