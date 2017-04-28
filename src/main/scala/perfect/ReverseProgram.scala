@@ -254,8 +254,8 @@ object ReverseProgram extends lenses.Lenses {
         // Values (including lambdas) should be immediately replaced by the new value
         case l: Literal[_] =>
           import ProgramFormula._
-          newOutProgram match {
-            case CloneTextMultiple(left, textVarRights) =>
+          newOut match {
+            case CloneTextMultiple.Expr(left, textVarRights) =>
               val middleExpr = CloneTextMultiple.createExpr(left, textVarRights)
               def first = if(program.canDoWrapping) { // Insert let-expressions the closest to the use.
                 val outputExpr = CloneTextMultiple.assignmentDirect(textVarRights)(middleExpr)
@@ -266,7 +266,7 @@ object ReverseProgram extends lenses.Lenses {
                 val formula = CloneTextMultiple.assignmentFormula(textVarRights)
                 Stream(ProgramFormula(middleExpr, formula))
               }
-            case ProgramFormula.PasteVariable(left, v, v_value, right, direction) =>
+            case ProgramFormula.PasteVariable.Expr(left, v, v_value, right, direction) =>
               if(left == "" && right == "") {
                 Stream(ProgramFormula(v))
               } else if(left == "" && right != "") {
@@ -276,40 +276,37 @@ object ReverseProgram extends lenses.Lenses {
               } else  {
                 Stream(ProgramFormula(StringLiteral(left) +& v +& StringLiteral(right)))
               }
-            case _ =>
-              newOut match {
-                case v: Variable => // We check if the replacement value is a Paste, in which case we are allowed to modify the program.
-                  newOutFormula.findConstraintValue(v) match {
-                    case Some(ProgramFormula.PasteVariable.Expr(left, v2, v2_value, right, direction)) =>
-                      val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
-                      Stream(ProgramFormula(newExpr, newOutFormula))
-                    case Some(ProgramFormula.CloneTextMultiple.Expr(left, textVarRights)) =>
-                      val newExpr = CloneTextMultiple.createExpr(left, textVarRights)
-                      val formula = CloneTextMultiple.assignmentFormula(textVarRights)
-                      Stream(ProgramFormula(newExpr, newOutFormula combineWith formula))
-                    case Some(ProgramFormula.StringInsert.Expr(left, middle, right, direction)) =>
-                      val newExpr = StringLiteral(left + middle + right)
-                      Stream(ProgramFormula(newExpr, newOutFormula))
-                    case _ =>
-                      // Replacement with the variable newOut, with a maybe clause.
-                      Stream(newOutProgram combineWith Formula(v -> OriginalValue(l)))
-                  }
-
-
-                case l: Literal[_] => // Raw replacement
-                  Stream(newOutProgram)
-                case m: MapApply =>
-                  repair(program, newOutProgram.subExpr(newOutProgram.formula.findConstraintVariableOrLiteral(m)))
-
-                /*case l@Let(cloned: ValDef, _, _) =>
-                  Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
+            case v: Variable => // We check if the replacement value is a Paste, in which case we are allowed to modify the program.
+              newOutFormula.findConstraintValue(v) match {
+                case Some(ProgramFormula.PasteVariable.Expr(left, v2, v2_value, right, direction)) =>
+                  val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
+                  Stream(ProgramFormula(newExpr, newOutFormula))
+                case Some(ProgramFormula.CloneTextMultiple.Expr(left, textVarRights)) =>
+                  val newExpr = CloneTextMultiple.createExpr(left, textVarRights)
+                  val formula = CloneTextMultiple.assignmentFormula(textVarRights)
+                  Stream(ProgramFormula(newExpr, newOutFormula combineWith formula))
+                case Some(ProgramFormula.StringInsert.Expr(left, middle, right, direction)) =>
+                  val newExpr = StringLiteral(left + middle + right)
+                  Stream(ProgramFormula(newExpr, newOutFormula))
                 case _ =>
-                  newOutProgram match {
-                    case ProgramFormula.StringInsert(left, inserted, right, direction) =>
-                      Stream(ProgramFormula(StringLiteral(left + inserted + right)))
-                    case _ =>
-                      throw new Exception("Don't know what to do, not a Literal, a Variable, a let, a string insertion or deletion: "+newOut)
-                  }
+                  // Replacement with the variable newOut, with a maybe clause.
+                  Stream(newOutProgram combineWith Formula(v -> OriginalValue(l)))
+              }
+
+
+            case l: Literal[_] => // Raw replacement
+              Stream(newOutProgram)
+            case m: MapApply =>
+              repair(program, newOutProgram.subExpr(newOutProgram.formula.findConstraintVariableOrLiteral(m)))
+
+            /*case l@Let(cloned: ValDef, _, _) =>
+              Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
+            case _ =>
+              newOutProgram match {
+                case ProgramFormula.StringInsert(left, inserted, right, direction) =>
+                  Stream(ProgramFormula(StringLiteral(left + inserted + right)))
+                case _ =>
+                  throw new Exception("Don't know what to do, not a Literal, a Variable, a let, a string insertion or deletion: "+newOut)
               }
           }
 
@@ -526,6 +523,8 @@ object ReverseProgram extends lenses.Lenses {
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
           newOut match {
+            case ProgramFormula.PatternMatch.Expr(before, variables, after) =>
+              ???
             case ProgramFormula.ListInsert.Expr(tpe, before, inserted, after) =>
               Log("ListInsert")
               if(before.length == 0) { // Insertion happens before this element

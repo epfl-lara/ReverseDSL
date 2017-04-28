@@ -607,7 +607,29 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         like.toVariable shouldEqual like3
         move_it.toVariable shouldEqual move_it2
         like2 shouldEqual like3
-        l
+    }
+  }
+
+  test("Clone and paste tricky") {
+    val pfun: Expr =
+      let("ab"::String, "ab")(ab =>
+        let("x"::String, ab)(x =>
+          x +& x
+        )
+      )
+
+    val expected = "abab"
+
+    pfun shouldProduce expected
+
+    val v = variable[String]("cloned")
+    Log.activated {
+      val pfun2 = pfun repairFrom CloneText("ab", "ab", "", v) shouldProduce expected
+
+      exprOps.count {
+        case Let(vd, _, _) if vd.toVariable == v => 1
+        case _ => 0
+      }(pfun2) shouldEqual 1
     }
   }
 
