@@ -228,7 +228,10 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
 
   /** Finds the 'value' of a variable in the lhs of a constraint*/
   def findConstraintValue(v: Variable): Option[Expr] = {
-    known.get(v).flatMap(_.getValue)
+    known.get(v).flatMap(_.getValue).flatMap{
+      case v: Variable => findConstraintValue(v).orElse(Some(v))
+      case x => Some(x)
+    }
   }
 
   /** Finds the value of an element in a map, in the formula */
