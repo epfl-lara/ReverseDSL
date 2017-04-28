@@ -19,7 +19,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 
 /** Mixin for tests repairing programs */
-trait TestHelpers extends InoxConvertible.conversions {
+trait TestHelpers extends InoxConvertible.conversions { self: FunSuite =>
   import InoxConvertible._
   import StringConcatExtended._
 
