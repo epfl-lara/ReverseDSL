@@ -567,8 +567,6 @@ object ReverseProgram extends lenses.Lenses {
                 case _ => throw new Exception(s"Unexpected pattern: $before")
               }
 
-            case pf@ProgramFormula.StringInsert(left, inserted, right, direction) =>
-              repair(program, pf)
             case _ =>
               ifEmpty(for (pf <- repair(program.subExpr(FunctionInvocation(StringConcatReverser.identifier, Nil,
                 Seq(expr1, expr2))), newOutProgram)) yield {
