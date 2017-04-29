@@ -493,9 +493,7 @@ object ReverseProgram extends lenses.Lenses {
             map(v => ProgramFormula(v, newOutFormula)).getOrElse(newOutProgram) match {
             case pf@ProgramFormula.PatternMatch(before, variables) =>
               before match {
-                case StringLiteral(_) =>
-                  Stream(program.assignmentsAsOriginals())
-                case StringConcats(patterns) =>
+                case StringConcats.Exhaustive(patterns) =>
                   val values: List[String] = patterns.map{ pattern =>
                     val StringLiteral(a) = ProgramFormula(pattern, Formula(variables.map{
                       case (v, value) => v -> StrongValue(value)}.toMap )).functionValue
@@ -562,9 +560,6 @@ object ReverseProgram extends lenses.Lenses {
                       case e => throw new Exception(s"[internal error] Only variables and strings in string patterns, got $e")
                     }
                   }
-                case v: Variable =>
-                  ???
-                case _ => throw new Exception(s"Unexpected pattern: $before")
               }
 
             case _ =>

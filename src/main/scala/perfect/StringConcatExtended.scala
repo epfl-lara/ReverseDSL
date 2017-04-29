@@ -37,15 +37,15 @@ object StringConcatExtended {
     }
   }
   object StringConcats {
-    private object StringConcatExtract {
+    object Exhaustive {
       def unapply(e: Expr): Some[List[Expr]] = e match {
-        case StringConcat(StringConcatExtract(a), StringConcatExtract(b)) => Some(a ++ b)
+        case StringConcat(Exhaustive(a), Exhaustive(b)) => Some(a ++ b)
         case e => Some(List(e))
       }
     }
 
     def unapply(e: Expr): Option[List[Expr]] = e match {
-      case StringConcatExtract(l) if l.length >= 2 => Some(l)
+      case Exhaustive(l) if l.length >= 2 => Some(l)
       case _ => None
     }
     def apply(s: Seq[Expr]): Expr = s match {
