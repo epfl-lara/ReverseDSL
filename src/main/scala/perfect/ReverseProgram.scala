@@ -5,7 +5,7 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
-import perfect.ProgramFormula.StringInsert
+import perfect.ProgramFormula.{PatternMatch, StringInsert}
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
@@ -254,7 +254,10 @@ object ReverseProgram extends lenses.Lenses {
         // Values (including lambdas) should be immediately replaced by the new value
         case l: Literal[_] =>
           import ProgramFormula._
-          newOut match {
+          optVar(newOut).flatMap(newOutFormula.findConstraintValue).getOrElse(newOut) match {
+            case l: Literal[_] => // Raw replacement
+              Stream(newOutProgram)
+
             case PatternMatch.Expr(before, variables) =>
               before match {
                 case lBefore: Literal[_] =>
@@ -274,59 +277,31 @@ object ReverseProgram extends lenses.Lenses {
                 case op => throw new Exception("Operation not supported in pattern matching: " + op)
               }
 
-            case CloneTextMultiple.Expr(left, textVarRights) =>
-              val middleExpr = CloneTextMultiple.createExpr(left, textVarRights)
+            case ProgramFormula.PasteVariable.Expr(left, v2, v2_value, right, direction) =>
+              val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
+              Stream(ProgramFormula(newExpr, newOutFormula))
+
+            case ProgramFormula.CloneTextMultiple.Expr(left, textVarRights) =>
+              val newExpr = CloneTextMultiple.createExpr(left, textVarRights)
               def first = if(program.canDoWrapping) { // Insert let-expressions the closest to the use.
-                val outputExpr = CloneTextMultiple.assignmentDirect(textVarRights)(middleExpr)
+                val outputExpr = CloneTextMultiple.assignmentDirect(textVarRights)(newExpr)
                 Stream(ProgramFormula(outputExpr))
               } else Stream.empty
 
               first #::: {
                 val formula = CloneTextMultiple.assignmentFormula(textVarRights)
-                Stream(ProgramFormula(middleExpr, formula))
+                Stream(ProgramFormula(newExpr, formula))
               }
-            case ProgramFormula.PasteVariable.Expr(left, v, v_value, right, direction) =>
-              if(left == "" && right == "") {
-                Stream(ProgramFormula(v))
-              } else if(left == "" && right != "") {
-                Stream(ProgramFormula(v +& StringLiteral(right)))
-              } else if(left != "" && right == "") {
-                Stream(ProgramFormula(StringLiteral(left) +& v))
-              } else  {
-                Stream(ProgramFormula(StringLiteral(left) +& v +& StringLiteral(right)))
-              }
-            case v: Variable => // We check if the replacement value is a Paste, in which case we are allowed to modify the program.
-              newOutFormula.findConstraintValue(v) match {
-                case Some(ProgramFormula.PasteVariable.Expr(left, v2, v2_value, right, direction)) =>
-                  val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
-                  Stream(ProgramFormula(newExpr, newOutFormula))
-                case Some(ProgramFormula.CloneTextMultiple.Expr(left, textVarRights)) =>
-                  val newExpr = CloneTextMultiple.createExpr(left, textVarRights)
-                  val formula = CloneTextMultiple.assignmentFormula(textVarRights)
-                  Stream(ProgramFormula(newExpr, newOutFormula combineWith formula))
-                case Some(ProgramFormula.StringInsert.Expr(left, middle, right, direction)) =>
-                  val newExpr = StringLiteral(left + middle + right)
-                  Stream(ProgramFormula(newExpr, newOutFormula))
-                case _ =>
-                  // Replacement with the variable newOut, with a maybe clause.
-                  Stream(newOutProgram combineWith Formula(v -> OriginalValue(l)))
-              }
+            case ProgramFormula.StringInsert.Expr(left, inserted, right, direction) =>
+              Stream(ProgramFormula(StringLiteral(left + inserted + right)))
 
-
-            case l: Literal[_] => // Raw replacement
-              Stream(newOutProgram)
             case m: MapApply =>
               repair(program, newOutProgram.subExpr(newOutProgram.formula.findConstraintVariableOrLiteral(m)))
-
-            /*case l@Let(cloned: ValDef, _, _) =>
-              Stream(ProgramFormula(newOut, Formula(Map(), Set(), Set(), BooleanLiteral(true))))*/
-            case _ =>
-              newOutProgram match {
-                case ProgramFormula.StringInsert(left, inserted, right, direction) =>
-                  Stream(ProgramFormula(StringLiteral(left + inserted + right)))
-                case _ =>
-                  throw new Exception("Don't know what to do, not a Literal, a Variable, a let, a string insertion or deletion: "+newOut)
-              }
+            case v: Variable =>
+                // Replacement with the variable newOut, with a maybe clause.
+              Stream(newOutProgram combineWith Formula(v -> OriginalValue(l)))
+            case _ => Log(s"[Internal warning] Don't know what to do to replace a literal by this: $newOutProgram")
+              Stream(newOutProgram)
           }
 
         case l: FiniteSet => // TODO: Need some rewriting to keep the variable's order.
@@ -514,8 +489,85 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case StringConcat(expr1, expr2) =>
-          optVar(newOutProgram.expr).flatMap(newOutFormula.findConstraintValue).map(v => ProgramFormula(v, newOutFormula)) match {
-            case Some(pf@ProgramFormula.StringInsert(left, inserted, right, direction)) =>
+          optVar(newOutProgram.expr).flatMap(newOutFormula.findConstraintValue).
+            map(v => ProgramFormula(v, newOutFormula)).getOrElse(newOutProgram) match {
+            case pf@ProgramFormula.PatternMatch(before, variables) =>
+              before match {
+                case StringLiteral(_) =>
+                  Stream(program.assignmentsAsOriginals())
+                case StringConcats(patterns) =>
+                  val values: List[String] = patterns.map{ pattern =>
+                    val StringLiteral(a) = ProgramFormula(pattern, Formula(variables.map{
+                      case (v, value) => v -> StrongValue(value)}.toMap )).functionValue
+                    a
+                  }
+                  val Some(StringLiteral(originalLeft)) = maybeEvalWithCache(functionFormula.assignments.get(expr1))
+                  val Some(StringLiteral(originalRight)) = maybeEvalWithCache(functionFormula.assignments.get(expr2))
+                  val shortestTailForLeft = values.inits.toList.reverse.find{
+                    case l => l.mkString("").startsWith(originalLeft)
+                  }.get
+                  val coverage = shortestTailForLeft.mkString("")
+                  if(coverage == originalLeft) {
+                    val newLeftPattern = StringConcats(patterns.take(shortestTailForLeft.length))
+                    val newRightPattern = StringConcats(patterns.drop(shortestTailForLeft.length))
+                    val arguments = List(
+                      repair(program.subExpr(expr1), pf.subExpr(PatternMatch.Expr(newLeftPattern, variables))),
+                      repair(program.subExpr(expr2), pf.subExpr(PatternMatch.Expr(newRightPattern, variables))))
+                    for{ regroupped <- regroupArguments(arguments)
+                         (Seq(newLeft1, newLeft2), formula) = regroupped
+                    } yield {
+                      ProgramFormula(StringConcat(newLeft1, newLeft2), formula)
+                    }
+                  } else {
+                    Log(s"coverage: `$coverage`")
+                    Log(s"origleft: `$originalLeft`")
+                    // shortestTailForLeft contains the originalLeft. We need to split the last variable.
+                    val lastValue: String = values(shortestTailForLeft.length-1)
+                    val extra = lastValue.length - (coverage.length - originalLeft.length) // > 0
+                    patterns(shortestTailForLeft.length - 1) match {
+                      case s: StringLiteral => // We can just split the string literal into two.
+                        repair(program, PatternMatch(StringConcats(
+                          patterns.take(shortestTailForLeft.length - 1) ++
+                          List(StringLiteral(lastValue.substring(0, extra)),
+                          StringLiteral(lastValue.substring(extra))) ++
+                          patterns.drop(shortestTailForLeft.length)
+                        ), variables))
+                      case lastVar: Variable => // Way interesting, we need to split the variable
+                        val leftVar = Variable(FreshIdentifier(Utils.uniqueName(lastVar.id.name, Set(lastVar.id.name))), StringType, Set())
+                        val rightVar = Variable(FreshIdentifier(Utils.uniqueName(lastVar.id.name, Set(lastVar.id.name, leftVar.id.name))), StringType, Set())
+                        val newFormula = Formula(Map(
+                          lastVar -> InsertVariable(leftVar +& rightVar),
+                          leftVar -> InsertVariable(StringLiteral(lastValue.substring(0, extra))),
+                          rightVar -> InsertVariable(StringLiteral(lastValue.substring(extra)))))
+                        val newLeftPattern = StringConcats(
+                          patterns.take(shortestTailForLeft.length - 1) ++
+                          List(leftVar))
+                        val newRightPattern = StringConcats(List(rightVar) ++
+                          patterns.drop(shortestTailForLeft.length)
+                        )
+
+                        val newVariables = variables.filter(_._1 != lastVar) ++
+                          List((leftVar, StringLiteral(lastValue.substring(0, extra))),
+                            (rightVar, StringLiteral(lastValue.substring(extra))))
+
+                        val arguments = List(
+                          repair(program.subExpr(expr1), pf.subExpr(PatternMatch.Expr(newLeftPattern, newVariables))),
+                          repair(program.subExpr(expr2), pf.subExpr(PatternMatch.Expr(newRightPattern, newVariables))))
+                        for{ regroupped <- regroupArguments(arguments)
+                             (Seq(newLeft1, newLeft2), formula) = regroupped
+                        } yield {
+                          ProgramFormula(StringConcat(newLeft1, newLeft2), formula combineWith newFormula)
+                        }
+
+                      case e => throw new Exception(s"[internal error] Only variables and strings in string patterns, got $e")
+                    }
+                  }
+                case v: Variable =>
+                  ???
+                case _ => throw new Exception(s"Unexpected pattern: $before")
+              }
+
+            case pf@ProgramFormula.StringInsert(left, inserted, right, direction) =>
               repair(program, pf)
             case _ =>
               ifEmpty(for (pf <- repair(program.subExpr(FunctionInvocation(StringConcatReverser.identifier, Nil,
@@ -569,7 +621,7 @@ object ReverseProgram extends lenses.Lenses {
               }
 
             case ProgramFormula.PatternReplace.Expr(before, variables, after) =>
-              before match {
+              before match { // TODO: Pattern replace at higher level?
                 case ADT(adtType2, argsIn2) if adtType2 == adtType =>
                   val argsMatched = argsIn.zip(argsIn2).map{
                     case (expr, pattern) =>
@@ -981,7 +1033,7 @@ object ReverseProgram extends lenses.Lenses {
       arguments: Seq[(Expr, ProgramFormula)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
     Log(s"combining arguments for $pf")
     val argumentsReversed = arguments.map { case (arg, expected) =>
-      Log(s" repairing argument $arg should equal $expected")
+      Log(s"repairing argument $arg should equal $expected")
       repair(ProgramFormula(arg, pf.formula), expected)
     }
     regroupArguments(argumentsReversed)

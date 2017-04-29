@@ -266,17 +266,34 @@ object Utils {
     (newExpr, renamings)
   }
 
+  /** Given a set of variables, return the extended set containing all dependencies. */
+  def newVariablesDependencies(e: Expr, init: Set[Variable]): Set[Variable] = {
+    inox.utils.fixpoint{
+      (s: Set[Variable]) => s.flatMap{
+        case v => Set(v) ++ exprOps.collect[Variable]{
+          case Let(vp, exprp, bodyp) if vp.toVariable == v =>
+            exprOps.collect[Variable]{
+              case vp2: Variable => Set(vp2)
+              case _ => Set[Variable]()
+            }(exprp)
+          case _ => Set[Variable]()
+        }(e)
+      }
+    }(init)
+  }
+
   /** Inline variables which can be inlined. */
-  def inlineVariables(e: Expr, variables: List[Variable]): Expr = {
+  def inlineVariables(e: Expr, toInline: Set[Variable]): Expr = {
+    Log(s"inlineVariables($e, $toInline)...")
     exprOps.postMap{
-      case let@Let(vd, expr, body) if (variables contains vd.toVariable) &&
+      case let@Let(vd, expr, body) if toInline(vd.toVariable) &&
         exprOps.count{
           case v: Variable if vd.toVariable == v => 1
           case _ => 0
-        }(body) <= 1
+        }(body) /: Log.prefix(s"Counting occurrences of ${vd.toVariable} = ") <= 1
       =>
-        Some(exprOps.replaceFromSymbols(Map(vd -> expr), body)) /: Log.prefix(s"inlineVariables($vd = $expr, $variables) = ")
+        Some(exprOps.replaceFromSymbols(Map(vd -> expr), body)) /: Log.prefix(s"inlineVariables($vd = $expr, $toInline) = ")
       case _ => None
     }(e)
-  } /: Log.prefix(s"inlineVariables($e, $variables) = ")
+  } /: Log.prefix(s"inlineVariables($e, $toInline) = ")
 }

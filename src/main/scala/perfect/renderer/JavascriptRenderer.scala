@@ -28,19 +28,7 @@ object JavascriptRenderer extends inox.ast.Printer {
       |}
     """.stripMargin
 
-  object StringConcats {
-    private object StringConcatExtract {
-      def unapply(e: Expr): Some[List[Expr]] = e match {
-        case StringConcat(StringConcatExtract(a), StringConcatExtract(b)) => Some(a ++ b)
-        case e => Some(List(e))
-      }
-    }
-
-    def unapply(e: Expr): Option[List[Expr]] = e match {
-      case StringConcatExtract(l) if l.length >= 2 => Some(l)
-      case _ => None
-    }
-  }
+  import StringConcatExtended._
 
   override protected def ppBody(tree: Tree)(implicit ctx: PrinterContext): Unit = tree match {
     case fm @ FiniteMap(rs, dflt, _, _) =>

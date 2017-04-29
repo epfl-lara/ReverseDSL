@@ -36,4 +36,22 @@ object StringConcatExtended {
       }
     }
   }
+  object StringConcats {
+    private object StringConcatExtract {
+      def unapply(e: Expr): Some[List[Expr]] = e match {
+        case StringConcat(StringConcatExtract(a), StringConcatExtract(b)) => Some(a ++ b)
+        case e => Some(List(e))
+      }
+    }
+
+    def unapply(e: Expr): Option[List[Expr]] = e match {
+      case StringConcatExtract(l) if l.length >= 2 => Some(l)
+      case _ => None
+    }
+    def apply(s: Seq[Expr]): Expr = s match {
+      case Nil => StringLiteral("")
+      case head +: Nil => head
+      case head +: tail => StringConcat(head, StringConcats(tail))
+    }
+  }
 }

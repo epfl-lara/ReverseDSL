@@ -144,7 +144,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
         known.get(v) match {
           case None => (known + (v -> s), nc)
           case Some(s2@InsertVariable(e2)) if e2 == e => (known, nc)
-          case Some(_) => throw new Error(s"Attempt at inserting a variable already known: $this.combineWith($other)")
+          case Some(_) => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
         }
       case ((known, nc), (v, s@StrongValue(e))) =>
         @inline def default(e2: Expr) = (known, nc &<>& (e === e2))
