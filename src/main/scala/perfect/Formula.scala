@@ -16,7 +16,7 @@ object Formula {
   /** A deterministic constructor for Formula */
   def apply(ve: (Variable, KnownValue)): Formula = Formula(Map(ve))
 
-  def apply(formulas: Iterable[Formula]): Formula = {
+  def apply(formulas: Iterable[Formula])(implicit symbols: Symbols): Formula = {
     (Formula() /: formulas)(_ combineWith _)
   }
 
@@ -43,10 +43,8 @@ object Formula {
         ListLiteral(left ++ middle ++ right, tpe)
       case TreeModification.Expr(tpeGlobal, tpeLocal, original, modified, argsList) =>
         TreeModification.LambdaPath(original, argsList, modified).getOrElse(e)
-      case CloneTextMultiple.Expr(left, textVariableRight) =>
-        ((StringLiteral(left): Expr) /: textVariableRight) {
-          case (l, (t, v, r)) => l +& v +& StringLiteral(r)
-        }
+      case PatternMatch.Expr(before, variables, forClone) =>
+        before
       case e => e
     }
     val result = e.known.map{
@@ -136,7 +134,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
     }
   }
 
-  def combineWith(other: Formula): Formula = {
+  def combineWith(other: Formula)(implicit symbols: Symbols): Formula = {
     val TopLevelAnds(ands) = constraints &<>& other.constraints
     val newConstraint = and(ands.distinct :_*)
     val (k, nc) = ((known, newConstraint: Expr) /: other.known.toSeq) {
@@ -144,6 +142,10 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
         known.get(v) match {
           case None => (known + (v -> s), nc)
           case Some(s2@InsertVariable(e2)) if e2 == e => (known, nc)
+          case Some(s2@InsertVariable(_: StringConcat | _: Variable)) if e.isInstanceOf[StringLiteral] =>
+            (known, nc)
+          case Some(s2@InsertVariable(StringLiteral(_))) if e.isInstanceOf[StringConcat] || e.isInstanceOf[Variable] =>
+            (known + (v -> s), nc)
           case Some(_) => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
         }
       case ((known, nc), (v, s@StrongValue(e))) =>
@@ -161,14 +163,24 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
               s"(${other.known} contains e as original: ${e.isInstanceOf[Variable] &&  other.known.get(e.asInstanceOf[Variable]).exists(_.isInstanceOf[OriginalValue])}):")*/
             =>
             (known + (e.asInstanceOf[Variable] -> StrongValue(e2)) + (v -> s), nc)
-          case Some(StrongValue(e2@CloneTextMultiple.Expr(left, tvr))) =>
+          case Some(StrongValue(e2@PatternMatch.Expr(before, variables, forClone))) =>
             e match {
-              case CloneTextMultiple.Expr(left2, tvr2) =>
-                CloneTextMultiple.Expr.merge(left, tvr, left2, tvr2) match {
+              case CloneTextMultiple.Expr(left2, textVarRight2) =>
+                e2 match {
+                  case CloneTextMultiple.Expr(left1, textVarRight1) =>
+                    CloneTextMultiple.Expr.merge(left1, textVarRight1, left2, textVarRight2) match {
+                      case Some((cm, news)) => (known + (v -> StrongValue(cm)) ++ news, nc)
+                      case None => default(e2)
+                    }
+                  case _ => ???
+                }
+
+              case PatternMatch.Expr(before2, variables2, forClone2) =>
+                PatternMatch.Expr.merge(before, variables, forClone, before2, variables2, forClone2) match {
                   case Some((cm, news)) => (known + (v -> StrongValue(cm)) ++ news, nc)
                   case None => default(e2)
                 }
-                case _ => default(e2)
+              case _ => default(e2)
             }
           case Some(StrongValue(e2@ADT(tpe, vars))) if vars.forall(_.isInstanceOf[Variable]) =>
             e match {
@@ -205,7 +217,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
     Formula(k, nc)
   } /: Log.prefix(s"combineWith($this,$other) = ")
 
-  def combineWith(assignment: (Variable, KnownValue)): Formula = {
+  def combineWith(assignment: (Variable, KnownValue))(implicit symbols: Symbols): Formula = {
     this combineWith Formula(Map(assignment))
   }
 
@@ -230,6 +242,14 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
   def findConstraintValue(v: Variable): Option[Expr] = {
     known.get(v).flatMap(_.getValue).flatMap{
       case v: Variable => findConstraintValue(v).orElse(Some(v))
+      case x => Some(x)
+    }
+  }
+
+  /** Find the value of a variable only if it is strongly connected */
+  def findStrongConstraintValue(v: Variable): Option[Expr] = {
+    known.get(v).flatMap{ case StrongValue(e) => Some(e) case _ => None }.flatMap{
+      case v: Variable => findStrongConstraintValue(v).orElse(Some(v))
       case x => Some(x)
     }
   }

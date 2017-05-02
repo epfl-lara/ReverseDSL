@@ -319,7 +319,7 @@ object ProgramFormula {
   object CloneText  { ct =>
     private val Cloned = FreshIdentifier("cloned")
 
-    def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set())): ProgramFormula = {
+    def apply(left: String, text: String, right: String, insertedVar: Variable = Variable(FreshIdentifier(""), StringType, Set()))(implicit symbols: Symbols): ProgramFormula = {
       val variable = if(insertedVar.id.name == "") Var(text) else insertedVar
       CloneTextMultiple(left, List((text, variable, right)))
     }
@@ -335,50 +335,52 @@ object ProgramFormula {
     }
   }
 
-  /** Inserts a variable for a given selected text.*/
-  object CloneTextMultiple extends CustomProgramFormula  { ct =>
-    private val ClonedMultiple = FreshIdentifier("clones")
-    import ImplicitTuples._
-
-    def createExpr(left: String, textVarRights: List[(String, Variable, String)]): Expr = {
-      ((StringLiteral(left): Expr) /: textVarRights) {
-        case (e: Expr, (middle, v, right)) => e +<>& v +<>& StringLiteral(right)
-      }
-    }
-
-    def assignmentDirect(textVarRights: List[(String, Variable, String)]): (Expr => Expr) = { (e: Expr) =>
-      (e /: textVarRights) {
-        case (e: Expr, (middle, v, right)) => Let(v.toVal, StringLiteral(middle), e)
-      }
-    }
-
-    def assignmentFormula(textVarRights: List[(String, Variable, String)]): Formula = {
-      (Formula() /: textVarRights) {
-        case (f, (middle, v, right)) => f combineWith Formula(v -> InsertVariable(StringLiteral(middle)))
-      }
-    }
-
-    def merge(left1: String, textVarRight1: List[(String, Variable, String)],
-              left2: String, textVarRight2: List[(String, Variable, String)]): Option[ProgramFormula] = {
-      Expr.merge(left1, textVarRight1, left2, textVarRight2).map{ case (x, n) => ProgramFormula(x, Formula(n.toMap)) }
-    }
+  object CloneTextMultiple {
+    def apply(left: String, textVarRights: List[(String, Variable, String)])(implicit symbols: Symbols): ProgramFormula =
+      ProgramFormula(Expr(left, textVarRights))
 
     object Expr {
+      def apply(left: String, textVarRights: List[(String, Variable, String)])(implicit symbols: Symbols) = {
+        val before = ((StringLiteral(left): Expr) /: textVarRights) {
+          case (e: Expr, (middle, v, right)) => e +<>& v +<>& StringLiteral(right)
+        }
+        PatternMatch.Expr(before, textVarRights.map(x => x._2 -> StringLiteral(x._1)), true)
+      }
+      def unapply(e: Expr)(implicit symbols: Symbols): Option[(String, List[(String, Variable, String)])] = e match {
+        case PatternMatch.Expr(StringConcats.Exhaustive(strs), variables, true) =>
+          def getVarValue(v: Variable): String = variables.collectFirst {
+            case (v2, StringLiteral(s)) if v2 == v => s
+          }.get
+
+          def unbuild(e: List[Expr]): Option[(String, List[(String, Variable, String)])] = e match {
+            case Nil => Some(("", Nil))
+            case StringLiteral(text) :: tail => unbuild(tail).map{ case (left, l) =>
+             ((text+left), l)
+            }
+            case (v: Variable)::tail => unbuild(tail).map{ case (left, l) =>
+              ("", (getVarValue(v), v, left)::l)
+            }
+            case _ => None
+          }
+          unbuild(strs)
+        case _ => None
+      }
+
       private def SplitVar(v1: Variable, inserted: Set[Variable]): (Variable, Variable) = {
         val v1p1 = CloneText.Var(v1.id.name, inserted.toSeq.map(_.id.name) ++ Seq(v1.id.name))
         val v1p2 = CloneText.Var(v1.id.name, inserted.toSeq.map(_.id.name) ++ Seq(v1.id.name, v1p1.id.name))
         (v1p1, v1p2)
       }
       def merge(left1: String, textVarRight1: List[(String, Variable, String)],
-                left2: String, textVarRight2: List[(String, Variable, String)], inserted: Set[Variable] = Set()): Option[(Expr, Seq[(Variable, KnownValue)])] = {
+                left2: String, textVarRight2: List[(String, Variable, String)], inserted: Set[Variable] = Set())(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
         Log(s"merge with inserted ${inserted}\n1. ($left1, $textVarRight1)\n2. ($left2, $textVarRight2)")
         if(left1.length > 0 && left2.length > 0) {
           if(left1.length <= left2.length) {
             assert(left2.startsWith(left1))
             merge("", textVarRight1,
               left2.substring(0, left1.length), textVarRight2, inserted).map{
-              case (CloneTextMultiple.Expr(newLeft1, newTextVarRight1), vk) =>
-                (CloneTextMultiple.Expr(left1 + newLeft1, newTextVarRight1), vk)
+              case (Expr(newLeft1, newTextVarRight1), vk) =>
+                (Expr(left1 + newLeft1, newTextVarRight1), vk)
             }
           } else { // if(left1.length > left2.length)
             merge(left2, textVarRight2, left1, textVarRight1, inserted)
@@ -399,8 +401,8 @@ object ProgramFormula {
                   val updatedLeft2 = left2.substring(middle1.length)
                   val updatedRight1 = right1
                   merge(updatedRight1, tail1, updatedLeft2, textVarRight2, inserted).map {
-                    case (CloneTextMultiple.Expr(leftNew, textVarRightNew), mp) =>
-                      (CloneTextMultiple.Expr(left1, (middle1, v1, leftNew) :: textVarRightNew), mp)
+                    case (Expr(leftNew, textVarRightNew), mp) =>
+                      (Expr(left1, (middle1, v1, leftNew) :: textVarRightNew), mp)
                   }
                 } else if(left2.length == 0) { // Overlapping between variables
                   if(middle1.length == middle2.length) {
@@ -410,8 +412,8 @@ object ProgramFormula {
                         None
                       } else {
                         merge(right1, tail1, right2, tail2, inserted) map {
-                          case (CloneTextMultiple.Expr(leftNew, textVarRightNew), mp) =>
-                            (CloneTextMultiple.Expr("", (middle1, v1, leftNew)::textVarRightNew),
+                          case (Expr(leftNew, textVarRightNew), mp) =>
+                            (Expr("", (middle1, v1, leftNew)::textVarRightNew),
                               (v2 -> InsertVariable(v1)) +: mp)
                         }
                       }
@@ -421,8 +423,8 @@ object ProgramFormula {
                       } else { // We insert a new variable and link the two other variables.
                         val v = CloneText.Var(v1.id.name, Seq(v2.id.name))
                         merge(right1, tail1, right2, tail2, inserted) map {
-                          case (CloneTextMultiple.Expr(leftNew, textVarRightNew), mp) =>
-                            (CloneTextMultiple.Expr("", (middle1, v, leftNew)::textVarRightNew),
+                          case (Expr(leftNew, textVarRightNew), mp) =>
+                            (Expr("", (middle1, v, leftNew)::textVarRightNew),
                               (v1 -> InsertVariable(v)) +: (v2 -> InsertVariable(v)) +: mp)
                         }
                       }
@@ -439,8 +441,8 @@ object ProgramFormula {
                         val positionSplit = middle1.length
                         val newMiddle2 = middle2.substring(positionSplit)
                         merge(right1, tail1, "", (newMiddle2, v2p2, right2)::tail2, inserted) map {
-                          case (CloneTextMultiple.Expr(leftNew, textVarRightNew), mp) =>
-                            (CloneTextMultiple.Expr("", (middle1, v1, leftNew)::textVarRightNew), news +: mp)
+                          case (Expr(leftNew, textVarRightNew), mp) =>
+                            (Expr("", (middle1, v1, leftNew)::textVarRightNew), news +: mp)
                         }
                       }
                     } else {
@@ -450,7 +452,7 @@ object ProgramFormula {
                       val middle21 = middle2.substring(0, position)
                       val middle22 = middle2.substring(position)
                       merge(left1, textVarRight1,
-                            left2, (middle21, v2p1, "") :: (middle22, v2p2, right2) :: tail2, inserted ++ Seq(v2p1, v2p2)
+                        left2, (middle21, v2p1, "") :: (middle22, v2p2, right2) :: tail2, inserted ++ Seq(v2p1, v2p2)
                       ) map {
                         case (ctm, mp) => (ctm, news +: mp)
                       }
@@ -479,56 +481,6 @@ object ProgramFormula {
           }
         }
       } /: Log.prefix(s"merge with inserted ${inserted}\n1. ($left1, $textVarRight1)\n2. ($left2, $textVarRight2) =\n")
-
-      def apply(left: String, textVarRight: List[(String, Variable, String)]): Expr = {
-        E(ClonedMultiple)(
-          StringLiteral(left),
-          ListLiteral(textVarRight.map{ case (middle, v, right) =>
-            _Tuple3(StringType, StringType, StringType)(StringLiteral(middle), v, StringLiteral(right))
-          }, inoxTypeOf[(String, String, String)]))
-      }
-      def unapply(e: Expr): Option[(String, List[(String, Variable, String)])] = e match {
-        case FunctionInvocation(ClonedMultiple, Seq(), Seq(StringLiteral(left), ListLiteral(textVarRightList, tpe))) =>
-          def unbuild(e: List[Expr]): Option[List[(String, Variable, String)]] = e match {
-            case Nil => Some(Nil)
-            case ADT(_, Seq(StringLiteral(text), v: Variable, StringLiteral(right))) :: tail => unbuild(tail).map{ l =>
-              (text, v, right)::l
-            }
-            case _ => None
-          }
-          unbuild(textVarRightList).map(x => (left, x))
-        case _ => None
-      }
-    }
-
-    def apply(left: String, textVarRight: List[(String, Variable, String)]): ProgramFormula = {
-      ProgramFormula(Expr(left, textVarRight))
-    }
-
-    def unapply(f: ProgramFormula): Option[(String, List[(String, Variable, String)])] = {
-      Expr.unapply(f.expr)
-    }
-
-    private val string3 = T(tuple3)(StringType, StringType, StringType)
-
-    def funDef = mkFunDef(ClonedMultiple)(){ case _ =>
-      (Seq("left"::StringType, "textVarRight"::conversions.TList[(String, String, String)]),
-        StringType,
-        { case Seq(left, textVarRight) =>
-          if_(textVarRight.isInstOf(T(cons)(string3))) {
-            let("c"::T(cons)(string3), textVarRight.asInstOf(T(cons)(string3)))(c =>
-              let("head"::string3, c.getField(head))( head =>
-                FunctionInvocation(ClonedMultiple, Seq(),
-                  Seq(left +& head.getField(_1) +& head.getField(_2),
-                    c.getField(tail)
-                  )
-                )
-              )
-            )
-          } else_ {
-            left
-          } // Dummy
-        })
     }
   }
 
@@ -536,33 +488,39 @@ object ProgramFormula {
   object PatternMatch extends CustomProgramFormula {
     private val PMId = FreshIdentifier("matcher")
 
-    def apply(before: Expr, variables: List[(Variable, Expr)])(implicit symbols: Symbols) =
-      ProgramFormula(Expr(before, variables))
-    def unapply(e: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)])] = {
+    def apply(before: Expr, variables: List[(Variable, Expr)], forClone: Boolean)(implicit symbols: Symbols) =
+      ProgramFormula(Expr(before, variables, forClone))
+    def unapply(e: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)], Boolean)] = {
       Expr.unapply(e.expr)
     }
 
     object Expr {
       import ImplicitTuples._
 
+      def merge(before1: Expr, variables1: List[(Variable, Expr)], forClone1: Boolean,
+               before2: Expr, variables2: List[(Variable, Expr)], forClone2: Boolean, insertedVariables: Set[Variable] = Set())(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
+        ???
+      }
+
       def Build(names: (ValDef, Expr)*)(f: Seq[Variable] => Expr)(implicit symbols: Symbols): Expr = {
         val variables = names.toList.map(n => n._1.toVariable)
         val before = f(variables)
-        apply(before, variables.zip(names.map(_._2)))
+        apply(before, variables.zip(names.map(_._2)), true)
       }
 
-      def apply(before: Expr, variables: List[(Variable, Expr)])(implicit symbols: Symbols) : Expr = {
+      def apply(before: Expr, variables: List[(Variable, Expr)], forClone: Boolean)(implicit symbols: Symbols) : Expr = {
         E(PMId)(before.getType)(Application(
           Lambda(variables.map(_._1.toVal), before)
-          , variables.map(_._2)))
+          , variables.map(_._2)), BooleanLiteral(forClone))
       }
 
-      def unapply(e: Expr)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)])] = {
+      def unapply(e: Expr)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)], Boolean)] = {
         e match {
           case FunctionInvocation(PMId, Seq(_), Seq(
-          Application(Lambda(valdefs, before), varValues)
+          Application(Lambda(valdefs, before), varValues),
+          BooleanLiteral(forClone)
           )) =>
-            Some((before, valdefs.toList.map(_.toVariable).zip(varValues)))
+            Some((before, valdefs.toList.map(_.toVariable).zip(varValues), forClone))
           case _ => None
         }
       }
@@ -679,7 +637,6 @@ object ProgramFormula {
     TreeUnwrap,
     StringInsert,
     ListInsert,
-    CloneTextMultiple,
     PatternMatch,
     PasteVariable
   )
@@ -796,7 +753,7 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
   }
 
   /** Augment this expr with the given formula */
-  def combineWith(f: Formula): ProgramFormula = {
+  def combineWith(f: Formula)(implicit symbols: Symbols): ProgramFormula = {
     ProgramFormula(expr, formula combineWith f).wrappingLowPriority(isWrappingLowPriority)
   }
 

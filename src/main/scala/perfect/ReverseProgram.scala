@@ -258,40 +258,36 @@ object ReverseProgram extends lenses.Lenses {
             case l: Literal[_] => // Raw replacement
               Stream(newOutProgram)
 
-            case PatternMatch.Expr(before, variables) =>
+            case PatternMatch.Expr(before, variables, forClone) =>
+              val newExpr = before
               before match {
                 case lBefore: Literal[_] =>
-                  Stream(ProgramFormula(lBefore))
+                  Stream(ProgramFormula(newExpr))
                 case vBefore: Variable =>
                   val value = variables.collectFirst{
                     case (v, value) if v == vBefore => value
                   }
                   value.toStream.map(value =>
-                    ProgramFormula(vBefore, Formula(vBefore -> InsertVariable(value)))
+                    ProgramFormula(newExpr, Formula(vBefore -> InsertVariable(value)))
                   )
                 case StringConcat(a, b) =>
                   val newFormula = Formula(exprOps.variablesOf(before).map(v => v -> InsertVariable(variables.collectFirst{
                     case (v2, value) if v2 == v => value
                   }.get)).toMap)
-                  Stream(ProgramFormula(before, newFormula))
+                  Stream(ProgramFormula(newExpr, newFormula))
                 case op => throw new Exception("Operation not supported in pattern matching: " + op)
               }
+              /*              def first = if(program.canDoWrapping) { // Insert let-expressions the closest to the use.
+                              val outputExpr = CloneTextMultiple.assignmentDirect(textVarRights)(newExpr)
+                              Stream(ProgramFormula(outputExpr))
+                            } else Stream.empty*/
+              // first #::: {
+            // }
 
             case ProgramFormula.PasteVariable.Expr(left, v2, v2_value, right, direction) =>
               val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
               Stream(ProgramFormula(newExpr, newOutFormula))
 
-            case ProgramFormula.CloneTextMultiple.Expr(left, textVarRights) =>
-              val newExpr = CloneTextMultiple.createExpr(left, textVarRights)
-              def first = if(program.canDoWrapping) { // Insert let-expressions the closest to the use.
-                val outputExpr = CloneTextMultiple.assignmentDirect(textVarRights)(newExpr)
-                Stream(ProgramFormula(outputExpr))
-              } else Stream.empty
-
-              first #::: {
-                val formula = CloneTextMultiple.assignmentFormula(textVarRights)
-                Stream(ProgramFormula(newExpr, formula))
-              }
             case ProgramFormula.StringInsert.Expr(left, inserted, right, direction) =>
               Stream(ProgramFormula(StringLiteral(left + inserted + right)))
 
@@ -491,7 +487,7 @@ object ReverseProgram extends lenses.Lenses {
         case StringConcat(expr1, expr2) =>
           optVar(newOutProgram.expr).flatMap(newOutFormula.findConstraintValue).
             map(v => ProgramFormula(v, newOutFormula)).getOrElse(newOutProgram) match {
-            case pf@ProgramFormula.PatternMatch(before, variables) =>
+            case pf@ProgramFormula.PatternMatch(before, variables, forClone) =>
               before match {
                 case StringConcats.Exhaustive(patterns) =>
                   val values: List[String] = patterns.map{ pattern =>
@@ -509,8 +505,8 @@ object ReverseProgram extends lenses.Lenses {
                     val newLeftPattern = StringConcats(patterns.take(shortestTailForLeft.length))
                     val newRightPattern = StringConcats(patterns.drop(shortestTailForLeft.length))
                     val arguments = List(
-                      repair(program.subExpr(expr1), pf.subExpr(PatternMatch.Expr(newLeftPattern, variables))),
-                      repair(program.subExpr(expr2), pf.subExpr(PatternMatch.Expr(newRightPattern, variables))))
+                      repair(program.subExpr(expr1), pf.subExpr(PatternMatch.Expr(newLeftPattern, variables, forClone))),
+                      repair(program.subExpr(expr2), pf.subExpr(PatternMatch.Expr(newRightPattern, variables, forClone))))
                     for{ regroupped <- regroupArguments(arguments)
                          (Seq(newLeft1, newLeft2), formula) = regroupped
                     } yield {
@@ -529,7 +525,7 @@ object ReverseProgram extends lenses.Lenses {
                           List(StringLiteral(lastValue.substring(0, extra)),
                           StringLiteral(lastValue.substring(extra))) ++
                           patterns.drop(shortestTailForLeft.length)
-                        ), variables))
+                        ), variables, forClone))
                       case lastVar: Variable => // Way interesting, we need to split the variable
                         val leftVar = Variable(FreshIdentifier(Utils.uniqueName(lastVar.id.name, Set(lastVar.id.name))), StringType, Set())
                         val rightVar = Variable(FreshIdentifier(Utils.uniqueName(lastVar.id.name, Set(lastVar.id.name, leftVar.id.name))), StringType, Set())
@@ -549,8 +545,8 @@ object ReverseProgram extends lenses.Lenses {
                             (rightVar, StringLiteral(lastValue.substring(extra))))
 
                         val arguments = List(
-                          repair(program.subExpr(expr1), pf.subExpr(PatternMatch.Expr(newLeftPattern, newVariables))),
-                          repair(program.subExpr(expr2), pf.subExpr(PatternMatch.Expr(newRightPattern, newVariables))))
+                          repair(program.subExpr(expr1), pf.subExpr(PatternMatch.Expr(newLeftPattern, newVariables, forClone))),
+                          repair(program.subExpr(expr2), pf.subExpr(PatternMatch.Expr(newRightPattern, newVariables, forClone))))
                         for{ regroupped <- regroupArguments(arguments)
                              (Seq(newLeft1, newLeft2), formula) = regroupped
                         } yield {
@@ -587,14 +583,14 @@ object ReverseProgram extends lenses.Lenses {
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
           newOut match {
-            case ProgramFormula.PatternMatch.Expr(pattern, variables) =>
+            case ProgramFormula.PatternMatch.Expr(pattern, variables, forClone) =>
               pattern match {
                 case ADT(adtType2, argsIn2) if adtType2 == adtType =>
                   val argumentsRepaired = for{ (argIn, argIn2) <- argsIn.zip(argsIn2) } yield {
                     repair(program.subExpr(argIn),
                       newOutProgram.subExpr(
                         ProgramFormula.PatternMatch.Expr(
-                          argIn2, variables
+                          argIn2, variables, forClone
                         )
                       )
                     )
@@ -622,7 +618,7 @@ object ReverseProgram extends lenses.Lenses {
                         program.subExpr(expr),
                         newOutProgram.subExpr(
                           ProgramFormula.PatternMatch.Expr(
-                            pattern, variables
+                            pattern, variables, false
                           )))
                   }
                   for{ argumentsCombined <-regroupArguments(argsMatched)

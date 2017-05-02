@@ -17,6 +17,10 @@ object StringConcatExtended {
     /** Simplifies the expression by removing empty string literals*/
     @inline def +<>&(other: Expr) = e match {
       case StringLiteral("") => other
+      case StringLiteral(a) => other match {
+        case StringLiteral(b) => StringLiteral(a+b)
+        case _ => e +& other
+      }
       case _ => other match {
         case StringLiteral("") => e
         case _ => e +& other

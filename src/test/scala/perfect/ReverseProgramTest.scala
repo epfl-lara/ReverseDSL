@@ -28,6 +28,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   val build = variable[String => Element]("build")
   val vText = variable[String]("text")
 
+  implicit val symbols = Utils.defaultSymbols
+
   test("Create a program from scratch") {
     val out = Element("div", WebElement(TextNode("Hello world"))::Nil)
     checkProg(out, generateProgram(out))

@@ -667,7 +667,7 @@ trait Lenses { self: ReverseProgram.type =>
 
   // TODO: Merge these two functions
   // The first formula is Formula is for the lambda, the second is for the arguments
-  def expand(i: List[Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]], lambda: Lambda):
+  def expand(i: List[Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]], lambda: Lambda)(implicit symbols: Symbols):
   Stream[(List[Expr], Lambda, Formula, Formula)] = {
     for{ e <- inox.utils.StreamUtils.cartesianProduct(i)
          argumentsChanged = e.map{
@@ -685,7 +685,7 @@ trait Lenses { self: ReverseProgram.type =>
   }
 
   private def recombineArgumentsLambdas(lambda: Lambda, tpes: Seq[Type])
-                                       (e: List[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]) = {
+                                       (e: List[Either[(Expr, Formula), ((Expr, Lambda), Formula)]])(implicit symbols: Symbols) = {
     Log(s"recombineArgumentLambdas($e)")
     val argumentsChanged = e.map{
       case Left((e, _)) => e
@@ -1049,8 +1049,8 @@ trait Lenses { self: ReverseProgram.type =>
       }
 
       // Prioritize changes that touch only one of the two expressions.
-      newOutputProgram match {
-        case StringInsert(leftAfter, inserted, rightAfter, direction) =>
+      newOutputProgram.expr match {
+        case StringInsert.Expr(leftAfter, inserted, rightAfter, direction) =>
           val StringLiteral(rightValue_s) = rightValue
           val StringLiteral(leftValue_s) = leftValue
 
@@ -1059,9 +1059,7 @@ trait Lenses { self: ReverseProgram.type =>
             StringLiteral,
             (l: String, i: String, r: String) => StringInsert(l, i, r, direction)
           )
-        case pc@CloneTextMultiple(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
-
-
+        case pc@CloneTextMultiple.Expr(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
           def cloneToLeft: List[ArgumentsFormula] = {
             if(right.endsWith(rv)) {
               val newLeft = left
@@ -1095,7 +1093,7 @@ trait Lenses { self: ReverseProgram.type =>
           }
           (cloneToLeft ++ cloneToRight ++ cloneBoth).toStream
 
-        case pv@ProgramFormula.PasteVariable(left, v, v_value, right, direction) =>
+        case pv@ProgramFormula.PasteVariable.Expr(left, v, v_value, right, direction) =>
           def pasteToLeft: List[(ArgumentsFormula, Int)] = {
             /*Log(s"Right:'$right'")
             Log(s"Right:'$right'")*/
@@ -1127,9 +1125,9 @@ trait Lenses { self: ReverseProgram.type =>
             } else Nil
           }
           (pasteToLeft ++ pasteToRight).sortBy(_._2).map(_._1).toStream
-        case ProgramFormula(StringLiteral(s), _) =>
+        case StringLiteral(s) =>
           ifEmpty((rightCase(s) .toList++ leftCase(s).toList).sortBy(_._2).map(_._1).toStream) { defaultCase }
-        case ProgramFormula(StringConcat(StringLiteral(left), right), _) => // TODO !!
+        case StringConcat(StringLiteral(left), right) =>
           val leftValue_s = asStr(leftValue)
           if(leftValue_s.startsWith(left)) {
             val newLeftValue = leftValue_s.substring(left.length)
@@ -1137,7 +1135,7 @@ trait Lenses { self: ReverseProgram.type =>
           } else {
             ???
           }
-        case ProgramFormula(StringConcat(left, StringLiteral(right)), _) => // TODO !!
+        case StringConcat(left, StringLiteral(right)) => // TODO !!
           //leftValue = "Hello big " && rightValue == "beautiful world" && right = " world"
           val rightValue_s = asStr(rightValue)
           if(rightValue_s.endsWith(right)) {
@@ -1146,10 +1144,10 @@ trait Lenses { self: ReverseProgram.type =>
           } else {
             ???
           }
-        case ProgramFormula(v: Variable, formula) if formula.constraints == BooleanLiteral(true) =>
-          formula.known.get(v) match {
-            case Some(StrongValue(e)) =>
-              put(tps)(Seq(leftValue, rightValue), ProgramFormula(e, formula))
+        case v: Variable if newOutputProgram.formula.constraints == BooleanLiteral(true) =>
+          newOutputProgram.formula.findStrongConstraintValue(v) match {
+            case Some(e) =>
+              put(tps)(Seq(leftValue, rightValue), ProgramFormula(e, newOutputProgram.formula))
             case _ => defaultCase
           }
 

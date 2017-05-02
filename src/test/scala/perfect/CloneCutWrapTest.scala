@@ -15,6 +15,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   import XmlTrees._
   import StringConcatExtended._
   import ProgramFormula.{AssociativeInsert, StringInsert, ListInsert, TreeWrap, TreeUnwrap, TreeModification, CloneText, PasteVariable}
+  implicit val symbols = Utils.defaultSymbols
 
   test("Formula assignment") {
     val va = variable[String]("a")
@@ -36,7 +37,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       }
     pfun shouldProduce output
 
-    val newOut = TreeWrap(output, v => _Node("b", children=_List[Node](v)))(Utils.defaultSymbols)
+    val newOut = TreeWrap(output, v => _Node("b", children=_List[Node](v)))
 
     pfun repairFrom newOut shouldProduce {
       _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
@@ -411,7 +412,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     val pfun: Expr = let("v"::String, " move it")(v => "I like to" +& v +& "!")
     pfun repairFrom CloneText("I ", "like", " to move it!") match {
       case Let(like, StringLiteral("like"), Let(move, StringLiteral(" move it"),
-      (StringLiteral("I ") +& (like2: Variable) +& StringLiteral(" to") +& (move2: Variable)) +& StringLiteral("!"))) =>
+      StringConcats(List(StringLiteral("I "), like2: Variable, StringLiteral(" to"), move2: Variable, StringLiteral("!"))))) =>
         move.id shouldEqual move2.id
         like.id shouldEqual like2.id
     }
@@ -518,7 +519,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       case Let(c2, StringLiteral("move"), Let(c1, StringLiteral("it "), b)) => (c1, c2, b)
     }) match {
       case (c1, c2, Let(cloned, cv1 +& cv2, Let(move, cv22 +& StringLiteral(" ") +& cv11,
-      (move1: Variable) +& (move2: Variable) ))) =>
+      (move1: Variable) +& (move2: Variable)))) =>
         c1.toVariable shouldEqual cv1
         c2.toVariable shouldEqual cv2
         cv11 shouldEqual cv1
@@ -536,7 +537,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("Clone accross a StringConcat of same variables but wider") {
     val pfun = let("move"::String, "move it ")(move => move +& move)
 
-    val ct@CloneTextMultiple(_, (_, cloned, _)::Nil) = CloneText("move", " it move ", "it ")
+    val ct@ProgramFormula(CloneTextMultiple.Expr(_, (_, cloned, _)::Nil), _) = CloneText("move", " it move ", "it ")
     val pfun2 = pfun repairFrom ct shouldProduce StringLiteral("move it move it ")
 
     val pfun3 = updateBody(pfun2){
@@ -550,7 +551,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("Clone accross a StringConcat of same variables with identical overlap") {
     val pfun = let("move"::String, "mov it ")(move => move +& move +& move)
 
-    val ct@CloneTextMultiple(_, (_, cloned, _)::Nil) = CloneText("mov ", "it mov it mov ", "it ")
+    val ct@ProgramFormula(CloneTextMultiple.Expr(_, (_, cloned, _)::Nil), _) = CloneText("mov ", "it mov it mov ", "it ")
     val pfun2 = pfun repairFrom ct shouldProduce StringLiteral("mov it mov it mov it ")
     val pfun3 = updateBody(pfun2){
       case moveVar +& moveVar2 +& moveVar3 => moveVar +& moveVar2 +& moveVar3 +& cloned
@@ -623,14 +624,12 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     pfun shouldProduce expected
 
     val v = variable[String]("cloned")
-    Log.activated {
-      val pfun2 = pfun repairFrom CloneText("ab", "ab", "", v) shouldProduce expected
+    val pfun2 = pfun repairFrom CloneText("ab", "ab", "", v) shouldProduce expected
 
-      exprOps.count {
-        case Let(vd, _, _) if vd.toVariable == v => 1
-        case _ => 0
-      }(pfun2) shouldEqual 1
-    }
+    exprOps.count {
+      case Let(vd, _, _) if vd.toVariable == v => 1
+      case _ => 0
+    }(pfun2) shouldEqual 1
   }
 
   /*test("Paste inside a variable and reverse order.") {
