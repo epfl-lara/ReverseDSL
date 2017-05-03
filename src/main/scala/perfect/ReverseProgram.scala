@@ -29,10 +29,6 @@ object ReverseProgram extends lenses.Lenses {
     if(a.isEmpty) b else a
   }
 
-  /*def put[A: InoxConvertible](out: A, prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
-    put(inoxExprOf[A](out), prevIn)
-  }*/
-
   def put(outProg: ProgramFormula, prevIn: Option[Expr]): Stream[Expr] = {
     if(prevIn == None) {
       val outExpr = outProg.bodyDefinition.getOrElse(throw new Exception(s"Ill-formed program: $outProg"))
@@ -137,14 +133,6 @@ object ReverseProgram extends lenses.Lenses {
     }
   }
 
-  /*case class letm(v: Map[ValDef, Expr]) {
-    @inline def in(res: Expr) = {
-      (res /: v) {
-        case (res, (key, value)) => let(key, value)(_ => res)
-      }
-    }
-  }*/
-
   /** Applies the interleaving to a finite sequence of streams. */
   def interleave[T](left: Stream[T])(right: => Stream[T]) : Stream[T] = {
     if (left.isEmpty) right else left.head #:: interleave(right)(left.tail)
@@ -156,7 +144,7 @@ object ReverseProgram extends lenses.Lenses {
     * by trying to change the variables values, or the function body itself.
     *
     * @param program An expression that computed the value before newOut, and the formula contains the current mappings.
-    * @param newOut A ProgramFormula resulting from the action of the user on the datat.
+    * @param newOutProgram A ProgramFormula resulting from the action of the user on the datat.
     *               Either a literal value that should be produced by function,
     *               or a variable, in which case the result will have in the formula a constraint over this variable,
     *               Or an expression with constrained free variables to denote a clone-and-paste or many other things.

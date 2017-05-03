@@ -191,29 +191,6 @@ class XmlTest extends FunSuite with TestHelpers {
     pfWithoutSorting shouldProduce initialOutWithoutSorting
   }
   test("Hu 2004 without sorting modification in name") {
-    /*val newOutModification: Node = <addrbook>
-      <index>
-        <name>Prof. Masato Takeichi</name>
-        <name>Zhenjiang Hu</name>
-        <name>Shin-Cheng Mu</name>
-      </index>
-      <person>
-        <name>Masato Takeichi</name>
-        <email>takeichi@acm.org</email>
-        <tel>+81-3-5841-7430</tel>
-      </person>
-      <person>
-        <name>Zhenjiang Hu</name>
-        <email>hu@mist.i.u-tokyo.ac.jp</email>
-        <email>hu@ipl.t.u-tokyo.ac.jp</email>
-        <tel>+81-3-5841-7411</tel>
-      </person>
-      <person>
-        <name>Shin-Cheng Mu</name>
-        <email>scm@mist.i.u-tokyo.ac.jp</email>
-        <tel>+81-3-5841-7411</tel>
-      </person>
-    </addrbook>*/
     import Utils._
     val newOutModification: ProgramFormula = ProgramFormula.TreeModification(
       inoxTypeOf[Node],
@@ -359,32 +336,7 @@ class XmlTest extends FunSuite with TestHelpers {
         List(<name> Shin-Cheng Mu </name>: Node)
       )
       , List(children, head, children)
-    )(Utils.defaultSymbols)/*
-    val newOutInsertionIndex: Node =
-      <addrbook>
-      <index>
-        <name> Masato Takeichi </name>
-        <name> Zhenjiang Hu </name>
-        <name> Mikael Mayer </name>
-        <name> Shin-Cheng Mu </name>
-      </index>
-      <person>
-        <name> Masato Takeichi </name>
-        <email> takeichi@acm.org </email>
-        <tel> +81-3-5841-7430 </tel>
-      </person>
-      <person>
-        <name> Zhenjiang Hu </name>
-        <email> hu@mist.i.u-tokyo.ac.jp </email>
-        <email> hu@ipl.t.u-tokyo.ac.jp </email>
-        <tel> +81-3-5841-7411 </tel>
-      </person>
-      <person>
-        <name> Shin-Cheng Mu </name>
-        <email> scm@mist.i.u-tokyo.ac.jp </email>
-        <tel> +81-3-5841-7411 </tel>
-      </person>
-    </addrbook>*/
+    )(Utils.defaultSymbols)
 
     val expectedOutInsertionIndex: Node = <addrbook>
       <index>
@@ -454,30 +406,6 @@ class XmlTest extends FunSuite with TestHelpers {
       "Prof. Masato Takeichi",
       List(children, head, children, tail, tail, head, children, head, tag)
     )(Utils.defaultSymbols)
-    /*
-    val newOutModification: Node = <addrbook>
-      <index>
-        <name>Zhenjiang Hu</name>
-        <name>Shin-Cheng Mu</name>
-        <name>Prof. Masato Takeichi</name>
-      </index>
-      <person>
-        <name>Zhenjiang Hu</name>
-        <email>hu@mist.i.u-tokyo.ac.jp</email>
-        <email>hu@ipl.t.u-tokyo.ac.jp</email>
-        <tel>+81-3-5841-7411</tel>
-      </person>
-      <person>
-        <name>Shin-Cheng Mu</name>
-        <email>scm@mist.i.u-tokyo.ac.jp</email>
-        <tel>+81-3-5841-7411</tel>
-      </person>
-      <person>
-        <name>Masato Takeichi</name>
-        <email>takeichi@acm.org</email>
-        <tel>+81-3-5841-7430</tel>
-      </person>
-    </addrbook>*/
 
     val expectedOutModification: Node = <addrbook>
       <index>
@@ -539,35 +467,6 @@ class XmlTest extends FunSuite with TestHelpers {
         ), List(Utils.children)
       )
 
-    /*val newOutInsertionData: Node = <addrbook>
-      <index>
-        <name>Zhenjiang Hu</name>
-        <name>Shin-Cheng Mu</name>
-        <name>Masato Takeichi</name>
-      </index>
-      <person>
-        <name>Zhenjiang Hu</name>
-        <email>hu@mist.i.u-tokyo.ac.jp</email>
-        <email>hu@ipl.t.u-tokyo.ac.jp</email>
-        <tel>+81-3-5841-7411</tel>
-      </person>
-      <person>
-        <name>Mikael Mayer</name>
-        <email>mikael@mayer.tk</email>
-        <tel>+41-787-330-1924</tel>
-      </person>
-      <person>
-        <name>Shin-Cheng Mu</name>
-        <email>scm@mist.i.u-tokyo.ac.jp</email>
-        <tel>+81-3-5841-7411</tel>
-      </person>
-      <person>
-        <name>Masato Takeichi</name>
-        <email>takeichi@acm.org</email>
-        <tel>+81-3-5841-7430</tel>
-      </person>
-    </addrbook>*/
-
     val expectedOutInsertionData: Node = <addrbook>
       <index>
         <name>Zhenjiang Hu</name>
@@ -615,31 +514,6 @@ class XmlTest extends FunSuite with TestHelpers {
       )
       , List(children, head, children)
     )(Utils.defaultSymbols)
-    /*
-    val newOutInsertionIndex: Node = <addrbook>
-      <index>
-        <name> Zhenjiang Hu </name>
-        <name> Mikael Mayer </name>
-        <name> Shin-Cheng Mu </name>
-        <name> Masato Takeichi </name>
-      </index>
-      <person>
-        <name> Zhenjiang Hu </name>
-        <email> hu@mist.i.u-tokyo.ac.jp </email>
-        <email> hu@ipl.t.u-tokyo.ac.jp </email>
-        <tel> +81-3-5841-7411 </tel>
-      </person>
-      <person>
-        <name> Shin-Cheng Mu </name>
-        <email> scm@mist.i.u-tokyo.ac.jp </email>
-        <tel> +81-3-5841-7411 </tel>
-      </person>
-      <person>
-        <name> Masato Takeichi </name>
-        <email> takeichi@acm.org </email>
-        <tel> +81-3-5841-7430 </tel>
-      </person>
-    </addrbook>*/
 
     val expectedOutInsertionIndex: Node = <addrbook>
       <index>
