@@ -547,10 +547,10 @@ object ReverseProgram extends lenses.Lenses {
               }
 
             case _ =>
-              ifEmpty(for (pf <- repair(program.subExpr(FunctionInvocation(StringConcatReverser.identifier, Nil,
+              ifEmpty(for (pf <- repair(program.subExpr(FunctionInvocation(StringConcatLens.identifier, Nil,
                 Seq(expr1, expr2))), newOutProgram)) yield {
                 pf match {
-                  case ProgramFormula(FunctionInvocation(StringConcatReverser.identifier, Nil, Seq(x, y)), f) =>
+                  case ProgramFormula(FunctionInvocation(StringConcatLens.identifier, Nil, Seq(x, y)), f) =>
                     ProgramFormula(StringConcat(x, y), f)
                 }
               }) {
@@ -896,9 +896,9 @@ object ReverseProgram extends lenses.Lenses {
           // We need to reverse the invocation arguments.
           reversions.get(f) match {
             case None => Stream.empty  /: Log.prefix(s"No function $f reversible for : $funInv.\nIt evaluates to:\n$functionValue.")
-            case Some(reverser) =>
+            case Some(lens) =>
               val argsValue = args.map(arg => evalWithCache(functionFormula.assignments.get(arg))) // One day, args.map(arg => program.subExpr(arg))
-              val lenseResult = reverser.put(tpes)(argsValue, newOutProgram)
+              val lenseResult = lens.put(tpes)(argsValue, newOutProgram)
               for{l <- lenseResult; (newArgsValues, newForm) = l
                   a <- combineArguments(program, args.zip(newArgsValues))
                   (newArguments, newArgumentsFormula) = a

@@ -218,8 +218,8 @@ object ProgramFormula {
     import AssociativeInsert._
 
     def computeDirection(left: String, s: String, right: String): InsertDirection = {
-      val leftJump = ReverseProgram.StringConcatReverser.typeJump(left, s)
-      val rightJump = ReverseProgram.StringConcatReverser.typeJump(s, right)
+      val leftJump = ReverseProgram.StringConcatLens.typeJump(left, s)
+      val rightJump = ReverseProgram.StringConcatLens.typeJump(s, right)
       if(leftJump < rightJump) {
         InsertToLeft
       } else if(leftJump > rightJump) {

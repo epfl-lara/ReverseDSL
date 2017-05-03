@@ -12,22 +12,22 @@ import StringConcatExtended._
 
 trait Lenses { self: ReverseProgram.type =>
 
-  val reversers = List[Reverser](
-    FilterReverser,
-    MapReverser,
-    ListConcatReverser,
-    FlattenReverser,
-    FlatMapReverser,
-    StringConcatReverser,
-    SplitEvenReverser,
-    MergeReverser,
-    SortWithReverser,
-    MkStringReverser
+  val lenses = List[Lens](
+    FilterLens,
+    MapLens,
+    ListConcatLens,
+    FlattenLens,
+    FlatMapLens,
+    StringConcatLens,
+    SplitEvenLens,
+    MergeLens,
+    SortWithLens,
+    MkStringLens
   )
 
-  val reversions = reversers.map(x => x.identifier -> x).toMap
+  val reversions = lenses.map(x => x.identifier -> x).toMap
 
-  val funDefs = reversers.map(_.funDef) ++ ProgramFormula.customFunDefs ++ List(
+  val funDefs = lenses.map(_.funDef) ++ ProgramFormula.customFunDefs ++ List(
     mkFunDef(Utils.stringCompare)(){case _ =>
       (Seq("left"::StringType, "right"::StringType),
         IntegerType,
@@ -40,7 +40,7 @@ trait Lenses { self: ReverseProgram.type =>
 
   type ArgumentsFormula = (Seq[ProgramFormula], Formula)
   
-  abstract class Reverser {
+  abstract class Lens {
     def identifier: Identifier
     def funDef: FunDef
     def mapping = identifier -> this
@@ -50,14 +50,14 @@ trait Lenses { self: ReverseProgram.type =>
 
 
   /** Lense-like filter */
-  case object FilterReverser extends Reverser with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.
+  case object FilterLens extends Lens with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.
     import Utils._
     val identifier = Utils.filter
     def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
       val lambda = originalArgsValues.tail.head
       val newOutput = newOutputProgram.expr
       val ListLiteral(originalInput, _) = originalArgsValues.head
-      Log(s"FilterReverser: $originalArgsValues => $newOutputProgram")
+      Log(s"FilterLens: $originalArgsValues => $newOutputProgram")
       val filterLambda = (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true)
       newOutput match {
         case ListLiteral(newOutputList, _) =>
@@ -105,7 +105,7 @@ trait Lenses { self: ReverseProgram.type =>
   }
 
   /** Lense-like map, with the possibility of changing the mapping lambda. */
-  case object MapReverser extends Reverser {
+  case object MapLens extends Lens {
     import Utils._
     import StringConcatExtended._
     val identifier = map
@@ -274,7 +274,7 @@ trait Lenses { self: ReverseProgram.type =>
   }
 
   /** Lense-like map, with the possibility of changing the mapping lambda. */
-  case object FlattenReverser extends Reverser {
+  case object FlattenLens extends Lens {
     import Utils._
     val identifier = flatten
 
@@ -302,7 +302,7 @@ trait Lenses { self: ReverseProgram.type =>
     }
   }
 
-  case object MkStringReverser extends Reverser {
+  case object MkStringLens extends Lens {
     import Utils._
     import StringConcatExtended._
     import InoxConvertible._
@@ -703,7 +703,7 @@ trait Lenses { self: ReverseProgram.type =>
   }
 
   /** Lense-like map, with the possibility of changing the mapping lambda. */
-  case object FlatMapReverser extends Reverser {
+  case object FlatMapLens extends Lens {
     import Utils._
     val identifier = flatmap
 
@@ -763,7 +763,7 @@ trait Lenses { self: ReverseProgram.type =>
 
 
   /** Lense-like list concat, with the possibility of changing the mapping lambda. */
-  case object ListConcatReverser extends Reverser with AssociativeConcat[List[Expr], Expr] {
+  case object ListConcatLens extends Lens with AssociativeConcat[List[Expr], Expr] {
     import Utils._
     import ProgramFormula.ListInsert
     val identifier = listconcat
@@ -973,7 +973,7 @@ trait Lenses { self: ReverseProgram.type =>
   }
 
   /** Lense-like list concat, with the possibility of changing the mapping lambda. */
-  case object StringConcatReverser extends Reverser with AssociativeConcat[String, Char] {
+  case object StringConcatLens extends Lens with AssociativeConcat[String, Char] {
     import StringConcatExtended._
     import Utils._
     import ProgramFormula._
@@ -1166,7 +1166,7 @@ trait Lenses { self: ReverseProgram.type =>
     }
   }
 
-  case object SplitEvenReverser extends Reverser {
+  case object SplitEvenLens extends Lens {
     import Utils._
     import ImplicitTuples._
     val identifier = splitEven
@@ -1192,7 +1192,7 @@ trait Lenses { self: ReverseProgram.type =>
   }
 
   // Merge two sorted lists.
-  case object MergeReverser extends Reverser {
+  case object MergeLens extends Lens {
     import Utils._
     val identifier = merge
     val funDef : FunDef = mkFunDef(identifier)("A") { case Seq(tA) =>
@@ -1224,7 +1224,7 @@ trait Lenses { self: ReverseProgram.type =>
     }
   }
 
-  case object SortWithReverser extends Reverser {
+  case object SortWithLens extends Lens {
     import Utils._
     val identifier = sortWith
     import InoxConvertible._
