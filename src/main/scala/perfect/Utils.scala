@@ -105,6 +105,7 @@ object Utils {
   val flatten = FreshIdentifier("flatten")
   val flatmap = FreshIdentifier("flatMap")
   val sortWith = FreshIdentifier("sortWith")
+  val rec = FreshIdentifier("rec")
   val merge = FreshIdentifier("merge")
   val splitEven = FreshIdentifier("splitEven")
   val mkString = FreshIdentifier("mkString")

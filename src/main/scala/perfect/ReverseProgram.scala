@@ -29,23 +29,33 @@ object ReverseProgram extends lenses.Lenses {
     if(a.isEmpty) b else a
   }
 
+  /** Main entry point to reverse a program.
+    * @param outProg The output that the program should produce
+    * @param prevIn The program to repair. May be empty, in which case it returns outProg
+    * @return The program prevIn such that it locally produces the changes given by outProg */
   def put(outProg: ProgramFormula, prevIn: Option[Expr]): Stream[Expr] = {
     if(prevIn == None) {
       val outExpr = outProg.bodyDefinition.getOrElse(throw new Exception(s"Ill-formed program: $outProg"))
       return Stream(outExpr)
     }
+
     implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
     implicit val cache = new HashMap[Expr, Expr]
-    val newMain = FreshIdentifier("main")
     for { r <- repair(ProgramFormula(prevIn.get), outProg)
-          ProgramFormula(newOutExpr, f) = r.insertVariables()
-          _ = Log("Remaining formula: " + f)
-          _ = Log("Remaining expression: " + newOutExpr)
-          assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toSeq)
-          _ = Log("Found assignments: " + assignments)
-          finalNewOutExpr = exprOps.replaceFromSymbols(assignments, newOutExpr)
-          _ = Log("Final  expression: " + finalNewOutExpr)
+          ProgramFormula(newOutExpr, f) = r.insertVariables()                    /: Log.remaining_program
+          assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toSeq) /:: Log.found_assignments
+          finalNewOutExpr = exprOps.replaceFromSymbols(assignments, newOutExpr)  /: Log.final_expression
     } yield finalNewOutExpr
+  }
+
+  /** Alternative way of reversing a program.
+    * @param outProg The output that the program should produce
+    * @param prevIn The program to repair, along with assignment formulas. May be empty, in which case it returns outProg
+    * @return The program prevIn such that it locally produces the changes given by outProg */
+  def put(outProg: ProgramFormula, prevIn: ProgramFormula): Stream[ProgramFormula] = {
+    implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
+    implicit val cache = new HashMap[Expr, Expr]
+    for { r <- repair(prevIn, outProg) } yield r.insertVariables() /: Log.remaining_program
   }
     /** Reverses a parameterless function, if possible.*/
   def putPf(outProg: ProgramFormula, prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
@@ -93,7 +103,6 @@ object ReverseProgram extends lenses.Lenses {
   /** Eval function. Uses a cache normally*/
   def evalWithCache(expr: Expr)(implicit cache: Cache, symbols: Symbols) = cache.getOrElseUpdate(expr, {
     import evaluators._
-    val funDef = mkFunDef(FreshIdentifier("main"))()(stp => (Seq(), expr.getType, _ => expr))
     val p = InoxProgram(context, symbols)
     val evaluator = LambdaPreservingEvaluator(p)
     evaluator.eval(expr) match {
@@ -107,7 +116,6 @@ object ReverseProgram extends lenses.Lenses {
       Some(cache(expr))
     } else {
       import evaluators._
-      val funDef = mkFunDef(FreshIdentifier("main"))()(stp => (Seq(), expr.getType, _ => expr))
       val p = InoxProgram(context, symbols)
       val evaluator = LambdaPreservingEvaluator(p)
       evaluator.eval(expr) match {
@@ -237,6 +245,22 @@ object ReverseProgram extends lenses.Lenses {
           }
         case _ => Stream.empty[ProgramFormula]
       })
+
+    // TODO: Use this lense converter when everything will have be put into lenses.
+    /*def lensConverter(e: Expr)(wrapper: Expr => Stream[ProgramFormula]): Stream[ProgramFormula] = {
+      e match {
+        case StringConcat(left, right) =>
+          for(pf <- wrapper(FunctionInvocation(StringConcatLens.identifier, Nil,
+            Seq(left, right)))) {
+            pf match {
+              case ProgramFormula(FunctionInvocation(StringConcatLens.identifier, Nil, Seq(x, y)), f) =>
+                ProgramFormula(StringConcat(x, y), f)
+            }
+          }
+        case _ => wrapper(e)
+      }
+    }*/
+
     def originalSolutions : Stream[ProgramFormula] =
       function match {
         // Values (including lambdas) should be immediately replaced by the new value
@@ -745,7 +769,7 @@ object ReverseProgram extends lenses.Lenses {
             pf.wrap(x => MapApply(x, key))
           }
 
-        case Application(lambdaExpr, arguments) =>
+        case Application(lambdaExpr, arguments) => // TODO: Put this into a lense.
           val originalValueMaybe: Option[Expr] = (lambdaExpr match {
             case v: Variable => currentValues.get(v).map(_.getValue).flatten.orElse(maybeEvalWithCache(functionFormula.assignments.get(v)))
             case l: Lambda => Some(l)

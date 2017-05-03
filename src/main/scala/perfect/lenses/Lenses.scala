@@ -22,7 +22,8 @@ trait Lenses { self: ReverseProgram.type =>
     SplitEvenLens,
     MergeLens,
     SortWithLens,
-    MkStringLens
+    MkStringLens,
+    RecLens2
   )
 
   val reversions = lenses.map(x => x.identifier -> x).toMap
@@ -1284,6 +1285,51 @@ trait Lenses { self: ReverseProgram.type =>
 
         case v =>
           ???
+      }
+    }
+  }
+
+  /*case object ApplicationLens extends Lens {
+
+  }*/
+
+  object RecLens {
+    def build(name: String, arg1: ValDef, arg2: ValDef)(returnType: Type)(f: (Variable, Variable, Variable) => Expr): Expr = {
+      Lambda(Seq(arg1, arg2),
+        E(RecLens2.identifier)(arg1.tpe, arg2.tpe, returnType)(
+          \(name::FunctionType(Seq(arg1.tpe, arg2.tpe), returnType), "a1"::arg1.tpe, "a2"::arg2.tpe)((m, a1, a2) =>
+            f(m, a1, a2)),
+          arg1.toVariable,
+          arg2.toVariable
+        ))
+    }
+  }
+
+  case object RecLens2 extends Lens {
+    import Utils._
+    val identifier = Utils.rec
+
+    val funDef: FunDef = mkFunDef(identifier)("A1", "A2", "B"){ case Seq(tA1, tA2, tB) =>
+      (Seq("F" :: FunctionType(Seq(FunctionType(Seq(tA1, tA2), tB), tA1, tA2), tB), "x1" :: tA1, "x2" :: tA2),
+        tB,
+        { case Seq(f, x1, x2) =>
+          f(\("a1"::tA1, "a2"::tA2)((a1, a2) => E(identifier)(tA1, tA2, tB)(f, a1, a2)), x1, x2)
+        })
+    }
+
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols)
+    : Stream[ArgumentsFormula] = {
+      val f = castOrFail[Expr, Lambda](originalArgsValues.head)
+      val x1 = originalArgsValues.tail.head
+      val x2 = originalArgsValues.tail.tail.head
+      val tA1 = tpes.head
+      val tA2 = tpes.tail.head
+      val tB = tpes.tail.tail.head
+      val equivalent = ProgramFormula(f(\("a1"::tA1, "a2"::tA2)((a1, a2) => E(identifier)(tA1, tA2, tB)(f, a1, a2)), x1, x2))
+      repair(equivalent, newOutput).map{
+        case ProgramFormula(Application(newF, Seq(_, newA1, newA2)), formula) =>
+          (Seq(ProgramFormula(newF),
+            ProgramFormula(newA1), ProgramFormula(newA2)), formula)
       }
     }
   }

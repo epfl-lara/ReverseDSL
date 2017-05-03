@@ -429,6 +429,12 @@ object InoxConvertible {
         def getType = inoxTypeOf[Bag[A]]
       }
     }
+    object TCons {
+      def apply[A: InoxConvertible] = new ToInoxTypeConvertible {
+        def ::(name: String): ValDef = ValDef(FreshIdentifier(name), getType, Set())
+        def getType = ADTType(Utils.cons, Seq(inoxTypeOf[A]))
+      }
+    }
     object TList {
       def apply[A: InoxConvertible] = new ToInoxTypeConvertible {
         def ::(name: String): ValDef = valdef[List[A]](name)
@@ -436,6 +442,7 @@ object InoxConvertible {
       }
     }
     implicit def toInoxTypeConvertible(t: ToInoxTypeConvertible): Type = t.getType
+    implicit def toInoxTypeConvertibleAdt(t: ToInoxTypeConvertible { def getType: ADTType }): ADTType= t.getType
     implicit def stringToType(t: String.type): Type = StringType
     implicit def stringToType(t: Int.type): Type = Int32Type
     object String {
