@@ -23,7 +23,6 @@ object ReverseProgram extends lenses.Lenses {
   import InoxConvertible._
   lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
 
-  var experimentalUnifyLambda = false
   /** Returns the stream b if a is empty, else only a. */
   def ifEmpty[A](a: Stream[A])(b: =>Stream[A]): Stream[A] = {
     if(a.isEmpty) b else a
@@ -437,12 +436,9 @@ object ReverseProgram extends lenses.Lenses {
         case fun@Lambda(vds, body) =>
 
           def unify: Stream[ProgramFormula] = {
-            println("entering unify")
-            if(/*experimentalUnifyLambda && */exprOps.variablesOf(fun).nonEmpty) {
-              println("entering unify-if")
+            if(exprOps.variablesOf(fun).nonEmpty) {
               optVar(newOut).flatMap(newOutFormula.findStrongConstraintValue).getOrElse(newOut) match {
                 case Lambda(vds2, body2) =>
-                  println("in lambda")
                   val freshVariables1 = vds.map(vd => Variable(FreshIdentifier(vd.id.name, true), vd.tpe, vd.flags))
                   val freshBody1 = exprOps.replaceFromSymbols(vds.zip(freshVariables1).toMap, body)
                   val freshBody2 = exprOps.replaceFromSymbols(vds2.zip(freshVariables1).toMap, body2)
