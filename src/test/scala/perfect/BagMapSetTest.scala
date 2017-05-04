@@ -13,7 +13,7 @@ import inox._
 import inox.evaluators.EvaluationResults
 import inox.trees.{not => inoxNot, _}
 import inox.trees.dsl._
-import perfect.ProgramFormula.{StringInsert, AssociativeInsert}
+import perfect.semanticlenses._
 
 /**
   * Created by Mikael on 22/03/2017.

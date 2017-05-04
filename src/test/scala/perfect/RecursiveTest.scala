@@ -14,6 +14,7 @@ class RecursiveTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import Utils._
   import StringConcatExtended._
+  import semanticlenses._
   implicit val symbols = Utils.defaultSymbols
 
   val mapDef = ReverseProgram.RecLens.build("map",
@@ -44,7 +45,7 @@ class RecursiveTest extends FunSuite with TestHelpers {
       mp(_List[String]("brother", "boss"), \("s"::String)(s => "Big " +& s))
     )
     val original = _List[String]("Big brother", "Big boss")
-    val modified = ProgramFormula.StringInsert.Expr("Big brother", "s", "", ProgramFormula.AssociativeInsert.InsertAutomatic)
+    val modified = StringInsert.Expr("Big brother", "s", "", AssociativeInsert.InsertAutomatic)
     prog shouldProduce original
     prog repairFrom
       ProgramFormula.TreeModification(

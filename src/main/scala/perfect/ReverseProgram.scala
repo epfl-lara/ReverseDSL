@@ -5,7 +5,6 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
-import perfect.ProgramFormula.{StringInsert}
 import perfect.semanticlenses._
 
 import scala.collection.mutable.{HashMap, ListBuffer}
@@ -151,7 +150,8 @@ object ReverseProgram extends lenses.Lenses {
     PatternMatch.Lens andThen
       PatternReplace.Lens andThen
       ListInsert.Lens andThen
-      PasteVariable.Lens
+      PasteVariable.Lens andThen
+      StringInsert.Lens
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * Basically, we solve the problem:
@@ -279,9 +279,6 @@ object ReverseProgram extends lenses.Lenses {
           import ProgramFormula._
           newOutBestValue match {
             case l: Literal[_] => Stream(newOutProgram) /* Raw replacement*/
-
-            case ProgramFormula.StringInsert.Expr(left, inserted, right, direction) =>
-              Stream(ProgramFormula(StringLiteral(left + inserted + right)))
 
             case m: MapApply =>
               repair(program, newOutProgram.subExpr(newOutProgram.formula.findConstraintVariableOrLiteral(m)))
@@ -438,8 +435,7 @@ object ReverseProgram extends lenses.Lenses {
             Seq(expr1, expr2)))
           val replacementOut = newOutProgram.wrap{
             case StringConcat(a, b) =>
-              FunctionInvocation(StringConcatLens.identifier, Nil,
-                Seq(a, b))
+              FunctionInvocation(StringConcatLens.identifier, Nil, Seq(a, b))
             case e => e
           }
 
@@ -454,7 +450,7 @@ object ReverseProgram extends lenses.Lenses {
           } #::: {
             // Handle insertion between two non-constants as a possible constant at the last resort.
             newOutProgram match {
-              case ProgramFormula.StringInsert(left, inserted, right, direction)
+              case StringInsert(left, inserted, right, direction)
                 if !expr1.isInstanceOf[StringLiteral] && !expr2.isInstanceOf[StringLiteral] &&
                   maybeEvalWithCache(functionFormula.assignments.get(expr1)) == Some(StringLiteral(left)) &&
                   maybeEvalWithCache(functionFormula.assignments.get(expr2)) == Some(StringLiteral(right))
