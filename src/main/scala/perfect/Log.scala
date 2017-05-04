@@ -6,16 +6,20 @@ package perfect
 import scala.language.dynamics
 object Log extends Log with Dynamic {
   var activate = false
-  def activated[A](execution: =>A) = {
+  def activated[A](execution: =>A): A = {
     val prevActivate = Log.activate
     Log.activate = true
-    execution
+    val res = execution
     Log.activate = prevActivate
+    res
+  }
+  def prefix_activated(p: String): Log = new Log {
+    override def apply(s: Any) = Log.activated {
+      super.apply(p + s)
+    }
   }
   def prefix(p: String): Log = new Log {
-    override def apply(s: Any) = if(activate) {
-      super.apply(p+s)
-    }
+    override def apply(s: Any) = super.apply(p+s)
   }
   def time(p: String): Log = new Log {
     val startTime = System.currentTimeMillis()

@@ -45,7 +45,7 @@ trait Lenses { self: ReverseProgram.type =>
     def identifier: Identifier
     def funDef: FunDef
     def mapping = identifier -> this
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula]
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula]
   }
 
 
@@ -54,28 +54,28 @@ trait Lenses { self: ReverseProgram.type =>
   case object FilterLens extends Lens with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.
     import Utils._
     val identifier = Utils.filter
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
-      val lambda = originalArgsValues.tail.head
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+      val ProgramFormula(lambda, lambdaF) = originalArgsValues.tail.head
       val newOutput = newOutputProgram.expr
-      val ListLiteral(originalInput, _) = originalArgsValues.head
+      val ProgramFormula(ListLiteral(originalInput, _), listF) = originalArgsValues.head
       Log(s"FilterLens: $originalArgsValues => $newOutputProgram")
-      val filterLambda = (expr: Expr) => evalWithCache(Application(lambda, Seq(expr))) == BooleanLiteral(true)
+      val filterLambda = (expr: Expr) => evalWithCache(lambdaF.assignments.get(Application(lambda, Seq(expr)))) == BooleanLiteral(true)
       newOutput match {
         case ListLiteral(newOutputList, _) =>
           filterRev(originalInput, filterLambda, newOutputList).map{ (e: List[Expr]) =>
-            (Seq(ProgramFormula(ListLiteral(e, tpes.head)), ProgramFormula(lambda)), Formula())
+            (Seq(ProgramFormula(ListLiteral(e, tpes.head), listF.assignmentsAsOriginals), ProgramFormula(lambda)), Formula())
           }
         case Variable(id, lstType, flags) => // Convert to a formula and return a new variable
           newOutputProgram.getFunctionValue match {
             case Some(ListLiteral(newOutputList, _)) =>
               Log.prefix(s"filterRev($originalInput, $newOutputList)") :=
               filterRev(originalInput, filterLambda, newOutputList).map{ (e: List[Expr]) =>
-                (Seq(ProgramFormula(ListLiteral(e, tpes.head)), ProgramFormula(lambda)), Formula())
+                (Seq(ProgramFormula(ListLiteral(e, tpes.head), listF.assignmentsAsOriginals), ProgramFormula(lambda)), Formula())
               }
             case _ =>
               val newVar = Variable(id.freshen, lstType, flags)
               Stream(((Seq(ProgramFormula(newVar), ProgramFormula(lambda)),
-                newOutputProgram.formula combineWith Formula(Map(), (FunctionInvocation(identifier, tpes, Seq(newVar, lambda)) === newOutput))
+                newOutputProgram.formula combineWith listF.assignmentsAsOriginals combineWith Formula(Map(), (FunctionInvocation(identifier, tpes, Seq(newVar, lambda)) === newOutput))
               )))
           }
 
@@ -113,17 +113,17 @@ trait Lenses { self: ReverseProgram.type =>
 
     import Utils.AugmentedStream
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
       Log(s"map.apply($newOutput)")
-      val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
-      val ListLiteral(originalInput, inputType) = originalArgsValues.head
+      val ProgramFormula(lambda: Lambda, lambdaF) = originalArgsValues.tail.head
+      val ProgramFormula(ListLiteral(originalInput, inputType), listF) = originalArgsValues.head
       val argType = lambda.args.head.getType
       val valueByDefault: Expr = originalInput.headOption.getOrElse(defaultValue(argType))
       val unknown = ValDef(FreshIdentifier("unknown"), argType)
       val unknownVar = unknown.toVariable
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
       val mapr = new MapReverseLike[(Expr, Formula), Expr, ((Expr, Lambda), Formula)] {
-        override def f = (exprF: (Expr, Formula)) => evalWithCache(Application(lambda, Seq(exprF._1)))
+        override def f = (exprF: (Expr, Formula)) => evalWithCache(lambdaF.assignments.get(Application(lambda, Seq(exprF._1))))
 
         override def fRev = (prevIn: Option[(Expr, Formula)], out: Expr) => {
           Log(s"Map.fRev: $prevIn, $out")
@@ -133,7 +133,7 @@ trait Lenses { self: ReverseProgram.type =>
             prevIn.map(x => (Seq(x._1), x._2)).getOrElse {(Seq(unknownVar), Formula(unknownVar -> OriginalValue(valueByDefault)))}
           Log(s"in:$in\nnewformula:$newFormula")
           Log.prefix(s"fRev($prevIn, $out)=") :=
-          repair(ProgramFormula(Application(lambda, Seq(in)), newFormula).wrappingLowPriority(), newOutput.subExpr(out)).flatMap {
+          repair(ProgramFormula(Application(lambda, Seq(in)), newFormula combineWith lambdaF).wrappingLowPriority(), newOutput.subExpr(out)).flatMap {
             case ProgramFormula(Application(lambda2, Seq(in2)), formula)
               if lambda2 == lambda => //The argument's values have changed
               Stream(Left((in2, formula)))
@@ -155,7 +155,7 @@ trait Lenses { self: ReverseProgram.type =>
           val original = originalInput(index.length)
           val newVar = Variable(FreshIdentifier("x"), inputType, Set())
 
-          if(remaining.isEmpty) {
+          if(remaining.isEmpty) { // TODO: Case not supported yet, we currently have to end with "head" selection.
             ???
           } else {
             repair(ProgramFormula(Application(lambda, Seq(original))),
@@ -165,17 +165,17 @@ trait Lenses { self: ReverseProgram.type =>
                 if (lambda2 != lambda && expr2 == original) {
                   (Seq(ProgramFormula.TreeModification(ADTType(Utils.cons, Seq(argType)),
                     tpeLocal,
-                    originalArgsValues.head,
+                    originalArgsValues.head.expr,
                     expr2,
                     index :+ Utils.head
-                  ) combineWith formula2, ProgramFormula(lambda2, formula2)), Formula())
+                  ) combineWith formula2 combineWith originalArgsValues.head.formula, ProgramFormula(lambda2, formula2)), Formula())
                 } else {
                   (Seq(ProgramFormula.TreeModification(ADTType(Utils.cons, Seq(argType)),
                     tpeLocal,
-                    originalArgsValues.head,
+                    originalArgsValues.head.expr,
                     expr2,
                     index :+ Utils.head
-                  ) combineWith formula2, ProgramFormula(lambda)), Formula())
+                  ) combineWith formula2 combineWith originalArgsValues.head.formula, ProgramFormula(lambda)), Formula())
                 }
             }
           }
@@ -242,17 +242,17 @@ trait Lenses { self: ReverseProgram.type =>
               newBefore,
               newInsertedRaw,
               newAfter
-            ) combineWith formulaArg
-            val secondArg = ProgramFormula(newLambda, formulaLambda)
+            ) combineWith formulaArg combineWith listF.assignmentsAsOriginals
+            val secondArg = ProgramFormula(newLambda, formulaLambda combineWith lambdaF.assignmentsAsOriginals)
 
             (Seq(firstArg, secondArg), Formula())
           }
         case _ =>
           //Log(s"Reversing $originalArgs: $originalOutput => $newOutput")
-          val res = mapr.mapRev((originalInput.map(x => (x, Formula()))),
+          val res = mapr.mapRev((originalInput.map(x => (x, listF))),
             ListLiteral.unapply(newOutput.functionValue).get._1)
-            Log("intermediate: "+res)
-            res.flatMap(recombineArgumentsLambdas(lambda, tpes))
+          Log("intermediate: "+res)
+          res.flatMap(recombineArgumentsLambdas(lambda, tpes)) /: Log.intermediate_recombined
       }
     }
 
@@ -279,7 +279,7 @@ trait Lenses { self: ReverseProgram.type =>
     import Utils._
     val identifier = flatten
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
 ???
     }
 
@@ -342,9 +342,9 @@ trait Lenses { self: ReverseProgram.type =>
       }
     }
     
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
-      val originalInputExpr@ListLiteral(originalInput, _) = originalArgsValues.head
-      val infixExpr@StringLiteral(infix) = originalArgsValues.tail.head
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+      val ProgramFormula(originalInputExpr@ListLiteral(originalInput, _), originalInput_formula) = originalArgsValues.head
+      val ProgramFormula(infixExpr@StringLiteral(infix), _) = originalArgsValues.tail.head
       val originalInputList: List[String] = originalInput.map{
         case StringLiteral(l) => l
         case e => throw new Exception(s"not a string: $e")
@@ -406,7 +406,7 @@ trait Lenses { self: ReverseProgram.type =>
             notHandledList.length == 0 && infix == "" && direction == AssociativeInsert.InsertAutomatic &&
               leftUntouched.length > 0 && rightUntouched.length > 0
           ) { // The prefix was selected and updated !
-            solutions += ((Seq(ProgramFormula(originalInputExpr),
+            solutions += ((Seq(ProgramFormula(originalInputExpr, originalInput_formula.assignmentsAsOriginals),
               StringInsert(leftUpdated, inserted, rightUpdated, direction)), Formula()))
           } else if(notHandledList.length % 2 == 0) { // An insertion occurred either on the element before or the element after.
             // Some more elements have been possibly inserted as well. We prioritize splitting on the infix if it is not empty.
@@ -446,7 +446,7 @@ trait Lenses { self: ReverseProgram.type =>
                 } else { // Infix is empty.
                   assert(infix == "")
                   val infixModification = if(someInfixOrNone != None)
-                    List((Seq(ProgramFormula(originalInputExpr), StringInsert("", inserted, "", direction)), Formula()))
+                    List((Seq(ProgramFormula(originalInputExpr, originalInput_formula.assignmentsAsOriginals), StringInsert("", inserted, "", direction)), Formula()))
                   else Nil
 
                   val elementToLeftModification = {  // Then the element to the left, if any
@@ -686,7 +686,8 @@ trait Lenses { self: ReverseProgram.type =>
   }
 
   private def recombineArgumentsLambdas(lambda: Lambda, tpes: Seq[Type])
-                                       (e: List[Either[(Expr, Formula), ((Expr, Lambda), Formula)]])(implicit symbols: Symbols) = {
+                                       (e: List[Either[(Expr, Formula), ((Expr, Lambda), Formula)]])(implicit symbols: Symbols)
+  : Stream[ArgumentsFormula] = {
     Log(s"recombineArgumentLambdas($e)")
     val argumentsChanged = e.map{
       case Left((e, _)) => e
@@ -699,7 +700,7 @@ trait Lenses { self: ReverseProgram.type =>
     for{l <- newLambdas
         (lExpr, lFormula) = l
     } yield {
-      (Seq(ProgramFormula(ListLiteral(argumentsChanged, tpes.head), argFormula), ProgramFormula(lExpr, lFormula)), Formula())
+      (Seq(ProgramFormula(ListLiteral(argumentsChanged, tpes.head), argFormula), ProgramFormula(lExpr, lFormula combineWith argFormula)), Formula())
     }
   }
 
@@ -708,14 +709,14 @@ trait Lenses { self: ReverseProgram.type =>
     import Utils._
     val identifier = flatmap
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
-      val ListLiteral(originalInput, _) = originalArgsValues.head
-      val lambda = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+      val originalInputProg@ProgramFormula(ListLiteral(originalInput, _), originalInputF) = originalArgsValues.head
+      val ProgramFormula(lambda: Lambda, lambdaF) = originalArgsValues.tail.head
       val uniqueUnknownValue = defaultValue(lambda.args.head.getType)
 
       val fmapr = new FlatMapReverseLike[(Expr, Formula), Expr, ((Expr, Lambda), Formula)] {
         def f: ((Expr, Formula)) => List[Expr] = { (exprF: (Expr, Formula)) =>
-          val ListLiteral(l, _) = evalWithCache(Application(lambda, Seq(exprF._1)))
+          val ListLiteral(l, _) = evalWithCache(lambdaF.assignments.get(Application(lambda, Seq(exprF._1))))
           l
         }
         def fRev: (Option[(Expr, Formula)], List[Expr]) => Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]] = { (prevIn, out) =>
@@ -741,7 +742,7 @@ trait Lenses { self: ReverseProgram.type =>
         }
       }
 
-      fmapr.flatMapRev(originalInput.map(x => (x, Formula())), ListLiteral.unapply(newOutput.expr).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
+      fmapr.flatMapRev(originalInput.map(x => (x, originalInputF)), ListLiteral.unapply(newOutput.expr).get._1).flatMap(recombineArgumentsLambdas(lambda, tpes))
     }
 
     // Flatmap definition in inox
@@ -794,10 +795,10 @@ trait Lenses { self: ReverseProgram.type =>
 
     def endsWith(list: Expr, end: Expr): Boolean = startsWith(reverse(list, None), reverse(end, None))
 
-    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tps: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
       val newOutput = newOutputProgram.expr
-      val leftValue@ListLiteral(leftValue_s, _) = originalArgsValues.head
-      val rightValue@ListLiteral(rightValue_s, _) = originalArgsValues.tail.head
+      val ProgramFormula(leftValue@ListLiteral(leftValue_s, _), leftF) = originalArgsValues.head
+      val ProgramFormula(rightValue@ListLiteral(rightValue_s, _), rightF) = originalArgsValues.tail.head
 
       def defaultCase: Stream[ArgumentsFormula] = {
         val left = Variable(FreshIdentifier("l", true), T(list)(tps.head), Set())
@@ -1000,10 +1001,10 @@ trait Lenses { self: ReverseProgram.type =>
       else 0) // We mostly insert into empty strings if available.
     }
 
-    def put(tps: Seq[Type])(originalArgsValues: Seq[Expr], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tps: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
       val newOutput = newOutputProgram.expr
-      val leftValue@StringLiteral(lv) = originalArgsValues.head
-      val rightValue@StringLiteral(rv) = originalArgsValues.tail.head
+      val leftProgram@ProgramFormula(leftValue@StringLiteral(lv), leftF) = originalArgsValues.head
+      val rightProgram@ProgramFormula(rightValue@StringLiteral(rv), rightF) = originalArgsValues.tail.head
 
       def leftCase(s: String):  Stream[(ArgumentsFormula, Int)] = {
         Log.prefix("Testing left:") :=
@@ -1132,7 +1133,7 @@ trait Lenses { self: ReverseProgram.type =>
           val leftValue_s = asStr(leftValue)
           if(leftValue_s.startsWith(left)) {
             val newLeftValue = leftValue_s.substring(left.length)
-            put(tps)(Seq(StringLiteral(newLeftValue), rightValue), newOutputProgram.subExpr(right))
+            put(tps)(Seq(ProgramFormula(StringLiteral(newLeftValue)), rightProgram), newOutputProgram.subExpr(right))
           } else {
             ???
           }
@@ -1141,14 +1142,14 @@ trait Lenses { self: ReverseProgram.type =>
           val rightValue_s = asStr(rightValue)
           if(rightValue_s.endsWith(right)) {
             val newRightValue = rightValue_s.substring(0, rightValue_s.length - right.length)
-            put(tps)(Seq(leftValue, StringLiteral(newRightValue)), newOutputProgram.subExpr(left))
+            put(tps)(Seq(leftProgram, ProgramFormula(StringLiteral(newRightValue))), newOutputProgram.subExpr(left))
           } else {
             ???
           }
         case v: Variable if newOutputProgram.formula.constraints == BooleanLiteral(true) =>
           newOutputProgram.formula.findStrongConstraintValue(v) match {
             case Some(e) =>
-              put(tps)(Seq(leftValue, rightValue), ProgramFormula(e, newOutputProgram.formula))
+              put(tps)(Seq(leftProgram, rightProgram), ProgramFormula(e, newOutputProgram.formula))
             case _ => defaultCase
           }
 
@@ -1187,7 +1188,7 @@ trait Lenses { self: ReverseProgram.type =>
         }
       )
     }
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
       ???
     }
   }
@@ -1219,7 +1220,7 @@ trait Lenses { self: ReverseProgram.type =>
           }
         })
     }
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr],
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula],
                              newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
       ???
     }
@@ -1248,16 +1249,16 @@ trait Lenses { self: ReverseProgram.type =>
       })
     }
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
       import ImplicitTuples._
-      val in@ListLiteral(inList, tpe) = originalArgsValues.head
-      val lambdaComp = castOrFail[Expr, Lambda](originalArgsValues.tail.head)
+      val ProgramFormula(in@ListLiteral(inList, tpe), inListF) = originalArgsValues.head
+      val lambdaProg@ProgramFormula(lambdaComp: Lambda, lambdaF) = originalArgsValues.tail.head
       lazy val tracingLambdaComp = \("in1"::_TTuple2(tpes.head, Int32Type), "in2"::_TTuple2(tpes.head, Int32Type))((in1, in2) =>
         Application(lambdaComp, Seq(in1.getField(_1), in2.getField(_1)))
       )
       lazy val tracingIn = ListLiteral(inList.zipWithIndex.map{ case (e, i) => _Tuple2(tpes.head, Int32Type)(e, IntLiteral(i)) }, _TTuple2(tpes.head, Int32Type))
 
-      lazy val expectedTracingOutput = evalWithCache(E(identifier)(_TTuple2(tpes.head, Int32Type))(tracingIn, tracingLambdaComp))
+      lazy val expectedTracingOutput = evalWithCache(lambdaF.assignments.get(E(identifier)(_TTuple2(tpes.head, Int32Type))(tracingIn, tracingLambdaComp)))
 
       lazy val ListLiteral(expectedTracedList, _) = expectedTracingOutput
       lazy val indexOrder = expectedTracedList.map {
@@ -1275,12 +1276,12 @@ trait Lenses { self: ReverseProgram.type =>
             val newArguments = List.fill(prev_n.toInt)(tail) ++ remaining
 
             Stream((Seq(TreeModification(tpeGlobal, tpeLocal, in, modified, newArguments),
-              ProgramFormula(lambdaComp)), Formula()))
+              lambdaProg.assignmentsAsOriginals()), Formula()))
           } else ??? // We tried to change one of the tails. Not supported.
         case ListInsert.Expr(tpe, left, inserted, right) => // We care only about deleted elements.
           if(left.length + right.length == inList.length) { // Only inserted elements. We insert them at the end of the original list.
-            Stream((Seq(ListInsert(tpe, inList, inserted, Nil),
-            ProgramFormula(lambdaComp)), Formula()))
+            Stream((Seq(ListInsert(tpe, inList, inserted, Nil) combineWith inListF.assignmentsAsOriginals,
+              lambdaProg.assignmentsAsOriginals()), Formula()))
           } else ??? // TODO: Deletions
 
         case v =>
@@ -1317,15 +1318,18 @@ trait Lenses { self: ReverseProgram.type =>
         })
     }
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[Expr], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols)
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols)
     : Stream[ArgumentsFormula] = {
-      val f = castOrFail[Expr, Lambda](originalArgsValues.head)
-      val x1 = originalArgsValues.tail.head
-      val x2 = originalArgsValues.tail.tail.head
+      val ProgramFormula(f: Lambda, f_formula) = originalArgsValues.head
+      val ProgramFormula(x1, x1_formula) = originalArgsValues.tail.head
+      val ProgramFormula(x2, x2_formula) = originalArgsValues.tail.tail.head
       val tA1 = tpes.head
       val tA2 = tpes.tail.head
       val tB = tpes.tail.tail.head
-      val equivalent = ProgramFormula(f(\("a1"::tA1, "a2"::tA2)((a1, a2) => E(identifier)(tA1, tA2, tB)(f, a1, a2)), x1, x2))
+      val equivalent =
+        ProgramFormula(f(\("a1"::tA1, "a2"::tA2)((a1, a2) => E(identifier)(tA1, tA2, tB)(f, a1, a2)), x1, x2),
+          f_formula combineWith x1_formula combineWith x2_formula
+        )
       repair(equivalent, newOutput).map{
         case ProgramFormula(Application(newF, Seq(_, newA1, newA2)), formula) =>
           (Seq(ProgramFormula(newF),

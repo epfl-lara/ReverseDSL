@@ -671,6 +671,31 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
 
   lazy val bodyDefinition: Option[Expr] = formula.assignments.map(f => f(expr))
 
+  // Returns an evaluated version of this program
+  // Keeps captured variables in lambdas if they have a value assigned (which they should)
+  /*def evaluated(implicit symbols: Symbols): Option[ProgramFormula] = {
+    expr match {
+      case l: Lambda => Some(this)
+      case e =>
+        givenValue match {
+          case Some(x) => Some(ProgramFormula(x))
+          case None =>
+            if(Utils.isValue(expr)) {
+              givenValue = Some(expr)
+              Some(this)
+            } else {  // Todo: If (f => f)(x => x + p), then it would still evaluate p.
+              import evaluators._
+              val p = InoxProgram(ReverseProgram.context, symbols)
+              val evaluator = ReverseProgram.LambdaPreservingEvaluator(p)
+              evaluator.eval(expr) match {
+                case EvaluationResults.Successful(e) => ProgramFormula(e) // Is it ok to loose variables?
+                case m => throw new Exception(s"Could not evaluate: $expr, got $m")
+              }
+            }
+        }
+    }
+  }
+*/
   def getFunctionValue(implicit cache: Cache, symbols: Symbols): Option[Expr] = {
     givenValue match {
       case Some(e) => givenValue
@@ -749,7 +774,7 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
   /** Returns the original assignments marked as original
     * Require known to be set. */
   def assignmentsAsOriginals(): ProgramFormula = {
-    this.copy(formula = Formula(formula.known.map{ case (k, StrongValue(e)) => (k, OriginalValue(e)) case kv => kv}))
+    this.copy(formula = this.formula.assignmentsAsOriginals)
   }
 
   /** Augment this expr with the given formula */

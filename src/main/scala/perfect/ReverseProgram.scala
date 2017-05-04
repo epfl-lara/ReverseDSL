@@ -40,7 +40,7 @@ object ReverseProgram extends lenses.Lenses {
     }
 
     implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
-    implicit val cache = new HashMap[Expr, Expr]
+    implicit val cache = new Cache
     for { r <- repair(ProgramFormula(prevIn.get), outProg)
           ProgramFormula(newOutExpr, f) = r.insertVariables()                    /: Log.remaining_program
           assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toSeq) /:: Log.found_assignments
@@ -54,7 +54,7 @@ object ReverseProgram extends lenses.Lenses {
     * @return The program prevIn such that it locally produces the changes given by outProg */
   def put(outProg: ProgramFormula, prevIn: ProgramFormula): Stream[ProgramFormula] = {
     implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
-    implicit val cache = new HashMap[Expr, Expr]
+    implicit val cache = new Cache
     for { r <- repair(prevIn, outProg) } yield r.insertVariables() /: Log.remaining_program
   }
     /** Reverses a parameterless function, if possible.*/
@@ -100,14 +100,18 @@ object ReverseProgram extends lenses.Lenses {
     } else expr
   }
 
-  /** Eval function. Uses a cache normally*/
+  /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
   def evalWithCache(expr: Expr)(implicit cache: Cache, symbols: Symbols) = cache.getOrElseUpdate(expr, {
-    import evaluators._
-    val p = InoxProgram(context, symbols)
-    val evaluator = LambdaPreservingEvaluator(p)
-    evaluator.eval(expr) match {
-      case EvaluationResults.Successful(e) => e
-      case m => throw new Exception(s"Could not evaluate: $expr, got $m")
+    expr match {
+      case l:Lambda => expr
+      case _ =>
+        import evaluators._
+        val p = InoxProgram(context, symbols)
+        val evaluator = LambdaPreservingEvaluator(p)
+        evaluator.eval(expr) match {
+          case EvaluationResults.Successful(e) => e
+          case m => throw new Exception(s"Could not evaluate: $expr, got $m")
+        }
     }
   })
 
@@ -217,9 +221,11 @@ object ReverseProgram extends lenses.Lenses {
 
     lazy val functionValue: Option[Expr] = program.getFunctionValue
 
-    if(!newOut.isInstanceOf[Variable] && functionValue.nonEmpty && !functionValue.get.isInstanceOf[FiniteMap]  && functionValue.get == newOut) return {
+    if(!newOut.isInstanceOf[Variable] &&
+      functionValue.nonEmpty && !functionValue.get.isInstanceOf[FiniteMap]
+       && functionValue.get == newOut) return {
       Log("@return original function");
-      Stream(program.assignmentsAsOriginals())
+      Stream(program.assignmentsAsOriginals() combineWith newOutFormula)
     }
     //Log(s"functionValue ($functionValue) != newOut ($newOut)")
 
@@ -429,18 +435,23 @@ object ReverseProgram extends lenses.Lenses {
 
           }
         case fun@Lambda(vds, body) =>
-          // Error if the free variables in body are not present in output.
 
           def unify: Stream[ProgramFormula] = {
-            if(experimentalUnifyLambda && exprOps.variablesOf(fun).nonEmpty) {
-              newOut match {
+            println("entering unify")
+            if(/*experimentalUnifyLambda && */exprOps.variablesOf(fun).nonEmpty) {
+              println("entering unify-if")
+              optVar(newOut).flatMap(newOutFormula.findStrongConstraintValue).getOrElse(newOut) match {
                 case Lambda(vds2, body2) =>
+                  println("in lambda")
                   val freshVariables1 = vds.map(vd => Variable(FreshIdentifier(vd.id.name, true), vd.tpe, vd.flags))
                   val freshBody1 = exprOps.replaceFromSymbols(vds.zip(freshVariables1).toMap, body)
                   val freshBody2 = exprOps.replaceFromSymbols(vds2.zip(freshVariables1).toMap, body2)
-                  for{ pf <- repair(program.subExpr(freshBody1), newOutProgram.subExpr(freshBody2)) } yield {
+                  val universallyQuantified = Formula(freshVariables1.map(v => v -> AllValues).toMap)
+                  for{ pf <- repair(program.subExpr(freshBody1) combineWith universallyQuantified,
+                    newOutProgram.subExpr(freshBody2) combineWith universallyQuantified) } yield {
                     pf.wrap { newBody =>
-                      val abstractedBody = exprOps.replaceFromSymbols(freshVariables1.map(_.toVal).zip(vds.map(_.toVariable)).toMap, pf.expr)
+                      val abstractedBody = exprOps.replaceFromSymbols(
+                        freshVariables1.map(_.toVal).zip(vds.map(_.toVariable)).toMap, pf.expr)
                       Lambda(vds, abstractedBody)
                     }
                   }
@@ -571,8 +582,16 @@ object ReverseProgram extends lenses.Lenses {
               }
 
             case _ =>
-              ifEmpty(for (pf <- repair(program.subExpr(FunctionInvocation(StringConcatLens.identifier, Nil,
-                Seq(expr1, expr2))), newOutProgram)) yield {
+              val replacement = program.subExpr(FunctionInvocation(StringConcatLens.identifier, Nil,
+                Seq(expr1, expr2)))
+              val replacementOut = newOutProgram.wrap{
+                case StringConcat(a, b) =>
+                  FunctionInvocation(StringConcatLens.identifier, Nil,
+                    Seq(a, b))
+                case e => e
+              }
+
+              ifEmpty(for (pf <- repair(replacement, replacementOut)) yield {
                 pf match {
                   case ProgramFormula(FunctionInvocation(StringConcatLens.identifier, Nil, Seq(x, y)), f) =>
                     ProgramFormula(StringConcat(x, y), f)
@@ -770,10 +789,12 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case Application(lambdaExpr, arguments) => // TODO: Put this into a lense.
-          val originalValueMaybe: Option[Expr] = (lambdaExpr match {
-            case v: Variable => currentValues.get(v).map(_.getValue).flatten.orElse(maybeEvalWithCache(functionFormula.assignments.get(v)))
+          val originalValueMaybe: Option[Expr] = (optVar(lambdaExpr).flatMap(functionFormula.findConstraintValue).getOrElse(lambdaExpr) match {
+            /*case v: Variable =>
+              currentValues.get(v).map(_.getValue).flatten.orElse(maybeEvalWithCache(functionFormula.assignments.get(v)))*/
             case l: Lambda => Some(l)
-            case l => maybeEvalWithCache(functionFormula.assignments.get(l))
+            //case _ => throw new Exception("Don't know how to deal with an application over non-lambda: "+lambdaExpr)
+            case l => functionFormula.partialAssignments.flatMap(assign => maybeEvalWithCache(assign._1(l)))
           }) /: Log.Original_Value
 
           // Returns the new list of arguments plus a mapping from old to new values.
@@ -787,20 +808,46 @@ object ReverseProgram extends lenses.Lenses {
           originalValueMaybe match {
             case Some(originalValue@Lambda(argNames, body)) =>
               val (freshArgsNames, oldToFresh, freshToOld) = freshenArgsList(argNames.map(_.toVariable))
-              val freshBody = exprOps.replaceFromSymbols(oldToFresh, body)
-              val argumentVals = arguments.map(arg => maybeEvalWithCache(functionFormula.assignments.get(arg)).map(v => OriginalValue(v)))
+              @inline def renew(e: Expr) = exprOps.replaceFromSymbols(oldToFresh, e)
+              @inline def back(e: Expr) = exprOps.replaceFromSymbols(freshToOld, e)
+
+              val freshBody = renew(body)
+              val assignments = functionFormula.assignments
+              val argumentVals =
+                arguments.map( arg =>
+                  assignments.flatMap(assign => maybeEvalWithCache(assign(arg)).map(v => OriginalValue(v)))
+                )
+
               if(argumentVals.forall(_.nonEmpty)) {
                 val argumentValues = freshArgsNames.zip(argumentVals.map(_.get)).toMap
-                val freshFormula = Formula(argumentValues)
-                val newpf = (program.subExpr(freshBody) combineWith freshFormula).wrappingEnabled
+                val newpf = (program.subExpr(freshBody) combineWith Formula(argumentValues)).wrappingEnabled
+
+                def backPf(newBodyFresh: Expr, newBodyFreshFormula: Formula): (Expr, Formula) = {
+                  val (newKnown, toInline) = ((Map[Variable, KnownValue](), Map[Variable, Expr]()) /: newBodyFreshFormula.known) {
+                    case ((newKnown, toInline), (k, v)) =>
+                      val newv = v.map(back)
+                      if(newv != v) { // A value changed, it means that it contained the old variable, so we need to inline this value.
+                        (newKnown, toInline + (k -> back(v.getValue.get)))
+                      } else {
+                        (newKnown + (k -> newv), toInline)
+                      }
+                  }
+                  val newBody =
+                    exprOps.preMap({
+                      case v: Variable => toInline.get(v)
+                      case _ => None
+                    }, true)(back(newBodyFresh))
+                  (newBody, Formula(newKnown, newBodyFreshFormula.constraints)) /: Log.prefix(s"backpf($newBodyFresh, $newBodyFreshFormula) = ")
+                }
+
                 for {pf <- repair(newpf, newOutProgram) /:: Log.prefix(s"For repair$stackLevel, recovered:\n")
                      ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
-                     newBody = exprOps.replaceFromSymbols(freshToOld, newBodyFresh)
+                     (newBody, newBodyFormula) = backPf(newBodyFresh, newBodyFreshFormula)
                      isSameBody = (newBody == body) /: Log.isSameBody
                      args <-
                      combineArguments(program,
                        arguments.zip(freshArgsNames).map { case (arg, expected) =>
-                         (arg, newOutProgram.subExpr(expected) combineWith newBodyFreshFormula combineWith Formula(expected -> argumentValues(expected)))
+                         (arg, newOutProgram.subExpr(expected) combineWith newBodyFormula combineWith Formula(expected -> argumentValues(expected)))
                        })
                      (newArguments, newArgumentsFormula) = args
                      newLambda = if (isSameBody) originalValue else Lambda(argNames, newBody)
@@ -809,15 +856,17 @@ object ReverseProgram extends lenses.Lenses {
                          if (isSameBody) Formula() else
                            Formula(v -> StrongValue(newLambda)))))
                        case l => repair(ProgramFormula(l, program.formula),
-                         newOutProgram.subExpr(newLambda) combineWith newBodyFreshFormula)
+                         newOutProgram.subExpr(newLambda) combineWith newBodyFormula)
                      }
                      ProgramFormula(newAppliee, lambdaRepairFormula) = pfLambda
                      finalApplication = Application(newAppliee, newArguments) /: Log.prefix("finalApplication")
                 } yield {
-                  Log(s"newBodyFreshFormula: $newBodyFreshFormula")
+                  Log(s"newBodyFormula: $newBodyFormula")
                   Log(s"lambdaRepairFormula: $lambdaRepairFormula")
                   Log(s"newArgumentsFormula: $newArgumentsFormula")
-                  val combinedFormula = newBodyFreshFormula combineWith lambdaRepairFormula combineWith newArgumentsFormula
+                  val varsToRemove = freshArgsNames.filter{ v => !exprOps.exists{ case `v` => true case _ => false}(finalApplication)}
+                  val combinedFormula = newBodyFormula combineWith lambdaRepairFormula combineWith
+                    newArgumentsFormula removeArgs varsToRemove
                   Log.prefix("[return] ") :=
                     ProgramFormula(finalApplication: Expr, combinedFormula)
                 }
@@ -830,10 +879,10 @@ object ReverseProgram extends lenses.Lenses {
                 lambdaExpr match {
                   case v: Variable if (originalVariables contains v) &&
                     !arguments.exists(arg => exprOps.exists{ case v2: Variable if v2 == v => true  case _ => false}(arg)) => // The variable should not be used in arguments.
-
+                    Log(s"The caller is a variable not used in arguments")
                     def modifyFunction: Stream[ProgramFormula] = {
                       if (originalVariables.size == 1) { // No need to evaluate the arguments, we just unify.
-
+                        Log("We only solve the puzzle on arguments since there are no more variables")
                         /** Returns an arrangment of variables v such that the goal is build only out of v's*/
                         def puzzle(v: Seq[ValDef], pieces: Seq[Expr], goal: Expr): Stream[Expr] = {
                           pieces.toStream.zip(v.toStream).collect[Expr, Stream[Expr]]{
@@ -853,16 +902,18 @@ object ReverseProgram extends lenses.Lenses {
                           program.assignmentsAsOriginals() combineWith Formula(v -> StrongValue(Lambda(argNames, solution)))
                         }
                       } else {
+                        Log(s"We assign to everything else than $v their value")
                         // We try to evaluate everything else so that we only have unification to do.
                         val newArguments = arguments.map { arg =>
                           exprOps.preMap{
                             case Application(v: Variable, args2) if originalVariables contains v =>
-                              maybeEvalWithCache(functionFormula.assignments.get(v)) match {
+                              functionFormula.partialAssignments.flatMap(assign => maybeEvalWithCache(assign._1(v))) match {
                                 case Some(Lambda(nArg, nBody)) =>
                                   Some(exprOps.replaceFromSymbols(nArg.map(_.toVariable).zip(args2).toMap, nBody))
                                 case _ => None
                               }
-                            case v: Variable if originalVariables contains v => maybeEvalWithCache(functionFormula.assignments.get(v))
+                            case v: Variable if originalVariables contains v =>
+                              functionFormula.partialAssignments.flatMap(assign => maybeEvalWithCache(assign._1(v)))
                             case _ => None
                           }(arg)
                         }
@@ -921,14 +972,33 @@ object ReverseProgram extends lenses.Lenses {
           reversions.get(f) match {
             case None => Stream.empty  /: Log.prefix(s"No function $f reversible for : $funInv.\nIt evaluates to:\n$functionValue.")
             case Some(lens) =>
-              val argsValue = args.map(arg => evalWithCache(functionFormula.assignments.get(arg))) // One day, args.map(arg => program.subExpr(arg))
-              val lenseResult = lens.put(tpes)(argsValue, newOutProgram)
-              for{l <- lenseResult; (newArgsValues, newForm) = l
-                  a <- combineArguments(program, args.zip(newArgsValues))
-                  (newArguments, newArgumentsFormula) = a
-              } yield {
-                val formula = newForm combineWith newArgumentsFormula
-                ProgramFormula(FunctionInvocation(f, tpes, newArguments), formula)
+              val assignments = functionFormula.partialAssignments.map(_._1)
+              val argsOptValue = args.map(arg => assignments.flatMap(assign => maybeEvalWithCache(assign(arg)).map(program.subExpr)))
+              if(argsOptValue.forall(_.nonEmpty)) {
+                val lenseResult = lens.put(tpes)(argsOptValue.map(_.get), newOutProgram)
+                for {l <- lenseResult; (newArgsValues, newForm) = l
+                     a <- combineArguments(program, args.zip(newArgsValues))
+                     (newArguments, newArgumentsFormula) = a
+                } yield {
+                  val formula = newForm combineWith newArgumentsFormula
+                  ProgramFormula(FunctionInvocation(f, tpes, newArguments), formula)
+                }
+              } else { // There are universally quantified variables.
+                newOut match {
+                  case FunctionInvocation(`f`, tpes2, args2) if tpes2 == tpes =>
+                    // There must be equivalence between arguments. Unification.
+                    val argsRepaired = args.zip(args2) map {
+                      case (a1, a2) => repair(program.subExpr(a1), newOutProgram.subExpr(a2))
+                    }
+                    for{psf <- regroupArguments(argsRepaired)
+                        (ps, formula) = psf} yield {
+                      ProgramFormula(FunctionInvocation(`f`, tpes, ps), formula)
+                    }
+
+                  case _ =>
+                    Log("Warning: impossible to merge")
+                    Stream.empty
+                }
               }
           }
         case SetAdd(sExpr, elem) =>

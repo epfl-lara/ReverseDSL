@@ -45,13 +45,12 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   test("Variable assigment keeps the shape") {
     val expected1 = "Hello world"
     val expected2 = "We are the children"
-
     val pfun = let(vText.toVal, "Hello world")(v => v)
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
     pfun2 match {
       case l@Let(vd, expr, body) =>
-        if(!isVarIn(vd.id, body)) fail(s"There was no use of the variable $vd in the given let-expression: $l")
+        if (!isVarIn(vd.id, body)) fail(s"There was no use of the variable $vd in the given let-expression: $l")
     }
   }
 
@@ -456,21 +455,20 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     }
   }
 
-
-  test("Reverse map") {
-    val ap = valdef[String]("a")
-    object Map {
-      def apply(l: List[String], v: Variable => Expr) =
+  object Map {
+    def apply(l: List[String], v: Variable => Expr) =
       E(Utils.map)(String, String)(
-      l: Expr, \("ap"::String)(av => v(av))
+        l: Expr, \("ap"::String)(av => v(av))
       )
 
-      def unapply(e: Expr) = e match {
-        case FunctionInvocation(Utils.map, Seq(_, _),
+    def unapply(e: Expr) = e match {
+      case FunctionInvocation(Utils.map, Seq(_, _),
       Seq(l, Lambda(Seq(vd), body))) => Some((l, vd.toVariable, body))
-        case _ => None
-      }
+      case _ => None
     }
+  }
+  test("Reverse map") {
+    val ap = valdef[String]("a")
     Map(List("A","B","D","E"), av => "- " +& av) repairFrom
       ListInsert(StringType, List("- A", "- B"), List("- C"), List("- D", "- E")) shouldProduce
       _List[String]("- A", "- B", "- C", "- D", "- E")
@@ -529,6 +527,25 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       case Map(list, vd, prefix +& _) =>
         list shouldEqual _List[String]("Margharita", "Salami", "Royal")
         prefix shouldEqual StringLiteral("The pizza ")
+    }
+  }
+
+  test("Reverse map where function comes from outside") {
+    val program = let("p"::String, " !")(p =>
+    let("f"::inoxTypeOf[String => String], \("x"::String)(x => x +& p))(f =>
+      E(Utils.map)(String, String)(_List[String]("a", "b"), f)
+    ))
+    program shouldProduce _List[String]("a !", "b !")
+
+    Log activated (
+    program repairFrom _List[String]("a ?", "b !"))/* shouldProduce _List[String]("a ?", "b ?")*/ match {
+      case Let(pvd, StringLiteral(str),
+      Let(fvd, Lambda(Seq(xvd), StringConcat(xv, pv)),
+        FunctionInvocation(Utils.map, Seq(StringType, StringType), Seq(ListLiteral(List(StringLiteral("a"), StringLiteral("b")), _), fv))
+      )) =>
+        pvd.toVariable shouldEqual pv
+        fvd.toVariable shouldEqual fv
+        str shouldEqual " ?"
     }
   }
 

@@ -212,10 +212,9 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
     Log(System.currentTimeMillis())
     val solver = Log.time("Get new solver") := prog.getSolver.getNewSolver
     val constraint = and(e._1 ++ e._2 : _*)
-    //Log("Typing: " + Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs).explainTyping(constraint)(inox.trees.PrinterOptions.fromSymbols(Utils.defaultSymbols, ReverseProgram.context)))
-
+    //Log("Typing: " + Utils.explainTyping(constraint))
     Log("solving " + constraint)
-    Log.time("Assert constraint") := solver.assertCnstr(and(e._1 ++ e._2 : _*))
+    Log.time("Assert constraint") := solver.assertCnstr(constraint)
     //Log("#2")
     (Log.time("Check answer") := solver.check(SolverResponses.Model)) match {
       case SatWithModel(model) =>

@@ -139,7 +139,7 @@ class LambdaCalculusTest extends FunSuite with TestHelpers {
       case Add.tupled(Zero.tupled(), Two.tupled()) => 1
       case Add.tupled(One.tupled(), One.tupled()) => 2
       case e => fail("Unexpected result: " + e)
-    }.toList.sum shouldEqual 3
+    }.sum shouldEqual 3
     ReverseProgram.experimentalUnifyLambda = false
   }
 

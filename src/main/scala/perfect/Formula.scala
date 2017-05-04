@@ -44,7 +44,7 @@ object Formula {
       case TreeModification.Expr(tpeGlobal, tpeLocal, original, modified, argsList) =>
         TreeModification.LambdaPath(original, argsList, modified).getOrElse(e)
       case PatternMatch.Expr(before, variables, forClone) =>
-        before
+        exprOps.replaceFromSymbols(variables.toMap, before)
       case e => e
     }
     val result = e.known.map{
@@ -72,23 +72,35 @@ object Formula {
 sealed trait KnownValue {
   def getValue: Option[Expr]
   def getConstraint(k: Variable): Expr
+  def map(f: Expr => Expr): KnownValue
+  def exists(f: Expr => Boolean): Boolean = getValue.exists(x => f(x))
 }
 case class StrongValue(e: Expr) extends KnownValue {
   def getValue = Some(e)
   def getConstraint(k: Variable) = k === e
+  def map(f: Expr => Expr): StrongValue = {
+    StrongValue(f(e))
+  }
 }
 case class OriginalValue(e: Expr) extends KnownValue {
   def getValue = Some(e)
   def getConstraint(k: Variable) = E(Utils.original)(k === e)
+  def map(f: Expr => Expr): OriginalValue = {
+    OriginalValue(f(e))
+  }
 }
 case class InsertVariable(e: Expr) extends KnownValue {
   def getValue = Some(e)
   def getConstraint(k: Variable) = k === e //throw new Exception("[Internal error] tried to get a constraint on an inserted variable")
+  def map(f: Expr => Expr): InsertVariable = {
+    InsertVariable(f(e))
+  }
 }
 case object AllValues extends KnownValue {
   def getValue = None
   def getConstraint(k: Variable) = BooleanLiteral(true)
-} // Existentially quantified variables.
+  def map(f: Expr => Expr): AllValues.type = this
+} // Universally quantified variables.
 
 object StrongOrOriginal {
   def unapply(e: KnownValue): Option[(Expr, Expr => KnownValue)] = e match {
@@ -104,10 +116,14 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
   // Can contain middle free variables.
   lazy val varsToAssign: Set[Variable] = known.keySet ++ exprOps.variablesOf(constraints)
 
-  /** If the constraints are complete, i.e. all variables can be defined, then we can generate a let-wrapper. */
-  lazy val assignments: Option[Expr => Expr] = { // We know that variables appear only once in the lhs of the seq
-    def rec(constraints: Seq[(Variable, KnownValue)], seen: Set[Variable]): Option[Expr => Expr] = {
-      if(constraints == Nil) return Some(x => x)
+  lazy val assignmentsAsOriginals: Formula = {
+    Formula(known.map{ case (k, StrongValue(e)) => (k, OriginalValue(e)) case kv => kv})
+  }
+
+  // A list of partial assignments if there is no further constraints.
+  lazy val partialAssignments: Option[(Expr => Expr, List[(Variable, KnownValue)])] = {
+    def rec(constraints: Seq[(Variable, KnownValue)], seen: Set[Variable]): (Expr => Expr, List[(Variable, KnownValue)]) = {
+      if(constraints == Nil) return ((x: Expr) => x, Nil)
       // Possibility to build all assignments in one shot.
       val (sNewF, newSeen, remaining) = ((None: Option[Expr => Expr], seen, ListBuffer[(Variable, KnownValue)]()) /: constraints) {
         case ((optF, seen, remaining), equ@(v, StrongOrOriginal(e, _))) if (exprOps.variablesOf(e) -- seen).isEmpty =>
@@ -119,106 +135,135 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
           (optF, seen, remaining += equ)
       }
       val newF = sNewF.getOrElse((x: Expr) => x)
-      if(remaining.length == 0) {
-        sNewF
-      } else if(newSeen.size == seen.size) {
-        Log(s"Could not reduce $constraints knowing $seen")
-        None
+      if(remaining.length == 0 || newSeen.size == seen.size) { // no progress
+        (newF, remaining.toList)
       } else {
-        val recursively = rec(remaining, newSeen)
-        recursively.map(rf => (x: Expr) => newF(rf(x)))
+        val (rf, remaining2) = rec(remaining, newSeen)
+        ((x: Expr) => newF(rf(x)), remaining2)
       }
     }
     if(constraints != BooleanLiteral(true)) None else {
-      rec(known.toSeq, Set())
+      Some(rec(known.toSeq, Set()))
+    }
+  }
+
+  /** If the constraints are complete, i.e. all variables can be defined, then we can generate a let-wrapper. */
+  lazy val assignments: Option[Expr => Expr] = { // We know that variables appear only once in the lhs of the seq
+    partialAssignments.flatMap{
+      case (f, Nil) => Some(f)
+      case _ => None
     }
   }
 
   def combineWith(other: Formula)(implicit symbols: Symbols): Formula = {
-    val TopLevelAnds(ands) = constraints &<>& other.constraints
-    val newConstraint = and(ands.distinct :_*)
-    val (k, nc) = ((known, newConstraint: Expr) /: other.known.toSeq) {
-      case ((known, nc), (v, s@InsertVariable(e))) =>
-        known.get(v) match {
-          case None => (known + (v -> s), nc)
-          case Some(s2@InsertVariable(e2)) if e2 == e => (known, nc)
-          case Some(s2@InsertVariable(_: StringConcat | _: Variable)) if e.isInstanceOf[StringLiteral] =>
-            (known, nc)
-          case Some(s2@InsertVariable(StringLiteral(_))) if e.isInstanceOf[StringConcat] || e.isInstanceOf[Variable] =>
-            (known + (v -> s), nc)
-          case Some(_) => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
-        }
-      case ((known, nc), (v, s@StrongValue(e))) =>
-        @inline def default(e2: Expr) = (known, nc &<>& (e === e2))
-        known.get(v) match {
-          case None => (known + (v -> s), nc)
-          case Some(OriginalValue(e)) => (known + (v -> s), nc) // We replace the original value with the strong one
-          case Some(StrongValue(e2)) if e2 == e => (known, nc)
-          case Some(StrongValue(e2: Variable)) if !(known contains e2) => (known + (e2 -> StrongValue(v)), nc)
-          case Some(StrongValue(e2)) if (exprOps.variablesOf(e2).isEmpty && e.isInstanceOf[Variable] && // Particular merging case quite useful.
-            !(this.known contains e.asInstanceOf[Variable]) &&
-            other.known.get(e.asInstanceOf[Variable]).exists(_.isInstanceOf[OriginalValue])) /* /:
+    if(this eq other) this else {
+      val TopLevelAnds(ands) = constraints &<>& other.constraints
+      val newConstraint = and(ands.distinct: _*)
+      val (k, nc) = ((known, newConstraint: Expr) /: other.known.toSeq) {
+        case ((known, nc), (v, s@AllValues)) =>
+          known.get(v) match {
+            case None => (known + (v -> s), nc)
+            case Some(s2@AllValues) => (known, nc)
+            case _ => throw new Exception(s"Tried to updated an universally quantified variable with non-universally quantified variable : $this.combineWith($other)")
+          }
+        case ((known, nc), (v, s@InsertVariable(e))) =>
+          known.get(v) match {
+            case None => (known + (v -> s), nc)
+            case Some(s2@InsertVariable(e2)) if e2 == e => (known, nc)
+            case Some(s2@InsertVariable(_: StringConcat | _: Variable)) if e.isInstanceOf[StringLiteral] =>
+              (known, nc)
+            case Some(s2@InsertVariable(StringLiteral(_))) if e.isInstanceOf[StringConcat] || e.isInstanceOf[Variable] =>
+              (known + (v -> s), nc)
+            case Some(_) => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
+          }
+        case ((known, nc), (v, s@StrongValue(e))) =>
+          @inline def default(e2: Expr) = (known, nc &<>& (e === e2))
+
+          known.get(v) match {
+            case None => (known + (v -> s), nc)
+            case Some(OriginalValue(e)) => (known + (v -> s), nc) // We replace the original value with the strong one
+            case Some(StrongValue(e2)) if e2 == e => (known, nc)
+            case Some(StrongValue(e2: Variable)) if !(known contains e2) => (known + (e2 -> StrongValue(v)), nc)
+            case Some(StrongValue(e2)) if (exprOps.variablesOf(e2).isEmpty && e.isInstanceOf[Variable] && // Particular merging case quite useful.
+              !(this.known contains e.asInstanceOf[Variable]) &&
+              other.known.get(e.asInstanceOf[Variable]).exists(_.isInstanceOf[OriginalValue])) /* /:
             Log.prefix(s"shortcut ($e2 is value: ${Utils.isValue(e2)}) (e = $e is variable: ${e.isInstanceOf[Variable]}) " +
               s"(this.known contains e: ${e.isInstanceOf[Variable] && !(known contains e.asInstanceOf[Variable])})" +
               s"(${other.known} contains e as original: ${e.isInstanceOf[Variable] &&  other.known.get(e.asInstanceOf[Variable]).exists(_.isInstanceOf[OriginalValue])}):")*/
             =>
-            (known + (e.asInstanceOf[Variable] -> StrongValue(e2)) + (v -> s), nc)
-          case Some(StrongValue(e2@PatternMatch.Expr(before, variables, forClone))) =>
-            e match {
-              case CloneTextMultiple.Expr(left2, textVarRight2) =>
-                e2 match {
-                  case CloneTextMultiple.Expr(left1, textVarRight1) =>
-                    CloneTextMultiple.Expr.merge(left1, textVarRight1, left2, textVarRight2) match {
-                      case Some((cm, news)) => (known + (v -> StrongValue(cm)) ++ news, nc)
-                      case None => default(e2)
-                    }
-                  case _ => ???
-                }
+              (known + (e.asInstanceOf[Variable] -> StrongValue(e2)) + (v -> s), nc)
+            case Some(StrongValue(e2@PatternMatch.Expr(before, variables, forClone))) =>
+              e match {
+                case CloneTextMultiple.Expr(left2, textVarRight2) =>
+                  e2 match {
+                    case CloneTextMultiple.Expr(left1, textVarRight1) =>
+                      CloneTextMultiple.Expr.merge(left1, textVarRight1, left2, textVarRight2) match {
+                        case Some((cm, news)) => (known + (v -> StrongValue(cm)) ++ news, nc)
+                        case None => default(e2)
+                      }
+                    case _ => ???
+                  }
 
-              case PatternMatch.Expr(before2, variables2, forClone2) =>
-                PatternMatch.Expr.merge(before, variables, forClone, before2, variables2, forClone2) match {
-                  case Some((cm, news)) => (known + (v -> StrongValue(cm)) ++ news, nc)
-                  case None => default(e2)
-                }
-              case _ => default(e2)
-            }
-          case Some(StrongValue(e2@ADT(tpe, vars))) if vars.forall(_.isInstanceOf[Variable]) =>
-            e match {
-              case ADT(tpe2, vars2) if vars2.forall(_.isInstanceOf[Variable]) && tpe == tpe2 =>
-                val vvars1: Seq[Variable] = vars.collect{case v: Variable => v}
-                val vvars2: Seq[Variable] = vars2.collect{case v: Variable => v}
-                ((known, nc) /: vvars1.zip(vvars2)) {
-                  case ((known, nc), (x1: Variable, x2: Variable)) =>
-                    (this.known.get(x1), other.known.get(x2)) match {
-                      case (Some(OriginalValue(o)), Some(StrongOrOriginal(_))) =>
-                        (known + (x1 -> StrongValue(x2)), nc)
-                      case (Some(StrongValue(sv)), Some(OriginalValue(_))) =>
-                        (known + (x2 -> StrongValue(x1)), nc)
-                      case (None, Some(StrongOrOriginal(_))) =>
-                        (known + (x1 -> StrongValue(x2)), nc)
-                      case (Some(StrongOrOriginal(_)), None) =>
-                        (known + (x2 -> StrongValue(x1)), nc)
-                      case (Some(StrongValue(sv1)), Some(StrongValue(sv2))) =>
-                        (known, nc &<>& sv1 === sv2)
-                      case e => throw new Exception("Did not implement something for this case: $e")
-                    }
-                }
-              case _ => (known, nc &<>& (v === e2))
-            }
-          case Some(StrongValue(e2)) => default(e2)
-          case Some(AllValues) => throw new Error(s"Attempt at assigning an universally quantified variable: $this.combineWith($other)")
-        }
-      case ((known, nc), (v, s@OriginalValue(e))) =>
-        known.get(v) match {
-          case None => (known + (v -> s), nc)
-          case _ => (known, nc)// No update needed.
-        }
+                case PatternMatch.Expr(before2, variables2, forClone2) =>
+                  PatternMatch.Expr.merge(before, variables, forClone, before2, variables2, forClone2) match {
+                    case Some((cm, news)) => (known + (v -> StrongValue(cm)) ++ news, nc)
+                    case None => default(e2)
+                  }
+                case _ => default(e2)
+              }
+            case Some(StrongValue(e2@ADT(tpe, vars))) if vars.forall(_.isInstanceOf[Variable]) =>
+              e match {
+                case ADT(tpe2, vars2) if vars2.forall(_.isInstanceOf[Variable]) && tpe == tpe2 =>
+                  val vvars1: Seq[Variable] = vars.collect { case v: Variable => v }
+                  val vvars2: Seq[Variable] = vars2.collect { case v: Variable => v }
+                  ((known, nc) /: vvars1.zip(vvars2)) {
+                    case ((known, nc), (x1: Variable, x2: Variable)) =>
+                      (this.known.get(x1), other.known.get(x2)) match {
+                        case (Some(OriginalValue(o)), Some(StrongOrOriginal(_))) =>
+                          (known + (x1 -> StrongValue(x2)), nc)
+                        case (Some(StrongValue(sv)), Some(OriginalValue(_))) =>
+                          (known + (x2 -> StrongValue(x1)), nc)
+                        case (None, Some(StrongOrOriginal(_))) =>
+                          (known + (x1 -> StrongValue(x2)), nc)
+                        case (Some(StrongOrOriginal(_)), None) =>
+                          (known + (x2 -> StrongValue(x1)), nc)
+                        case (Some(StrongValue(sv1)), Some(StrongValue(sv2))) =>
+                          (known, nc &<>& sv1 === sv2)
+                        case e => throw new Exception("Did not implement something for this case: $e")
+                      }
+                  }
+                case _ => (known, nc &<>& (v === e2))
+              }
+            case Some(StrongValue(e2)) => default(e2)
+            case Some(AllValues) => throw new Error(s"Attempt at assigning an universally quantified variable: $this.combineWith($other)")
+          }
+        case ((known, nc), (v, s@OriginalValue(e))) =>
+          known.get(v) match {
+            case None => (known + (v -> s), nc)
+            case _ => (known, nc) // No update needed.
+          }
+      }
+      Formula(k, nc)
     }
-    Formula(k, nc)
   } /: Log.prefix(s"combineWith($this,$other) = ")
 
   def combineWith(assignment: (Variable, KnownValue))(implicit symbols: Symbols): Formula = {
     this combineWith Formula(Map(assignment))
+  }
+
+  // We remove all the given argument names from the formula because they are not going to be used anymore.
+  def removeArgs(argNames: Seq[Variable]): Formula = {
+    val newKnown = (known /: argNames) {
+      case (known, v) =>
+      if(!(known contains v) ||
+        known.exists{ case (k, value) => value.exists(va => exprOps.count{ case `v` => 1 case _ => 0}(va) >= 1)} ||
+        exprOps.exists{ case `v` => true case _ => false}(this.constraints)) { // we keep it.
+        known
+      } else { // We remove it, it is useless if it does not appear in the constraints.
+        known - v
+      }
+    }
+    Formula(newKnown, constraints)
   }
 
   private lazy val knownToString: String = known.toSeq.map{
@@ -275,10 +320,11 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
     Log(s"Trying to get all solutions for $varsToAssign of \n" + this)
     val simplified = inlineSimpleFormulas(this)
     Log(s"Simplified: $simplified")
-    val streamOfSolutions = simplified.assignments match {
-      case Some(wrapper) =>
+    val streamOfSolutions = simplified.partialAssignments match {
+      case Some((wrapper, remaining)) if remaining.forall(x => x._2 == AllValues) =>
         Stream(ReverseProgram.evalWithCache(wrapper(tupleWrap(freeVariables)))(new ReverseProgram.Cache(), symbols))
-      case None =>
+      case e =>
+        if(e.nonEmpty) Log(s"Warning: some equations could not be simplified: $e")
         val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
         val constraint = InoxConstraint(input === tupleWrap(freeVariables) &<>& simplified.constraints &<>&
           and(simplified.known.toSeq.map{ case (k, v) => v.getConstraint(k)}: _*))

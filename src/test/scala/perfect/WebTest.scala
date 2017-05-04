@@ -63,84 +63,80 @@ class WebTest extends FunSuite with TestHelpers {
   }
 
   test("Isolate a variable to insert bold") {
-    Log.activated {
-      val pfun = let("ssome" :: String, "some")(some =>
+    val pfun = let("ssome" :: String, "some")(some =>
+      _Element("div", _List[WebElement](
+        _WebElement(_TextNode("This is " +& some +& " text"))
+      )))
+    val original = eval(pfun)
+
+    val repaired = PatternReplace.Expr.Build(
+      ("t" :: StringType, "This is "),
+      ("some" :: StringType, "some"),
+      ("text" :: StringType, " text")) { case Seq(this_is, some, text) =>
+      (_Element("div", _List[WebElement](
+        _WebElement(_TextNode(this_is +& some +& text))
+      )),
         _Element("div", _List[WebElement](
-          _WebElement(_TextNode("This is " +& some +& " text"))
+          _WebElement(_TextNode(this_is)),
+          _WebElement(Bold(_TextNode(some))),
+          _WebElement(_TextNode(text))
         )))
-      val original = eval(pfun)
-
-      val repaired = PatternReplace.Expr.Build(
-        ("t" :: StringType, "This is "),
-        ("some" :: StringType, "some"),
-        ("text" :: StringType, " text")) { case Seq(this_is, some, text) =>
-        (_Element("div", _List[WebElement](
-          _WebElement(_TextNode(this_is +& some +& text))
-        )),
-          _Element("div", _List[WebElement](
-            _WebElement(_TextNode(this_is)),
-            _WebElement(Bold(_TextNode(some))),
-            _WebElement(_TextNode(text))
-          )))
-      }
-      val PatternReplace.Expr(_, varVals, _) = repaired
-      val variables = varVals.map(_._1)
-
-      val (someV, body) = Utils.inlineVariables(pfun repairFrom repaired, variables.toSet) match {
-        case Let(someVd, StringLiteral("some"), Let(prevSomeVd, sv, body)) =>
-          sv shouldEqual someVd.toVariable
-          (someVd.toVariable, body)
-      }
-
-      body shouldEqual
-        _Element("div", _List[WebElement](
-          _WebElement(_TextNode("This is ")),
-          _WebElement(Bold(_TextNode(someV))),
-          _WebElement(_TextNode(" text"))
-        ))
     }
+    val PatternReplace.Expr(_, varVals, _) = repaired
+    val variables = varVals.map(_._1)
+
+    val (someV, body) = Utils.inlineVariables(pfun repairFrom repaired, variables.toSet) match {
+      case Let(someVd, StringLiteral("some"), Let(prevSomeVd, sv, body)) =>
+        sv shouldEqual someVd.toVariable
+        (someVd.toVariable, body)
+    }
+
+    body shouldEqual
+      _Element("div", _List[WebElement](
+        _WebElement(_TextNode("This is ")),
+        _WebElement(Bold(_TextNode(someV))),
+        _WebElement(_TextNode(" text"))
+      ))
   }
 
   test("Split a variable to insert bold") {
-    Log.activated {
-      val pfun = let("sometext" :: String, "some text")(sometext =>
+    val pfun = let("sometext" :: String, "some text")(sometext =>
+      _Element("div", _List[WebElement](
+        _WebElement(_TextNode("This is " +& sometext))
+      )))
+    val original = eval(pfun)
+
+    val repaired = PatternReplace.Expr.Build(
+      ("t" :: StringType, "This "),
+      ("is_some" :: StringType, "is some"),
+      ("text" :: StringType, " text")) { case Seq(t, is_some, text) =>
+      (_Element("div", _List[WebElement](
+        _WebElement(_TextNode(t +& is_some +& text))
+      )),
         _Element("div", _List[WebElement](
-          _WebElement(_TextNode("This is " +& sometext))
+          _WebElement(_TextNode(t)),
+          _WebElement(Bold(_TextNode(is_some))),
+          _WebElement(_TextNode(text))
         )))
-      val original = eval(pfun)
-
-      val repaired = PatternReplace.Expr.Build(
-        ("t" :: StringType, "This "),
-        ("is_some" :: StringType, "is some"),
-        ("text" :: StringType, " text")) { case Seq(t, is_some, text) =>
-        (_Element("div", _List[WebElement](
-          _WebElement(_TextNode(t +& is_some +& text))
-        )),
-          _Element("div", _List[WebElement](
-            _WebElement(_TextNode(t)),
-            _WebElement(Bold(_TextNode(is_some))),
-            _WebElement(_TextNode(text))
-          )))
-      }
-      val PatternReplace.Expr(_, varVals, _) = repaired
-      val variables = varVals.map(_._1)
-
-      val pfun2 = pfun repairFrom repaired
-      val pfunSimplified = Utils.inlineVariables(pfun2, newVariablesDependencies(pfun2, variables.toSet))
-      println(pfunSimplified)
-      val (someV, textV, body) = pfunSimplified match {
-        case Let(someVd, StringLiteral("some"), Let(textVd, StringLiteral(" text"), Let(sometextvd, someV +& textV, body))) =>
-          (someVd.toVariable, textVd.toVariable, body)
-        case Let(textVd, StringLiteral(" text"), Let(someVd, StringLiteral("some"), Let(sometextvd, someV +& textV, body))) =>
-          (someVd.toVariable, textVd.toVariable, body)
-      }
-
-      body shouldEqual
-        _Element("div", _List[WebElement](
-          _WebElement(_TextNode("This ")),
-          _WebElement(Bold(_TextNode("is " +& someV))),
-          _WebElement(_TextNode(textV))
-        ))
     }
+    val PatternReplace.Expr(_, varVals, _) = repaired
+    val variables = varVals.map(_._1)
+
+    val pfun2 = pfun repairFrom repaired
+    val pfunSimplified = Utils.inlineVariables(pfun2, newVariablesDependencies(pfun2, variables.toSet))
+    println(pfunSimplified)
+    val (someV, textV, body) = pfunSimplified match {
+      case Let(someVd, StringLiteral("some"), Let(textVd, StringLiteral(" text"), Let(sometextvd, someV +& textV, body))) =>
+        (someVd.toVariable, textVd.toVariable, body)
+      case Let(textVd, StringLiteral(" text"), Let(someVd, StringLiteral("some"), Let(sometextvd, someV +& textV, body))) =>
+        (someVd.toVariable, textVd.toVariable, body)
+    }
+
+    body shouldEqual
+      _Element("div", _List[WebElement](
+        _WebElement(_TextNode("This ")),
+        _WebElement(Bold(_TextNode("is " +& someV))),
+        _WebElement(_TextNode(textV))
+      ))
   }
 }
