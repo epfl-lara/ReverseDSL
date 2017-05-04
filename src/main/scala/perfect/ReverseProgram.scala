@@ -257,37 +257,10 @@ object ReverseProgram extends lenses.Lenses {
         case _ => Stream.empty[ProgramFormula]
       })
 
-    // TODO: Use this lense converter when everything will have be put into lenses.
-    /*def lensConverter(e: Expr)(wrapper: Expr => Stream[ProgramFormula]): Stream[ProgramFormula] = {
-      e match {
-        case StringConcat(left, right) =>
-          for(pf <- wrapper(FunctionInvocation(StringConcatLens.identifier, Nil,
-            Seq(left, right)))) {
-            pf match {
-              case ProgramFormula(FunctionInvocation(StringConcatLens.identifier, Nil, Seq(x, y)), f) =>
-                ProgramFormula(StringConcat(x, y), f)
-            }
-          }
-        case _ => wrapper(e)
-      }
-    }*/
-
     def originalSolutions : Stream[ProgramFormula] = {
       function match {
         // Values (including lambdas) should be immediately replaced by the new value
-        case l: Literal[_] =>
-          import ProgramFormula._
-          newOutBestValue match {
-            case l: Literal[_] => Stream(newOutProgram) /* Raw replacement*/
-
-            case m: MapApply =>
-              repair(program, newOutProgram.subExpr(newOutProgram.formula.findConstraintVariableOrLiteral(m)))
-            case v: Variable =>
-              // Replacement with the variable newOut, with a maybe clause.
-              Stream(newOutProgram combineWith Formula(v -> OriginalValue(l)))
-            case _ => Log(s"[Internal warning] Don't know what to do to replace a literal by this: $newOutProgram")
-              Stream(newOutProgram)
-          }
+        case l: Literal[_] => Stream(newOutProgram)
 
         case l: FiniteSet => // TODO: Need some rewriting to keep the variable's order.
           lazy val evaledElements = l.elements.map{ e =>
@@ -392,6 +365,7 @@ object ReverseProgram extends lenses.Lenses {
           }
         case fun@Lambda(vds, body) =>
 
+          /** Replaces the vds by universally quantified variables */
           def unify: Stream[ProgramFormula] = {
             if(exprOps.variablesOf(fun).nonEmpty) {
               optVar(newOut).flatMap(newOutFormula.findStrongConstraintValue).getOrElse(newOut) match {
