@@ -358,7 +358,7 @@ object ReverseProgram extends lenses.Lenses {
             case ADT(ADTType(_, _), _) =>
               Stream.empty // Wrapping already handled.
 
-            case _ =>
+            case a =>
               Log(s"[Warning] Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
               Stream.empty
           }
