@@ -152,7 +152,8 @@ object ReverseProgram extends lenses.Lenses {
       ListInsert.Lens andThen
       PasteVariable.Lens andThen
       StringInsert.Lens andThen
-      perfect.lenses.SetLens
+      perfect.lenses.SetLens andThen
+      perfect.lenses.MapDataLens
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * Basically, we solve the problem:
@@ -263,76 +264,6 @@ object ReverseProgram extends lenses.Lenses {
         // Values (including lambdas) should be immediately replaced by the new value
         case l: Literal[_] => Stream(newOutProgram)
 
-        case l: FiniteMap =>
-          if(isValue(l) && (newOut.isInstanceOf[FiniteMap] || newOut.isInstanceOf[Variable])) {
-            def reoderIfCanReorder(fm: FiniteMap) = {
-              if(fm.pairs.forall(x => isValue(x._1))) { // Check that all the keys are values.
-                val inserted = fm.pairs.filter(x => l.pairs.forall(y => x._1 != y._1))
-                val fmUpdated = FiniteMap(l.pairs.flatMap {
-                  case (key, value) => fm.pairs.collectFirst { case (k, v) if k == key => key -> v }
-                } ++ inserted, fm.default, fm.keyType, fm.valueType)
-                Stream(newOutProgram.subExpr(fmUpdated))
-              } else Stream(newOutProgram)
-            }
-            newOutBestValue match {
-              case fm: FiniteMap => reoderIfCanReorder(fm)
-              case newOut => Stream(newOutProgram)
-            }
-          } else {
-            // Check for changed keys, removals and additions.
-            lazy val partEvaledPairs = l.pairs.map{ case (key, value) =>
-              (evalWithCache(functionFormula.assignments.get(key)), (key, value, evalWithCache(functionFormula.assignments.get(value))))
-            }
-            def propagateChange(fm: FiniteMap) = {
-              val insertedPairs = fm.pairs.collect {
-                case (k, v) if !partEvaledPairs.exists(x => x._1 == k) =>
-                  Stream((k, ProgramFormula(v)))
-              }
-
-              val (newFiniteMapKV) = (ListBuffer[Stream[(Expr, ProgramFormula)]]() /: partEvaledPairs) {
-                case (lb, (key_v, (key, value, value_v))) =>
-                  val i = fm.pairs.lastIndexWhere(_._1 == key_v)
-                  if(i > -1) {
-                    val newValue = fm.pairs(i)._2
-                    lb += repair(program.subExpr(value), newOutProgram.subExpr(newValue)).map(pf => (key, pf))
-                  } else {
-                    lb
-                  }
-              }.toList ++ insertedPairs
-              for {solution <- inox.utils.StreamUtils.cartesianProduct(newFiniteMapKV)
-                   (mapKeys, mapValuesFormula) = solution.unzip
-                   mapValues = mapValuesFormula.map(_.expr)
-                   mapFormula = mapValuesFormula.map(_.formula)
-                   formula = (Formula() /: mapFormula){ case (f, ff) => f combineWith ff }
-              } yield {
-                ProgramFormula(FiniteMap(mapKeys.zip(mapValues), l.default, l.keyType, l.valueType), formula)
-              }
-            }
-            newOutBestValue match {
-              case fm: FiniteMap => propagateChange(fm)
-              case _ =>
-                // We output the constraints with the given FiniteMap description.
-                // We repair symbolically on every map's value.
-                val repairs = partEvaledPairs.map {
-                  case (key_v, (key, value, value_v)) =>
-                    repair(program.subExpr(value), newOutProgram.subExpr(MapApply(newOut, key))).map((key_v, _))
-                }
-                for {keys_pf_seq <- inox.utils.StreamUtils.cartesianProduct(repairs)} yield {
-                  val (keys, pf_seq) = keys_pf_seq.unzip
-                  val (list_m, formula) = combineResults(pf_seq)
-                  val new_exprs = keys.zip(list_m).toMap
-                  // Keep the original order.
-                  val newPairs = (partEvaledPairs map {
-                    case (key_v, (key, value, value_v)) => key -> new_exprs(key_v)
-                  })
-                  ProgramFormula(
-                    FiniteMap(newPairs, l.default, l.keyType, l.valueType),
-                    formula)
-                }
-              //case _ => throw new Exception("Don't know what to do, not a Literal or a Variable: " + newOut)
-            }
-
-          }
         case fun@Lambda(vds, body) =>
 
           /** Replaces the vds by universally quantified variables */
@@ -816,7 +747,7 @@ object ReverseProgram extends lenses.Lenses {
   }
 
   // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
-  private def combineResults(seq: List[ProgramFormula])
+  def combineResults(seq: List[ProgramFormula])
             (implicit symbols: Symbols, cache: Cache): (List[Expr], Formula) = {
     val (lb, f) = ((ListBuffer[Expr](), Formula()) /: seq) {
       case total@((ls, f1), (ProgramFormula(l, f2))) =>
