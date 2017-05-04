@@ -151,7 +151,8 @@ object ReverseProgram extends lenses.Lenses {
       PatternReplace.Lens andThen
       ListInsert.Lens andThen
       PasteVariable.Lens andThen
-      StringInsert.Lens
+      StringInsert.Lens andThen
+      perfect.lenses.SetLens
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * Basically, we solve the problem:
@@ -262,37 +263,6 @@ object ReverseProgram extends lenses.Lenses {
         // Values (including lambdas) should be immediately replaced by the new value
         case l: Literal[_] => Stream(newOutProgram)
 
-        case l: FiniteSet => // TODO: Need some rewriting to keep the variable's order.
-          lazy val evaledElements = l.elements.map{ e =>
-            (evalWithCache(functionFormula.assignments.get(e)), e)
-          }
-          def insertElementsIfNeeded(fs: FiniteSet) = {
-            val expectedElements = fs.elements.toSet
-            val newElements = evaledElements.filter{
-              case (v, e) => expectedElements contains v
-            }.map(_._2) ++ expectedElements.filter(x =>
-              !evaledElements.exists(_._1 == x))
-            Stream(newOutProgram.subExpr(FiniteSet(newElements, fs.base)))
-          }
-
-          if(isValue(l) && (newOut.isInstanceOf[FiniteSet] || newOut.isInstanceOf[Variable])) { // We shuold keep the same order if possible.
-            newOutBestValue match {
-              case fs: FiniteSet =>
-                insertElementsIfNeeded(fs)
-              case _ =>
-                Stream(newOutProgram)
-            }
-          } else {
-            newOutBestValue match {
-              case fs: FiniteSet =>
-                // Since there is no order, there is no point repairing expressions,
-                // only adding new ones and deleting old ones.
-                insertElementsIfNeeded(fs)
-
-              case newOut => // Maybe it has a formula ?
-                Stream(newOutProgram)
-            }
-          }
         case l: FiniteMap =>
           if(isValue(l) && (newOut.isInstanceOf[FiniteMap] || newOut.isInstanceOf[Variable])) {
             def reoderIfCanReorder(fm: FiniteMap) = {
