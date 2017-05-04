@@ -1094,19 +1094,19 @@ trait Lenses { self: ReverseProgram.type =>
           }
           (cloneToLeft ++ cloneToRight ++ cloneBoth).toStream
 
-        case pv@ProgramFormula.PasteVariable.Expr(left, v, v_value, right, direction) =>
+        case pv@PasteVariable.Expr(left, v, v_value, right, direction) =>
           def pasteToLeft: List[(ArgumentsFormula, Int)] = {
             /*Log(s"Right:'$right'")
             Log(s"Right:'$right'")*/
             if(right.endsWith(rv)) { // We did not touch the right part.
               val newLeft = left
               val newRight = right.substring(0, right.length - rv.length)
-              val leftPaste = ProgramFormula.PasteVariable(newLeft, v, v_value, newRight, direction)
+              val leftPaste = PasteVariable(newLeft, v, v_value, newRight, direction)
               val rightPaste = ProgramFormula(rightValue)
               val weight = direction match {
-                case ProgramFormula.PasteVariable.PasteToLeft => 0
-                case ProgramFormula.PasteVariable.PasteToRight => 1
-                case ProgramFormula.PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
+                case PasteVariable.PasteToLeft => 0
+                case PasteVariable.PasteToRight => 1
+                case PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
               }
               List(((Seq(leftPaste, rightPaste), Formula()), weight)) /: Log.prefix("pasteToLeft: ")
             } else Nil
@@ -1116,11 +1116,11 @@ trait Lenses { self: ReverseProgram.type =>
               val newLeft = left.substring(lv.length)
               val newRight = right
               val leftPaste = ProgramFormula(leftValue)
-              val rightPaste = ProgramFormula.PasteVariable(newLeft, v, v_value, newRight, direction)
+              val rightPaste = PasteVariable(newLeft, v, v_value, newRight, direction)
               val weight = direction match {
-                case ProgramFormula.PasteVariable.PasteToLeft => 1
-                case ProgramFormula.PasteVariable.PasteToRight => 0
-                case ProgramFormula.PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
+                case PasteVariable.PasteToLeft => 1
+                case PasteVariable.PasteToRight => 0
+                case PasteVariable.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
               }
               List(((Seq(leftPaste, rightPaste), Formula()), weight)) /: Log.prefix("pasteToRight: ")
             } else Nil

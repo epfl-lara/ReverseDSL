@@ -150,7 +150,8 @@ object ReverseProgram extends lenses.Lenses {
   val semanticLenses: semanticlenses.SemanticLens =
     PatternMatch.Lens andThen
       PatternReplace.Lens andThen
-      ListInsert.Lens
+      ListInsert.Lens andThen
+      PasteVariable.Lens
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * Basically, we solve the problem:
@@ -278,10 +279,6 @@ object ReverseProgram extends lenses.Lenses {
           import ProgramFormula._
           newOutBestValue match {
             case l: Literal[_] => Stream(newOutProgram) /* Raw replacement*/
-
-            case ProgramFormula.PasteVariable.Expr(left, v2, v2_value, right, direction) =>
-              val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
-              Stream(ProgramFormula(newExpr, newOutFormula))
 
             case ProgramFormula.StringInsert.Expr(left, inserted, right, direction) =>
               Stream(ProgramFormula(StringLiteral(left + inserted + right)))
@@ -425,38 +422,7 @@ object ReverseProgram extends lenses.Lenses {
 
         // Variables are assigned the given value.
         case v@Variable(id, tpe, flags) =>
-          newOutProgram match {
-            case ProgramFormula.PasteVariable(left, v2, v_value, right, direction) =>
-              functionValue match {
-                case Some(StringLiteral(s)) =>
-                  def insertLeft = (if(left == s) {
-                    if(right != "") {
-                      Stream(ProgramFormula(v +& v2 +& StringLiteral(right)))
-                    } else {
-                      Stream(ProgramFormula(v +& v2))
-                    }
-                  } else Stream.empty) /:: Log.insertLeft
-                  def insertRight = (if(right == s) {
-                    if(left != "") {
-                      Stream(ProgramFormula(StringLiteral(left) +& v2 + v))
-                    } else {
-                      Stream(ProgramFormula(v +& v2))
-                    }
-                  } else Stream.empty) /:: Log.insertRight
-
-                  def propagate = (if(left != s && right != s &&
-                    s.startsWith(left) && s.endsWith(right) &&
-                    s.length >= left.length + right.length ) {
-                    // We need to propagate this paste to higher levels.
-                    Stream(ProgramFormula(v, newOutFormula combineWith (v -> StrongValue(newOutProgram.expr))))
-                  } else Stream.empty) /:: Log.propagate
-                  insertLeft #::: insertRight #::: propagate
-
-                case _ => Stream.empty
-              }
-            case _ =>
-              Stream(ProgramFormula(v, Formula(v -> StrongValue(newOut)) combineWith newOutFormula))
-          }
+          Stream(ProgramFormula(v, Formula(v -> StrongValue(newOut)) combineWith newOutFormula))
 
         case Let(vd, expr, body) =>
           repair(ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), program.formula),
@@ -544,7 +510,7 @@ object ReverseProgram extends lenses.Lenses {
 
         case MapApply(map, key) => // Variant of ADT selection.
           val map_v = evalWithCache(functionFormula.assignments.get(map)).asInstanceOf[FiniteMap] //originalAdtValue
-        val key_v = evalWithCache(functionFormula.assignments.get(key))
+          val key_v = evalWithCache(functionFormula.assignments.get(key))
 
           val defaultValue = map_v.default
 

@@ -14,7 +14,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import XmlTrees._
   import StringConcatExtended._
-  import ProgramFormula.{AssociativeInsert, StringInsert, ListInsert, TreeWrap, TreeUnwrap, TreeModification, CloneText, PasteVariable}
+  import ProgramFormula.{AssociativeInsert, StringInsert, TreeWrap, TreeUnwrap, TreeModification, CloneText}
   implicit val symbols = Utils.defaultSymbols
 
   test("Formula assignment") {
@@ -561,7 +561,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       StringLiteral("mov at mov at mov at at mov at mov ")
   }
 
-
+  import semanticlenses.PasteVariable
   test("Paste") {
     val pfun: Let = let("v"::String, " move it")(v => "I like to" +& v +& "!")
     val v = pfun.vd.toVariable
