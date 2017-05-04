@@ -297,4 +297,9 @@ object Utils {
       case _ => None
     }(e)
   } /: Log.prefix(s"inlineVariables($e, $toInline) = ")
+
+  /** Returns the stream b if a is empty, else only a. */
+  def ifEmpty[A](a: Stream[A])(b: =>Stream[A]): Stream[A] = {
+    if(a.isEmpty) b else a
+  }
 }
