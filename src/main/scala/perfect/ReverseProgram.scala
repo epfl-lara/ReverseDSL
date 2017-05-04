@@ -148,7 +148,8 @@ object ReverseProgram extends lenses.Lenses {
   }
 
   val semanticLenses: semanticlenses.SemanticLens =
-    perfect.semanticlenses.PatternMatch.Lens
+    PatternMatch.Lens andThen
+      PatternReplace.Lens
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * Basically, we solve the problem:
@@ -497,27 +498,6 @@ object ReverseProgram extends lenses.Lenses {
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
           newOut match {
-            case ProgramFormula.PatternReplace.Expr(before, variables, after) =>
-              before match { // TODO: Pattern replace at higher level?
-                case ADT(adtType2, argsIn2) if adtType2 == adtType =>
-                  val argsMatched = argsIn.zip(argsIn2).map{
-                    case (expr, pattern) =>
-                      repair(
-                        program.subExpr(expr),
-                        newOutProgram.subExpr(
-                          PatternMatch.Expr(
-                            pattern, variables, false
-                          )))
-                  }
-                  for{ argumentsCombined <-regroupArguments(argsMatched)
-                       (_, formula) = argumentsCombined
-                  } yield ProgramFormula(after, formula)
-
-                case v: Variable =>
-                  ???
-
-                case _ => throw new Exception("Did not expect something else than an ADT of same type or variable here")
-              }
             case ProgramFormula.ListInsert.Expr(tpe, before, inserted, after) =>
               Log("ListInsert")
               if(before.length == 0) { // Insertion happens before this element

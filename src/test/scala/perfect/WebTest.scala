@@ -20,6 +20,7 @@ class WebTest extends FunSuite with TestHelpers {
   import XmlTrees._
   import StringConcatExtended._
   implicit val symbols = Utils.defaultSymbols
+  import semanticlenses._
 
   object Bold {
     val TWebElement = inoxTypeOf[WebElement]
