@@ -3,7 +3,7 @@ package lenses
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ReverseProgram.{Cache, combineResults, evalWithCache, repair}
+import perfect.ReverseProgram.{Cache, evalWithCache, repair}
 import perfect.Utils.isValue
 
 import scala.collection.mutable.ListBuffer
@@ -67,7 +67,7 @@ object MapDataLens extends semanticlenses.SemanticLens {
               }
               for {keys_pf_seq <- inox.utils.StreamUtils.cartesianProduct(repairs)} yield {
                 val (keys, pf_seq) = keys_pf_seq.unzip
-                val (list_m, formula) = combineResults(pf_seq)
+                val (list_m, formula) = ProgramFormula.combineResults(pf_seq)
                 val new_exprs = keys.zip(list_m).toMap
                 // Keep the original order.
                 val newPairs = (partEvaledPairs map {

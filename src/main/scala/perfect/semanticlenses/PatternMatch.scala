@@ -5,7 +5,7 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import perfect.ProgramFormula.CustomProgramFormula
-import perfect.ReverseProgram.{Cache, maybeEvalWithCache, regroupArguments, repair}
+import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
 
 /**
@@ -56,7 +56,7 @@ object PatternMatch extends CustomProgramFormula {
                     val arguments = List(
                       repair(in.subExpr(expr1), out.subExpr(PatternMatch.Expr(newLeftPattern, variables, forClone))),
                       repair(in.subExpr(expr2), out.subExpr(PatternMatch.Expr(newRightPattern, variables, forClone))))
-                    for{ regroupped <- regroupArguments(arguments)
+                    for{ regroupped <- ProgramFormula.regroupArguments(arguments)
                          (Seq(newLeft1, newLeft2), formula) = regroupped
                     } yield {
                       ProgramFormula(StringConcat(newLeft1, newLeft2), formula)
@@ -96,7 +96,7 @@ object PatternMatch extends CustomProgramFormula {
                         val arguments = List(
                           repair(in.subExpr(expr1), out.subExpr(PatternMatch.Expr(newLeftPattern, newVariables, forClone))),
                           repair(in.subExpr(expr2), out.subExpr(PatternMatch.Expr(newRightPattern, newVariables, forClone))))
-                        for{ regroupped <- regroupArguments(arguments)
+                        for{ regroupped <- ProgramFormula.regroupArguments(arguments)
                              (Seq(newLeft1, newLeft2), formula) = regroupped
                         } yield {
                           ProgramFormula(StringConcat(newLeft1, newLeft2), formula combineWith newFormula)
@@ -117,7 +117,7 @@ object PatternMatch extends CustomProgramFormula {
                     )
                     )
                   }
-                  for{ res <- regroupArguments(argumentsRepaired)
+                  for{ res <- ProgramFormula.regroupArguments(argumentsRepaired)
                        (newArgs, formula) = res
                   } yield {
                     ProgramFormula(ADT(adtType, newArgs), formula)

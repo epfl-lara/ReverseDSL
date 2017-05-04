@@ -5,7 +5,7 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import perfect.ProgramFormula.CustomProgramFormula
-import perfect.ReverseProgram.{Cache, maybeEvalWithCache, regroupArguments, repair}
+import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
 
 /**
@@ -29,7 +29,7 @@ object PatternReplace extends CustomProgramFormula {
                             pattern, variables, false
                           )))
                   }
-                  for{ argumentsCombined <-regroupArguments(argsMatched)
+                  for{ argumentsCombined <-ProgramFormula.regroupArguments(argsMatched)
                        (_, formula) = argumentsCombined
                   } yield ProgramFormula(after, formula)
 

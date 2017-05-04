@@ -3,10 +3,12 @@ package perfect
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ReverseProgram.{Cache, evalWithCache, maybeEvalWithCache, repair, regroupArguments}
+import perfect.ReverseProgram.{Cache, evalWithCache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
 import perfect.Utils.optVar
 import semanticlenses._
+
+import scala.collection.mutable.ListBuffer
 
 /**
   * Created by Mikael on 06/04/2017.
@@ -385,6 +387,37 @@ object ProgramFormula {
   )
 
   val customFunDefs = customProgramFormulas.map(_.funDef)
+
+  /** Given a sequence of (arguments expression, expectedValue),
+      returns the cartesian product of all argument programs and solutions. */
+  def combineArguments(pf: ProgramFormula,
+                               arguments: Seq[(Expr, ProgramFormula)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
+    Log(s"combining arguments for $pf")
+    val argumentsReversed = arguments.map { case (arg, expected) =>
+      Log(s"repairing argument $arg should equal $expected")
+      repair(ProgramFormula(arg, pf.formula), expected)
+    }
+    regroupArguments(argumentsReversed)
+  }
+
+  // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
+  def regroupArguments(arguments: Seq[Stream[ProgramFormula]])
+  (implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
+    inox.utils.StreamUtils.cartesianProduct(arguments).map{
+      pfs =>
+        (pfs.map(_.expr), (Formula() /: pfs) { case (f, pfr) => f combineWith pfr.formula })
+    }
+  }
+
+  // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
+  def combineResults(seq: List[ProgramFormula])
+                    (implicit symbols: Symbols, cache: Cache): (List[Expr], Formula) = {
+    val (lb, f) = ((ListBuffer[Expr](), Formula()) /: seq) {
+      case total@((ls, f1), (ProgramFormula(l, f2))) =>
+        (ls += l, f1 combineWith f2)
+    }
+    (lb.toList, f)
+  }
 }
 
 case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {

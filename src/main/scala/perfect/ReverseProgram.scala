@@ -351,7 +351,7 @@ object ReverseProgram extends lenses.Lenses {
               val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
               for {seq <- streamOfSeqSolutions
                    _ = Log(s"combineResults($seq)")
-                   (newArgs, assignments) = combineResults(seq)
+                   (newArgs, assignments) = ProgramFormula.combineResults(seq)
               } yield {
                 ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
               }
@@ -465,7 +465,7 @@ object ReverseProgram extends lenses.Lenses {
                      (newBody, newBodyFormula) = backPf(newBodyFresh, newBodyFreshFormula)
                      isSameBody = (newBody == body) /: Log.isSameBody
                      args <-
-                     combineArguments(program,
+                     ProgramFormula.combineArguments(program,
                        arguments.zip(freshArgsNames).map { case (arg, expected) =>
                          (arg, newOutProgram.subExpr(expected) combineWith newBodyFormula combineWith Formula(expected -> argumentValues(expected)))
                        })
@@ -597,7 +597,7 @@ object ReverseProgram extends lenses.Lenses {
               if(argsOptValue.forall(_.nonEmpty)) {
                 val lenseResult = lens.put(tpes)(argsOptValue.map(_.get), newOutProgram)
                 for {l <- lenseResult; (newArgsValues, newForm) = l
-                     a <- combineArguments(program, args.zip(newArgsValues))
+                     a <- ProgramFormula.combineArguments(program, args.zip(newArgsValues))
                      (newArguments, newArgumentsFormula) = a
                 } yield {
                   val formula = newForm combineWith newArgumentsFormula
@@ -610,7 +610,7 @@ object ReverseProgram extends lenses.Lenses {
                     val argsRepaired = args.zip(args2) map {
                       case (a1, a2) => repair(program.subExpr(a1), newOutProgram.subExpr(a2))
                     }
-                    for{psf <- regroupArguments(argsRepaired)
+                    for{psf <- ProgramFormula.regroupArguments(argsRepaired)
                         (ps, formula) = psf} yield {
                       ProgramFormula(FunctionInvocation(`f`, tpes, ps), formula)
                     }
@@ -723,37 +723,6 @@ object ReverseProgram extends lenses.Lenses {
     }) #::: {
 //      ???
       Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOutProgram):\n~>")
-  }
-
-  /** Given a sequence of (arguments expression, expectedValue),
-      returns the cartesian product of all argument programs and solutions. */
-  private def combineArguments(pf: ProgramFormula,
-      arguments: Seq[(Expr, ProgramFormula)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
-    Log(s"combining arguments for $pf")
-    val argumentsReversed = arguments.map { case (arg, expected) =>
-      Log(s"repairing argument $arg should equal $expected")
-      repair(ProgramFormula(arg, pf.formula), expected)
-    }
-    regroupArguments(argumentsReversed)
-  }
-
-  // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
-  def regroupArguments(arguments: Seq[Stream[ProgramFormula]])
-                            (implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
-    inox.utils.StreamUtils.cartesianProduct(arguments).map{
-      pfs =>
-        (pfs.map(_.expr), (Formula() /: pfs) { case (f, pfr) => f combineWith pfr.formula })
-    }
-  }
-
-  // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
-  def combineResults(seq: List[ProgramFormula])
-            (implicit symbols: Symbols, cache: Cache): (List[Expr], Formula) = {
-    val (lb, f) = ((ListBuffer[Expr](), Formula()) /: seq) {
-      case total@((ls, f1), (ProgramFormula(l, f2))) =>
-        (ls += l, f1 combineWith f2)
-    }
-    (lb.toList, f)
   }
 
   /* Example:
