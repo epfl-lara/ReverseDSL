@@ -23,7 +23,8 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import StringConcatExtended._
   import perfect.ProgramFormula
-  import ProgramFormula.{StringInsert, ListInsert,AssociativeInsert}
+  import ProgramFormula.{StringInsert, AssociativeInsert}
+  import semanticlenses._
 
   val build = variable[String => Element]("build")
   val vText = variable[String]("text")

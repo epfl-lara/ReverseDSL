@@ -149,7 +149,8 @@ object ReverseProgram extends lenses.Lenses {
 
   val semanticLenses: semanticlenses.SemanticLens =
     PatternMatch.Lens andThen
-      PatternReplace.Lens
+      PatternReplace.Lens andThen
+      ListInsert.Lens
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * Basically, we solve the problem:
@@ -239,7 +240,7 @@ object ReverseProgram extends lenses.Lenses {
             case l: Let => Stream.empty[ProgramFormula] // No need to wrap a let expression, we can always do this later. Indeed,
               //f{val x = A; B} = {val x = A; f(B)}
             case Application(Lambda(_, _), _) => Stream.empty[ProgramFormula] // Same argument
-            case _ if ProgramFormula.ListInsert.unapply(newOutProgram).nonEmpty => Stream.empty[ProgramFormula]
+            case _ if ListInsert.unapply(newOutProgram).nonEmpty => Stream.empty[ProgramFormula]
             case _ =>
               (maybeWrap(program, newOutProgram, functionValue.get) /:: Log.maybe_wrap) #::: (maybeUnwrap(program, newOutProgram, functionValue.get) /:: Log.maybe_unwrap)
           }
@@ -498,61 +499,6 @@ object ReverseProgram extends lenses.Lenses {
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
           newOut match {
-            case ProgramFormula.ListInsert.Expr(tpe, before, inserted, after) =>
-              Log("ListInsert")
-              if(before.length == 0) { // Insertion happens before this element
-                Log("beforeLength == 0")
-                // We might delete the elements afterwards.
-                if(after.length == 0) {
-                  Log("afterLength == 0")
-                  Stream(
-                    ProgramFormula(ListLiteral(inserted, tpe), newOutFormula)
-                  )
-                } else { // after.length > 0
-                  Log("afterLength > 0")
-                  functionValue match {
-                    case Some(ListLiteral(functionValueList, tpe)) =>
-                      val newTail = ListLiteral(functionValueList.tail, tpe)
-
-                      if(after.length == functionValueList.length) { // No deletion.
-                        Log("afterLength == functionValueList.length")
-                        for{ pf <- repair(program.subExpr(argsIn(0)).withComputedValue(functionValueList.head), newOutProgram.subExpr(after.head))
-                             pf2 <- repair(program.subExpr(argsIn(1)).withComputedValue(newTail),
-                               ProgramFormula.ListInsert(tpe, Nil, Nil, after.tail) combineWith newOutFormula) } yield {
-                          ProgramFormula(ListLiteral.concat(
-                            ListLiteral(inserted, tpe),
-                            ListLiteral(List(pf.expr), tpe),
-                            pf2.expr), pf.formula combineWith pf2.formula combineWith newOutFormula)
-                        }
-                      } else {
-                        Log("afterLength < functionValueList.length")
-                        assert(after.length < functionValueList.length) // some deletion happened.
-                        val updatedOutProgram = ProgramFormula.ListInsert(tpe, Nil, Nil, after) combineWith newOutFormula // Recursive problem if
-                        for{ pf <- repair(program.subExpr(argsIn(1)).withComputedValue(newTail), updatedOutProgram)} yield {
-                          pf.wrap{ x =>
-                            ListLiteral.concat(
-                              ListLiteral(inserted, tpe),
-                              x
-                            )
-                          }
-                        }
-                      }
-
-                    case _ => Stream.empty
-                  }
-                }
-              } else { // before.length > 0
-                assert(argsIn.length == 2, "supposed that there was an element here, but there was none.")
-                val updatedOutProgram = ProgramFormula.ListInsert(tpe, before.tail, inserted, after) combineWith newOutFormula
-
-                for{pfHead <- repair(program.subExpr(argsIn(0)), newOutProgram.subExpr(before.head))
-                    pfTail <- repair(program.subExpr(argsIn(1)), updatedOutProgram)} yield {
-                  ProgramFormula(ListLiteral.concat(ListLiteral(List(pfHead.expr), tpe), pfTail.expr),
-                    pfHead.formula combineWith pfTail.formula
-                  )
-                }
-              }
-
             case v: Variable =>
               Stream(newOutProgram)
             case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != Some(newOut) => // Same type ! Maybe the arguments will change or move.

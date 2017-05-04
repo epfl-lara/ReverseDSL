@@ -11,7 +11,7 @@ import ProgramFormula._
 import StringConcatExtended._
 
 trait Lenses { self: ReverseProgram.type =>
-
+  import perfect.semanticlenses._
   val lenses = List[Lens](
     FilterLens,
     MapLens,
@@ -181,7 +181,7 @@ trait Lenses { self: ReverseProgram.type =>
           }
 
 
-        case ProgramFormula.ListInsert(tpe, before, inserted, after) =>
+        case ListInsert(tpe, before, inserted, after) =>
           // Beware, there might be changes in before or after. But at least, we know how the insertion occurred.
           val (newBeforeAfter: List[Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]]]) =
               (before.zip(originalInput.take(before.length)) ++
@@ -237,7 +237,7 @@ trait Lenses { self: ReverseProgram.type =>
                (newBefore, newAfterInserted) = newBeforeAfterUnique.splitAt(before.length)
                (newAfter, newInsertedRaw) = newAfterInserted.splitAt(after.length) } yield {
             // A list insert results in a list insert in the argument.
-            val firstArg = ProgramFormula.ListInsert(
+            val firstArg = ListInsert(
               argType,
               newBefore,
               newInsertedRaw,
@@ -767,7 +767,6 @@ trait Lenses { self: ReverseProgram.type =>
   /** Lense-like list concat, with the possibility of changing the mapping lambda. */
   case object ListConcatLens extends Lens with AssociativeConcat[List[Expr], Expr] {
     import Utils._
-    import ProgramFormula.ListInsert
     val identifier = listconcat
 
     def typeJump(a: List[Expr], b: List[Expr]): Int = if(a.length != 0 && b.length != 0) 1 else 0
