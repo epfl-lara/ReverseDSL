@@ -81,6 +81,35 @@ object MapDataLens extends semanticlenses.SemanticLens {
           }
 
         }
+      case MapApply(map, key) => // Variant of ADT selection.
+        val map_v = evalWithCache(in.formula.assignments.get(map)).asInstanceOf[FiniteMap] //originalAdtValue
+        val key_v = evalWithCache(in.formula.assignments.get(key))
+
+        val defaultValue = map_v.default
+
+        val vds = map_v.pairs.map{ case (k, v) => (k, Variable(FreshIdentifier("x", true), map_v.valueType, Set()))}
+        var found = false
+        val constraints = (vds map {
+          case (k, vd) => if(k == key_v) {
+            found = true
+            vd -> StrongValue(out.expr)
+          } else {
+            vd -> OriginalValue(evalWithCache(MapApply(map_v, k)))
+          }
+        }).toMap
+        val finiteMapRepair = if (!found) { // We should not change the default, rather add a new entry.
+          FiniteMap(vds.map{x => (x._1, x._2)} :+ (key_v -> out.expr)
+            , map_v.default, map_v.keyType, map_v.valueType)
+        } else {
+          FiniteMap(vds.map{x => (x._1, x._2)}, map_v.default, map_v.keyType, map_v.valueType)
+        }
+
+        val newConstraint = Formula(constraints)
+
+        for{ pf <- repair(in.subExpr(map), out.subExpr(finiteMapRepair) combineWith newConstraint) } yield {
+          pf.wrap(x => MapApply(x, key))
+        }
+
       case _ => Stream.Empty
     }
   }

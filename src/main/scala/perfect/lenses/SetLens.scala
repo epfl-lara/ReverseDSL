@@ -3,7 +3,7 @@ package lenses
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ReverseProgram.{Cache, evalWithCache}
+import perfect.ReverseProgram.{Cache, evalWithCache, repair}
 import perfect.Utils.isValue
 
 /**
@@ -40,6 +40,57 @@ object SetLens extends semanticlenses.SemanticLens {
             case newOut => // Maybe it has a formula ?
               Stream(out)
           }
+        }
+      case SetAdd(sExpr, elem) =>
+        val sExpr_v = evalWithCache(in.formula.assignments.get(sExpr))
+        val elem_v = evalWithCache(in.formula.assignments.get(elem))
+        val FiniteSet(vs, tpe) = sExpr_v
+        val FiniteSet(vsNew, _) = out.simplifiedExpr
+        val vsSet = vs.toSet
+        val vsNewSet = vsNew.toSet
+        val maybeAddedElements = vsNewSet -- vsSet
+        val maybeRemovedElements = vsSet -- vsNewSet
+        val (changedElements, added, removed) = if(maybeAddedElements.size == 1 && maybeRemovedElements.size == 1) {
+          (maybeRemovedElements.headOption.zip(maybeAddedElements.headOption).headOption: Option[(Expr, Expr)], Set[Expr](), Set[Expr]())
+        } else
+          (None: Option[(Expr, Expr)], maybeAddedElements: Set[Expr], maybeRemovedElements: Set[Expr])
+        Log(s"Added $added, Removed $removed, changed: $changedElements")
+        changedElements match {
+          case Some((old, fresh)) =>
+            (if(vsSet contains old) {
+              Log.prefix("#1") :=
+                (for(pf <- repair(in.subExpr(sExpr),
+                  out.subExpr(FiniteSet((vsSet - old + fresh).toSeq, tpe)))) yield {
+                  pf.wrap(x => SetAdd(x, elem))
+                })
+            } else Stream.empty) #::: (
+              Log.prefix("#2") :=
+                (if(elem_v == old) {
+                  for(pf <- repair(in.subExpr(elem), out.subExpr(fresh))) yield {
+                    pf.wrap(x => SetAdd(sExpr, x))
+                  }
+                } else Stream.empty)
+              )
+          case None => // Just added and removed elements.
+            if(removed.isEmpty) { // Just added elements.
+              for {pf <- repair(in.subExpr(sExpr),
+                out.subExpr(FiniteSet((vsSet ++ (added - elem_v)).toSeq, tpe)))
+                   pfElem <- repair(in.subExpr(elem), ProgramFormula(elem_v))
+              } yield {
+                pf.wrap(x => SetAdd(x, pfElem.expr)) combineWith pfElem.formula
+              }
+            } else {
+              if(removed contains elem_v) { // We replace SetAdd(f, v) by f
+                for(pf <- repair(in.subExpr(sExpr),
+                  out.subExpr(FiniteSet(vsSet.toSeq, tpe))
+                )) yield pf
+              } else { // All changes happened in the single set.
+                for{pf <- repair(in.subExpr(sExpr),
+                  out.subExpr(FiniteSet((vsSet ++ (added-elem_v) -- removed).toSeq, tpe)))
+                    pfElem <- repair(in.subExpr(elem), ProgramFormula(elem_v))
+                } yield pf.wrap(x => SetAdd(x, pfElem.expr)) combineWith pfElem.formula
+              }
+            }
         }
       case _ => Stream.empty
     }

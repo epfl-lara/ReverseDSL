@@ -379,35 +379,6 @@ object ReverseProgram extends lenses.Lenses {
             pf.wrap(x => ADTSelector(x, selector))
           }
 
-        case MapApply(map, key) => // Variant of ADT selection.
-          val map_v = evalWithCache(functionFormula.assignments.get(map)).asInstanceOf[FiniteMap] //originalAdtValue
-          val key_v = evalWithCache(functionFormula.assignments.get(key))
-
-          val defaultValue = map_v.default
-
-          val vds = map_v.pairs.map{ case (k, v) => (k, Variable(FreshIdentifier("x", true), map_v.valueType, Set()))}
-          var found = false
-          val constraints = (vds map {
-            case (k, vd) => if(k == key_v) {
-              found = true
-              vd -> StrongValue(newOut)
-            } else {
-              vd -> OriginalValue(evalWithCache(MapApply(map_v, k)))
-            }
-          }).toMap
-          val finiteMapRepair = if (!found) { // We should not change the default, rather add a new entry.
-            FiniteMap(vds.map{x => (x._1, x._2)} :+ (key_v -> newOut)
-              , map_v.default, map_v.keyType, map_v.valueType)
-          } else {
-            FiniteMap(vds.map{x => (x._1, x._2)}, map_v.default, map_v.keyType, map_v.valueType)
-          }
-
-          val newConstraint = Formula(constraints)
-
-          for{ pf <- repair(program.subExpr(map), newOutProgram.subExpr(finiteMapRepair) combineWith newConstraint) } yield {
-            pf.wrap(x => MapApply(x, key))
-          }
-
         case Application(lambdaExpr, arguments) => // TODO: Put this into a lense.
           val originalValueMaybe: Option[Expr] = (optVar(lambdaExpr).flatMap(functionFormula.findConstraintValue).getOrElse(lambdaExpr) match {
             /*case v: Variable =>
@@ -621,57 +592,7 @@ object ReverseProgram extends lenses.Lenses {
                 }
               }
           }
-        case SetAdd(sExpr, elem) =>
-          val sExpr_v = evalWithCache(functionFormula.assignments.get(sExpr))
-          val elem_v = evalWithCache(functionFormula.assignments.get(elem))
-          val FiniteSet(vs, tpe) = sExpr_v
-          val FiniteSet(vsNew, _) = newOut
-          val vsSet = vs.toSet
-          val vsNewSet = vsNew.toSet
-          val maybeAddedElements = vsNewSet -- vsSet
-          val maybeRemovedElements = vsSet -- vsNewSet
-          val (changedElements, added, removed) = if(maybeAddedElements.size == 1 && maybeRemovedElements.size == 1) {
-            (maybeRemovedElements.headOption.zip(maybeAddedElements.headOption).headOption: Option[(Expr, Expr)], Set[Expr](), Set[Expr]())
-          } else
-            (None: Option[(Expr, Expr)], maybeAddedElements: Set[Expr], maybeRemovedElements: Set[Expr])
-          Log(s"Added $added, Removed $removed, changed: $changedElements")
-          changedElements match {
-            case Some((old, fresh)) =>
-              (if(vsSet contains old) {
-                Log.prefix("#1") :=
-                  (for(pf <- repair(program.subExpr(sExpr),
-                    newOutProgram.subExpr(FiniteSet((vsSet - old + fresh).toSeq, tpe)))) yield {
-                    pf.wrap(x => SetAdd(x, elem))
-                  })
-              } else Stream.empty) #::: (
-                Log.prefix("#2") :=
-                  (if(elem_v == old) {
-                    for(pf <- repair(program.subExpr(elem), newOutProgram.subExpr(fresh))) yield {
-                      pf.wrap(x => SetAdd(sExpr, x))
-                    }
-                  } else Stream.empty)
-                )
-            case None => // Just added and removed elements.
-              if(removed.isEmpty) { // Just added elements.
-                for {pf <- repair(program.subExpr(sExpr),
-                  newOutProgram.subExpr(FiniteSet((vsSet ++ (added - elem_v)).toSeq, tpe)))
-                     pfElem <- repair(program.subExpr(elem), ProgramFormula(elem_v))
-                } yield {
-                  pf.wrap(x => SetAdd(x, pfElem.expr)) combineWith pfElem.formula
-                }
-              } else {
-                if(removed contains elem_v) { // We replace SetAdd(f, v) by f
-                  for(pf <- repair(program.subExpr(sExpr),
-                    newOutProgram.subExpr(FiniteSet(vsSet.toSeq, tpe))
-                  )) yield pf
-                } else { // All changes happened in the single set.
-                  for{pf <- repair(program.subExpr(sExpr),
-                    newOutProgram.subExpr(FiniteSet((vsSet ++ (added-elem_v) -- removed).toSeq, tpe)))
-                      pfElem <- repair(program.subExpr(elem), ProgramFormula(elem_v))
-                  } yield pf.wrap(x => SetAdd(x, pfElem.expr)) combineWith pfElem.formula
-                }
-              }
-          }
+
         // Special case where we prefer the cons-branch. For that we need to modify the input.
         /*case IfExpr(IsInstanceOf(v:Variable, ADTType(Utils.cons, Seq(tpe))), thenn, elze) =>
           val value_v = evalWithCache(letm(currentValues) in v)
