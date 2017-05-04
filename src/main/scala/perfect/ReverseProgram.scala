@@ -5,8 +5,8 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
-import perfect.ProgramFormula.{PatternMatch, StringInsert}
-import perfect.semanticlenses.SemanticLens
+import perfect.ProgramFormula.{StringInsert}
+import perfect.semanticlenses._
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
@@ -148,7 +148,7 @@ object ReverseProgram extends lenses.Lenses {
   }
 
   val semanticLenses: semanticlenses.SemanticLens =
-    ProgramFormula.PatternMatch.Lens
+    perfect.semanticlenses.PatternMatch.Lens
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * Basically, we solve the problem:
@@ -505,7 +505,7 @@ object ReverseProgram extends lenses.Lenses {
                       repair(
                         program.subExpr(expr),
                         newOutProgram.subExpr(
-                          ProgramFormula.PatternMatch.Expr(
+                          PatternMatch.Expr(
                             pattern, variables, false
                           )))
                   }

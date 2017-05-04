@@ -35,6 +35,7 @@ object Formula {
 
   protected def inlineSimpleFormulas(e: Formula): Formula = {
     import StringConcatExtended._
+    import semanticlenses._
     implicit val symbols = Utils.defaultSymbols
     def evalExprIfNeeded(e: Expr) = e match {
       case StringInsert.Expr(left, middle, right, direction) =>
@@ -154,7 +155,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
       case _ => None
     }
   }
-
+  import semanticlenses._
   def combineWith(other: Formula)(implicit symbols: Symbols): Formula = {
     if(this eq other) this else {
       val TopLevelAnds(ands) = constraints &<>& other.constraints
