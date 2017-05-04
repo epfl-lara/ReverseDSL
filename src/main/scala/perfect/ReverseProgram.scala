@@ -335,9 +335,7 @@ object ReverseProgram extends lenses.Lenses {
           }
 
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
-          newOut match {
-            case v: Variable =>
-              Stream(newOutProgram)
+          newOutBestValue match {
             case ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && functionValue != Some(newOut) => // Same type ! Maybe the arguments will change or move.
               Log("ADT 2")
               val argsInValue = functionValue match {
@@ -355,12 +353,14 @@ object ReverseProgram extends lenses.Lenses {
               } yield {
                 ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
               }
-            case ADT(ADTType(tp2, tpArgs2), args2) =>
-              Log("ADT 3")
+            case _: Variable =>
+              Stream(newOutProgram)
+            case ADT(ADTType(_, _), _) =>
               Stream.empty // Wrapping already handled.
 
-            case a =>
-              throw new Exception(s"Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
+            case _ =>
+              Log(s"[Warning] Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
+              Stream.empty
           }
 
         case as@ADTSelector(adt, selector) =>
