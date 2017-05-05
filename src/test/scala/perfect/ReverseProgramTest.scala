@@ -162,69 +162,72 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     changeLambdasArgument(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))), true)
   }
 
-  for((pfun, msg) <- Seq(
-    (Application(lambda, Seq("Hello world")),
-      "Change an applied lambda's shape by wrapping an element"),
-    (let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))),
-      "Change a variable lambda's shape by wrapping an element")
-  )) test(msg) {
-      val expected1 = Element("div", WebElement(TextNode("Hello world")) :: Nil)
-      val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world")) :: Nil)) :: Nil)
-      checkProg(expected1, pfun)
-      val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-      pfun2 match {
-        case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
-          if msg == "Change a variable lambda's shape by wrapping an element"
-        => if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
-        case Application(newLambda@Lambda(Seq(v2), body), _)
-          if msg == "Change an applied lambda's shape by wrapping an element"
-        => if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
-      }
+  def changeLambdaShapeWrapping(pfun: Expr, variable: Boolean) = {
+    val expected1 = Element("div", WebElement(TextNode("Hello world")) :: Nil)
+    val expected2 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world")) :: Nil)) :: Nil)
+    checkProg(expected1, pfun)
+    val pfun2 = pfun repairFrom expected2 shouldProduce expected2
+    pfun2 match {
+      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) if variable
+      => if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
+      case Application(newLambda@Lambda(Seq(v2), body), _) if !variable
+      => if (!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
     }
+  }
+  test("Change an applied lambda's shape by wrapping an element") {
+    changeLambdaShapeWrapping(Application(lambda, Seq("Hello world")), false)
+  }
+  test("Change a variable lambda's shape by wrapping an element") {
+    changeLambdaShapeWrapping(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))), true)
+  }
 
   val lambda2 = \("v"::String)(v =>
     _Element("div", _List[WebElement](_WebElement(_Element("b", _List[WebElement](_WebElement(_TextNode(v))),
       _List[WebAttribute](), _List[WebStyle]()))), _List[WebAttribute](), _List[WebStyle]()))
 
-  for((pfun, msg) <- Seq(
-    (Application(lambda2, Seq("Hello world")),
-      "Change an applied lambda's shape by unwrapping an element"),
-    (let(build.toVal, lambda2)(b => Application(b, Seq("Hello world"))),
-      "Change a variable lambda's shape by unwrapping an element")
-  )) test(msg) {
+  def changeLambdaShapeUnwrapping(pfun: Expr, variable: Boolean) = {
     val expected1 = Element("div", WebElement(Element("b", WebElement(TextNode("Hello world"))::Nil))::Nil)
     val expected2 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     checkProg(expected1, pfun)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
     pfun2 match {
       case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
-        if msg == "Change a variable lambda's shape by unwrapping an element"
+        if variable
       => if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
       case Application(newLambda@Lambda(Seq(v2), body), _)
-        if msg == "Change an applied lambda's shape by unwrapping an element"
+        if !variable
       => if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
     }
   }
 
-  for((pfun, msg) <- Seq(
-    (Application(lambda, Seq("Hello world")),
-      "Change an applied lambda's shape by inserting a constant element"),
-    (let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))),
-      "Change a variable lambda's shape by inserting a constant element")
-  ))  test(msg) {
+  test("Change an applied lambda's shape by unwrapping an element") {
+    Log activated changeLambdaShapeUnwrapping(Application(lambda2, Seq("Hello world")), false)
+  }
+
+  test("Change a variable lambda's shape by unwrapping an element") {
+    changeLambdaShapeUnwrapping(let(build.toVal, lambda2)(b => Application(b, Seq("Hello world"))), true)
+  }
+
+  def changeLambdaShapeInsertingConstant(pfun: Expr, variable: Boolean) = {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("div", WebElement(Element("br"))::WebElement(TextNode("Hello world"))::Nil)
     val pfun2 = pfun repairFrom expected2 shouldProduce expected2
     pfun2 match {
-      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_))))
-        if msg == "Change a variable lambda's shape by inserting a constant element"
+      case Let(_, newLambda@Lambda(Seq(v2), body), Application(_, Seq(StringLiteral(_)))) if variable
       =>
         if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
-      case Application(newLambda@Lambda(Seq(v2), body), _)
-        if msg == "Change an applied lambda's shape by inserting a constant element"
+      case Application(newLambda@Lambda(Seq(v2), body), _) if !variable
       =>
         if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
     }
+  }
+
+  test("Change an applied lambda's shape by inserting a constant element") {
+    changeLambdaShapeInsertingConstant(Application(lambda, Seq("Hello world")), false)
+  }
+
+  test("Change a variable lambda's shape by inserting a constant element") {
+    changeLambdaShapeInsertingConstant(let(build.toVal, lambda)(b => Application(b, Seq("Hello world"))), true)
   }
 
   test("Change a variable which went through a lambda") {
@@ -537,8 +540,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     ))
     program shouldProduce _List[String]("a !", "b !")
 
-    Log activated (
-    program repairFrom _List[String]("a ?", "b !"))/* shouldProduce _List[String]("a ?", "b ?")*/ match {
+    program repairFrom _List[String]("a ?", "b !") shouldProduce _List[String]("a ?", "b ?") match {
       case Let(pvd, StringLiteral(str),
       Let(fvd, Lambda(Seq(xvd), StringConcat(xv, pv)),
         FunctionInvocation(Utils.map, Seq(StringType, StringType), Seq(ListLiteral(List(StringLiteral("a"), StringLiteral("b")), _), fv))
@@ -706,7 +708,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       )
 
     checkProg(_List[String]("Margharita", "Salami", "Sudjuk"), pfun)
-    val s_pfun2 = repairProgramList(pfun, _List[String]("Margharita", "Salami", "Salmon", "Sudjuk"), 2).take(2)
+    val s_pfun2 = Log activated repairProgramList(pfun, _List[String]("Margharita", "Salami", "Salmon", "Sudjuk"), 2).take(2)
     s_pfun2.map{ pfun2 =>
       pfun2 match {
         case FunctionInvocation(_, _, Seq(a, b)) =>

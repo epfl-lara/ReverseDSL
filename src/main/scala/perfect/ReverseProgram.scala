@@ -238,7 +238,7 @@ object ReverseProgram extends lenses.Lenses {
 
     //Log.prefix(s"@return ") :=
     def maybeWrappedSolutions = if(functionValue.isEmpty) Stream.empty else (function.getType match {
-        case a: ADTType if !newOut.isInstanceOf[Variable] =>
+        case a: ADTType if !newOut.isInstanceOf[Variable] && exprOps.variablesOf(function).nonEmpty =>
           function match {
             case l: Let => Stream.empty[ProgramFormula] // No need to wrap a let expression, we can always do this later. Indeed,
               //f{val x = A; B} = {val x = A; f(B)}
@@ -353,14 +353,12 @@ object ReverseProgram extends lenses.Lenses {
               } yield {
                 ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
               }
-            case _: Variable =>
+            case _: Variable | ADT(ADTType(_, _), _) =>
               Stream(newOutProgram)
-            case ADT(ADTType(_, _), _) =>
-              Stream.empty // Wrapping already handled.
 
             case a =>
               Log(s"[Warning] Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
-              Stream.empty
+              Stream(newOutProgram)
           }
 
         case as@ADTSelector(adt, selector) =>
@@ -724,11 +722,12 @@ object ReverseProgram extends lenses.Lenses {
   *  result:        v  #::   Element("span", List(), List(), List()) #:: Stream.empty
   * */
   private def maybeUnwrap(program: ProgramFormula, newOutProgram: ProgramFormula, functionValue: Expr)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
+    Log(s"Testing maybeUnwrap for function Value = $functionValue")
     val newOut = newOutProgram.getFunctionValue.getOrElse(return Stream.empty)
     val function = program.expr
     if(functionValue == newOut) {
       Log("@return unwrapped")
-      return Stream(program.assignmentsAsOriginals())
+      return Stream(program.assignmentsAsOriginals()) // Necessary because we just found the sub-program which corresponds to the output.
     }
 
     (function, functionValue) match {
