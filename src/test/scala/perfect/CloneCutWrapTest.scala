@@ -14,7 +14,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import XmlTrees._
   import StringConcatExtended._
-  import ProgramFormula.{TreeWrap, TreeUnwrap, TreeModification, CloneText}
+  import ProgramFormula.CloneText
   import semanticlenses._
   implicit val symbols = Utils.defaultSymbols
 

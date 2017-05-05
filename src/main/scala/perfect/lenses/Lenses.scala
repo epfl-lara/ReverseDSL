@@ -149,7 +149,7 @@ trait Lenses { self: ReverseProgram.type =>
       }
 
       newOutput match {
-        case ProgramFormula.TreeModification(tpeGlobal, tpeLocal, originalOutputModifList, modified, argsInSequence) =>
+        case TreeModification(tpeGlobal, tpeLocal, originalOutputModifList, modified, argsInSequence) =>
           val ListLiteral(originalOutputModifList2, _) = originalOutputModifList
           val (index, remaining) = argsInSequence.span(_ == Utils.tail)
           val original = originalInput(index.length)
@@ -159,18 +159,18 @@ trait Lenses { self: ReverseProgram.type =>
             ???
           } else {
             repair(ProgramFormula(Application(lambda, Seq(original))),
-              newOutput.subExpr(ProgramFormula.TreeModification.Expr(tpeGlobal, tpeLocal, originalOutputModifList2(index.length), modified, remaining.tail))) map {
+              newOutput.subExpr(TreeModification.Expr(tpeGlobal, tpeLocal, originalOutputModifList2(index.length), modified, remaining.tail))) map {
               case pf@ProgramFormula(Application(lExpr, Seq(expr2)), formula2) =>
                 val lambda2 = castOrFail[Expr, Lambda](lExpr)
                 if (lambda2 != lambda && expr2 == original) {
-                  (Seq(ProgramFormula.TreeModification(ADTType(Utils.cons, Seq(argType)),
+                  (Seq(TreeModification(ADTType(Utils.cons, Seq(argType)),
                     tpeLocal,
                     originalArgsValues.head.expr,
                     expr2,
                     index :+ Utils.head
                   ) combineWith formula2 combineWith originalArgsValues.head.formula, ProgramFormula(lambda2, formula2)), Formula())
                 } else {
-                  (Seq(ProgramFormula.TreeModification(ADTType(Utils.cons, Seq(argType)),
+                  (Seq(TreeModification(ADTType(Utils.cons, Seq(argType)),
                     tpeLocal,
                     originalArgsValues.head.expr,
                     expr2,
@@ -820,20 +820,20 @@ trait Lenses { self: ReverseProgram.type =>
             ListLiteral(_, tpe),
             ListInsert(tpe, _, _, _))
 
-        case ProgramFormula.TreeModification.Expr(tpeGlobal, tpeLocal, original@ADT(adt, Seq(hdOriginal, tlOriginal)), modified, path) =>
+        case TreeModification.Expr(tpeGlobal, tpeLocal, original@ADT(adt, Seq(hdOriginal, tlOriginal)), modified, path) =>
           val (index, remaining) = path.span(_ == Utils.tail)
           leftValue match {
             case ListLiteral(l, _) =>
               if(index.length < l.length) {
                 Stream((Seq(
-                  ProgramFormula.TreeModification(tpeGlobal, tpeLocal, original, modified, path),
+                  TreeModification(tpeGlobal, tpeLocal, original, modified, path),
                   ProgramFormula(rightValue)),
                   Formula())
                 )
               } else {
                 Stream((Seq(
                   ProgramFormula(leftValue),
-                  ProgramFormula.TreeModification(tpeGlobal, tpeLocal, original, modified, path.drop(index.length))),
+                  TreeModification(tpeGlobal, tpeLocal, original, modified, path.drop(index.length))),
                   Formula()
                 ))
               }

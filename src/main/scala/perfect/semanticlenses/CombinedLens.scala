@@ -15,5 +15,5 @@ case class CombinedLens(self: SemanticLens, other: SemanticLens) extends Semanti
       self.put(in, out) #::: other.put(in, out)
     }
   }
-  isPreemptive = self.isPreemptive
+  isPreemptive = self.isPreemptive || other.isPreemptive
 }

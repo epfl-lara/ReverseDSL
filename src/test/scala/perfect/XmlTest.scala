@@ -1,6 +1,6 @@
 package perfect
 import legacy._
-import perfect.ProgramFormula.TreeModification
+import perfect.semanticlenses.TreeModification
 import perfect.Utils.children
 
 /**
@@ -193,7 +193,7 @@ class XmlTest extends FunSuite with TestHelpers {
   }
   test("Hu 2004 without sorting modification in name") {
     import Utils._
-    val newOutModification: ProgramFormula = ProgramFormula.TreeModification(
+    val newOutModification: ProgramFormula = TreeModification(
       inoxTypeOf[Node],
       inoxTypeOf[String],
       initialOutWithoutSorting,
@@ -257,7 +257,7 @@ class XmlTest extends FunSuite with TestHelpers {
     </addrbook>*/
     implicit val symbols = Utils.defaultSymbols
     val newOutInsertionData: ProgramFormula =
-      ProgramFormula.TreeModification(inoxTypeOf[Node],inoxTypeOf[List[Node]],initialOutWithoutSorting,
+      TreeModification(inoxTypeOf[Node],inoxTypeOf[List[Node]],initialOutWithoutSorting,
         ListInsert.Expr(inoxTypeOf[Node],
           List(<index>
             <name>Masato Takeichi</name>
@@ -400,7 +400,7 @@ class XmlTest extends FunSuite with TestHelpers {
   }
   test("Hu 2004 modification in name") {
     import Utils._
-    val newOutModification: ProgramFormula = ProgramFormula.TreeModification(
+    val newOutModification: ProgramFormula = TreeModification(
       inoxTypeOf[Node],
       inoxTypeOf[String],
       initialOutWithoutSorting,
@@ -436,7 +436,7 @@ class XmlTest extends FunSuite with TestHelpers {
   test("Hu 2004 insertion in data") {
     implicit val symbols = Utils.defaultSymbols
     val newOutInsertionData: ProgramFormula =
-      ProgramFormula.TreeModification(inoxTypeOf[Node],inoxTypeOf[List[Node]],initialOutWithoutSorting,
+      TreeModification(inoxTypeOf[Node],inoxTypeOf[List[Node]],initialOutWithoutSorting,
         ListInsert.Expr(inoxTypeOf[Node],
           List(<index>
             <name>Zhenjiang Hu</name>

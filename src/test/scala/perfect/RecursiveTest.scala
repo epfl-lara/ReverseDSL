@@ -47,14 +47,14 @@ class RecursiveTest extends FunSuite with TestHelpers {
     val original = _List[String]("Big brother", "Big boss")
     val modified = StringInsert.Expr("Big brother", "s", "", AssociativeInsert.InsertAutomatic)
     prog shouldProduce original
-    prog repairFrom
-      ProgramFormula.TreeModification(
+    Log activated (prog repairFrom
+      TreeModification(
         inoxTypeOf[List[String]],
         inoxTypeOf[String],
         original,
         modified,
         List(Utils.head)
-      ) match {
+      )) match {
       case Let(mpd, mpval, Application(mpv, Seq(l, Lambda(Seq(i), StringConcat(StringLiteral("Big "), iv))))) =>
         mpv shouldEqual mpd.toVariable
         l shouldEqual _List[String]("brothers", "boss")
