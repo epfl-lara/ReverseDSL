@@ -433,10 +433,8 @@ object ReverseProgram extends lenses.Lenses {
                      ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
                      (newBody, newBodyFormula) = backPf(newBodyFresh, newBodyFreshFormula)
                      isSameBody = (newBody == body) /: Log.isSameBody
-                     args <-
-                     ProgramFormula.combineArguments(program,
-                       arguments.zip(freshArgsNames).map { case (arg, expected) =>
-                         (arg, newOutProgram.subExpr(expected) combineWith newBodyFormula combineWith Formula(expected -> argumentValues(expected)))
+                     args <- ProgramFormula.regroupArguments(arguments.zip(freshArgsNames).map { case (arg, expected) =>
+                         repair(program.subExpr(arg), newOutProgram.subExpr(expected) combineWith newBodyFormula combineWith Formula(expected -> argumentValues(expected)))
                        })
                      (newArguments, newArgumentsFormula) = args
                      newLambda = if (isSameBody) originalValue else Lambda(argNames, newBody)
@@ -566,7 +564,7 @@ object ReverseProgram extends lenses.Lenses {
               if(argsOptValue.forall(_.nonEmpty)) {
                 val lenseResult = lens.put(tpes)(argsOptValue.map(_.get), newOutProgram)
                 for {l <- lenseResult; (newArgsValues, newForm) = l
-                     a <- ProgramFormula.combineArguments(program, args.zip(newArgsValues))
+                     a <- ProgramFormula.repairArguments(program, args.zip(newArgsValues))
                      (newArguments, newArgumentsFormula) = a
                 } yield {
                   val formula = newForm combineWith newArgumentsFormula

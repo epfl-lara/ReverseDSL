@@ -390,8 +390,8 @@ object ProgramFormula {
 
   /** Given a sequence of (arguments expression, expectedValue),
       returns the cartesian product of all argument programs and solutions. */
-  def combineArguments(pf: ProgramFormula,
-                               arguments: Seq[(Expr, ProgramFormula)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
+  def repairArguments(pf: ProgramFormula,
+       arguments: Seq[(Expr, ProgramFormula)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
     Log(s"combining arguments for $pf")
     val argumentsReversed = arguments.map { case (arg, expected) =>
       Log(s"repairing argument $arg should equal $expected")
@@ -402,11 +402,8 @@ object ProgramFormula {
 
   // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
   def regroupArguments(arguments: Seq[Stream[ProgramFormula]])
-  (implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
-    inox.utils.StreamUtils.cartesianProduct(arguments).map{
-      pfs =>
-        (pfs.map(_.expr), (Formula() /: pfs) { case (f, pfr) => f combineWith pfr.formula })
-    }
+  (implicit symbols: Symbols, cache: Cache): Stream[(List[Expr], Formula)] = {
+    inox.utils.StreamUtils.cartesianProduct(arguments).map(combineResults)
   }
 
   // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
