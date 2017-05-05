@@ -159,36 +159,36 @@ object ReverseProgram extends lenses.Lenses {
     *  let variables = values in function = newOut
     * by trying to change the variables values, or the function body itself.
     *
-    * @param program An expression that computed the value before newOut, and the formula contains the current mappings.
-    * @param newOutProgram A ProgramFormula resulting from the action of the user on the datat.
-    *               Either a literal value that should be produced by function,
-    *               or a variable, in which case the result will have in the formula a constraint over this variable,
-    *               Or an expression with constrained free variables to denote a clone-and-paste or many other things.
+    * @param in An expression that computed the value before newOut, and the formula contains the current mappings.
+    * @param out A ProgramFormula resulting from the action of the user on the datat.
+    *            Either a literal value that should be produced by function,
+    *            or a variable, in which case the result will have in the formula a constraint over this variable,
+    *            Or an expression with constrained free variables to denote a clone-and-paste or many other things.
     * @return A set of possible expressions, along with a set of possible assignments to input variables.
     **/
-  def repair(program: ProgramFormula, newOutProgram: ProgramFormula)
+  def repair(in: ProgramFormula, out: ProgramFormula)
             (implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
-    val ProgramFormula(function, functionFormula) = program
-    val ProgramFormula(newOut, newOutFormula) = newOutProgram
-    val currentValues = functionFormula.known
     val stackLevel = Thread.currentThread().getStackTrace.length
-    Log(s"\n@repair$stackLevel(\n  $program\n, $newOutProgram)")
-    if(function == newOut) return { Log("@return original without constraints");
-      Stream(program.assignmentsAsOriginals())
+    Log(s"\n@repair$stackLevel(\n  $in\n, $out)")
+    if(in.expr == out.expr) return { Log("@return original without constraints");
+      Stream(in.assignmentsAsOriginals())
     }
 
     val semanticOriginalLens = semanticLenses andThen DefaultLens
 
     val finalRepair =
-      ((TreeWrap.Lens andThen TreeUnwrap.Lens) andThen (TreeModification.Lens andThen
-      ValueLens)) andThen {
-        if (program.isWrappingLowPriority) {
+      ((TreeWrap.Lens andThen
+        TreeUnwrap.Lens) andThen (
+        TreeModification.Lens andThen
+        ValueLens)) andThen {
+        if (in.isWrappingLowPriority) {
           semanticOriginalLens interleave MaybeWrappedSolutions
         } else {
           MaybeWrappedSolutions interleave semanticOriginalLens
         }
       }
-    finalRepair.put(program, newOutProgram) #:::
-      {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOutProgram):\n~>")
+
+    finalRepair.put(in, out) #:::
+      {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $in\n, $out):\n~>")
   }
 }
