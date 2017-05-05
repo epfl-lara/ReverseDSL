@@ -5,7 +5,10 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import inox.solvers._
+import perfect.ReverseProgram.Cache
+import perfect.Utils.isValue
 import perfect.semanticlenses._
+import perfect.wraplenses.MaybeWrappedSolutions
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
@@ -141,11 +144,6 @@ object ReverseProgram extends lenses.Lenses {
     }
   }
 
-  /** Applies the interleaving to a finite sequence of streams. */
-  def interleave[T](left: Stream[T])(right: => Stream[T]) : Stream[T] = {
-    if (left.isEmpty) right else left.head #:: interleave(right)(left.tail)
-  }
-
   val semanticLenses: semanticlenses.SemanticLens =
     PatternMatch.Lens andThen
       PatternReplace.Lens andThen
@@ -237,27 +235,7 @@ object ReverseProgram extends lenses.Lenses {
     //Log(s"functionValue ($functionValue) != newOut ($newOut)")
 
     //Log.prefix(s"@return ") :=
-    def maybeWrappedSolutions = if(functionValue.isEmpty) Stream.empty else (function.getType match {
-        case a: ADTType if !newOut.isInstanceOf[Variable] && exprOps.variablesOf(function).nonEmpty =>
-          function match {
-            case l: Let => Stream.empty[ProgramFormula] // No need to wrap a let expression, we can always do this later. Indeed,
-              //f{val x = A; B} = {val x = A; f(B)}
-            case Application(Lambda(_, _), _) => Stream.empty[ProgramFormula] // Same argument
-            case _ if ListInsert.unapply(newOutProgram).nonEmpty => Stream.empty[ProgramFormula]
-            case _ =>
-              (maybeWrap(program, newOutProgram, functionValue.get) /:: Log.maybe_wrap) #::: (maybeUnwrap(program, newOutProgram, functionValue.get) /:: Log.maybe_unwrap)
-          }
-        case StringType if !newOut.isInstanceOf[Variable] && program.canDoWrapping =>
-          function match {
-            case l: Let => Stream.empty[ProgramFormula]
-            case Application(Lambda(_, _), _) => Stream.empty[ProgramFormula]
-            case _ =>
-              // Stream.empty
-              // Can be a StringConcat with constants to add or to remove.
-              maybeWrapString(program, newOut, functionValue.get)// #::: maybeUnwrapString(program, newOut, functionValue)
-          }
-        case _ => Stream.empty[ProgramFormula]
-      })
+
 
     def originalSolutions : Stream[ProgramFormula] = {
       function match {
@@ -634,220 +612,10 @@ object ReverseProgram extends lenses.Lenses {
     }
 
     (if(program.isWrappingLowPriority) {
-      interleave { (semanticLenses andThen originalLens).put(program, newOutProgram) } { maybeWrappedSolutions }
+      ((semanticLenses andThen originalLens) interleave MaybeWrappedSolutions).put(program, newOutProgram)
     } else {
-      interleave { maybeWrappedSolutions } { (semanticLenses andThen originalLens).put(program, newOutProgram) }
+      (MaybeWrappedSolutions interleave (semanticLenses andThen originalLens)).put(program, newOutProgram)
     }) #::: {
-//      ???
       Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $program\n, $newOutProgram):\n~>")
   }
-
-  /* Example:
-    function = v
-    functionValue = Element("b", List(), List(), List())
-    newOut = Element("div", List(Element("b", List(), List(), List())), List(), List())
-    result: Element("div", List(v), List(), List())
-  * */
-  private def maybeWrap(program: ProgramFormula, newOutProgram: ProgramFormula, functionValue: Expr)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
-    Log(s"Testing maybewrap for function Value = $functionValue")
-    val newOut = newOutProgram.getFunctionValue.getOrElse(return Stream.empty)
-    val function = program.expr
-    if(functionValue == newOut) return Stream.empty[ProgramFormula] // Value returned in maybeUnwrap
-    Log(s"maybewrap 2")
-
-    val containsFunctionValue = exprOps.exists {
-      case t if t == functionValue => true
-      case _ => false
-    } _
-    // Checks if the old value is inside the new value, in which case we add a wrapper.
-    if (containsFunctionValue(newOut)) {
-      Log(s"maybewrap 3")
-      val canWrap = newOut match {
-        case ADT(ADTType(name, tps), args) =>
-          function match {
-            case ADT(ADTType(nameFun, tpsFun), argsFun) =>
-              if(name != nameFun || tps != tpsFun) {
-                true
-              } else { // There might be a duplicate wrapping.
-                val argsWithIndex = args.zipWithIndex
-                val indexes = argsWithIndex.filter{ case (arg, i) =>
-                  containsFunctionValue(arg)
-                }
-                if(indexes.length >= 2) {
-                  true
-                } else if(indexes.isEmpty) { // That's weird, should not happen.
-                  Log("##### Error: This cannot happen #####")
-                  false
-                } else {
-                  val (arg, i) = indexes.head
-                  val shouldNotWrap = argsFun.zipWithIndex.forall{ case (arg2, i2) =>
-                    println(s"Testing if $arg2 is value: ${isValue(arg2)}")
-                    i2 == i || isValue(arg2)
-                  }
-                  /*if(shouldNotWrap) {
-                    println("~~~~~~~~~~ Did not wrap this ~~~~~~~~")
-                    println("  " + function)
-                    println(" =" + functionValue)
-                    println("->" + newOut)
-                    println(s"because we would have the same wrapping at index $i")
-                  }*/
-                  !shouldNotWrap
-                }
-              }
-            case _ => true
-          }
-        case _ => true
-      }
-      Log(s"canwrap: $canWrap")
-      if(canWrap) {
-        // We wrap the computation of functionValue with ADT construction
-        val newFunction = exprOps.postMap {
-          case t if t == functionValue => Some(function)
-          case _ => None
-        }(newOut)
-        Stream(ProgramFormula(newFunction))
-      } else Stream.empty
-    } else {
-      Stream.empty
-    }
-  }
-
-
-  /* Example:
-  *  function:      Element("b", List(v, Element("span", List(), List(), List())), List(), List())
-  *  functionValue: Element("b", List(Element("span", List(), List(), List()), Element("span", List(), List(), List())), List(), List())
-  *  newOut:        Element("span", List(), List(), List())
-  *  result:        v  #::   Element("span", List(), List(), List()) #:: Stream.empty
-  * */
-  private def maybeUnwrap(program: ProgramFormula, newOutProgram: ProgramFormula, functionValue: Expr)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
-    Log(s"Testing maybeUnwrap for function Value = $functionValue")
-    val newOut = newOutProgram.getFunctionValue.getOrElse(return Stream.empty)
-    val function = program.expr
-    if(functionValue == newOut) {
-      Log("@return unwrapped")
-      return Stream(program.assignmentsAsOriginals()) // Necessary because we just found the sub-program which corresponds to the output.
-    }
-
-    (function, functionValue) match {
-      case (ADT(ADTType(tp, tpArgs), args), ADT(ADTType(tp2, tpArgs2), argsValue)) =>
-        // Checks if the old value is inside the new value, in which case we add a wrapper.
-        argsValue.toStream.zipWithIndex.filter{ case (arg, i) =>
-          exprOps.exists {
-            case t if t == newOut => true
-            case _ => false
-          }(arg)
-        }.flatMap{ case (arg, i) =>
-          maybeUnwrap(ProgramFormula(args(i), program.formula), newOutProgram, arg)
-        }
-
-      case _ => Stream.empty
-    }
-  }
-
-  /* Example:
-    function = f(a) + v + "boss"
-    functionValue = "I am the boss"
-    newOut =  "Therefore, I am the boss"
-    result: "Therefore, " + (f(a) + v + "boss")
-  * */
-  private def maybeWrapString(program: ProgramFormula, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[ProgramFormula] = {
-    val function = program.expr
-    if(functionValue == newOut) {
-      Log("@return unwrapped")
-      return Stream(program.assignmentsAsOriginals())
-    }
-    val StringLiteral(t) = functionValue
-
-    object StringConcats {
-      def unapply(e: Expr): Some[List[Expr]] = e match {
-        case StringConcat(a, b) => Some(unapply(a).get ++ unapply(b).get)
-        case e => Some(List(e))
-      }
-    }
-
-    def wrapToRight(s: String) = {
-      val StringConcats(atoms) = function
-      if(atoms.lastOption.exists(x => x.isInstanceOf[StringLiteral])) { // We don't wrap in a new string if the last concatenation is a StringLiteral
-        Stream.empty
-      } else {
-        Stream(ProgramFormula(StringConcat(function, StringLiteral(s))))
-      }
-    }
-
-    def wrapToLeft(s: String) = {
-      val StringConcats(atoms) = function
-      if(atoms.headOption.exists(x => x.isInstanceOf[StringLiteral])) { // We don't wrap in a new string if the last concatenation is a StringLiteral
-        Stream.empty
-      } else {
-        Stream(ProgramFormula(StringConcat(StringLiteral(s), function)))
-      }
-    }
-
-    newOut match {
-      case StringLiteral(s) =>
-        function match {
-          case StringLiteral(_) => Stream.empty // We can always replace the StringLiteral later
-          case _ => (
-            (if(s.startsWith(t)) wrapToRight(s.substring(t.length)) else Stream.empty) #:::
-            (if(s.endsWith(t)) wrapToLeft(s.substring(0, s.length - t.length)) else Stream.empty)
-            ) /:: Log.prefix("@return wrapped: ")
-        }
-      case StringInsert.Expr("", inserted, right, direction) if t == right => wrapToLeft(inserted)
-      case StringInsert.Expr(left, inserted, "", direction) if t == left => wrapToRight(inserted)
-      case _ => Stream.empty
-    }
-  }
-
-  /* Example:
-    function = "Therefore, " + f(a) + v + "boss"
-    functionValue = "Therefore, I am the boss"
-    newOut =  "I am the boss"
-    result: f(a) + v + "boss" (we remove the empty string)
-  * */
-  /*private def maybeUnwrapString(program: ProgramFormula, newOut: Expr, functionValue: Expr)(implicit symbols: Symbols): Stream[ProgramFormula] = {
-    val function = program.program
-    if(functionValue == newOut) return Stream.empty
-
-    def dropRightIfPossible(lReverse: List[Expr], toRemoveRight: String): Option[List[Expr]] =
-      if(toRemoveRight == "") Some(lReverse.reverse) else lReverse match {
-      case Nil => None
-      case StringLiteral(last) :: lReverseTail =>
-        if(toRemoveRight.endsWith(last))
-          dropRightIfPossible(lReverseTail, toRemoveRight.substring(0, last.length))
-        else if(last.endsWith(toRemoveRight))
-          Some((StringLiteral(last.substring(0, last.length - toRemoveRight.length)) :: lReverseTail).reverse)
-        else None
-      case _ => None
-    }
-
-    def dropLeftIfPossible(l: List[Expr], toRemoveLeft: String): Option[List[Expr]] =
-      if(toRemoveLeft == "") Some(l) else l match {
-        case Nil => None
-        case StringLiteral(first) :: lTail =>
-          if(toRemoveLeft.startsWith(first))
-            dropLeftIfPossible(lTail, toRemoveLeft.substring(0, first.length))
-          else if(first.startsWith(toRemoveLeft))
-            Some(StringLiteral(first.substring(toRemoveLeft.length)) :: lTail)
-          else None
-        case _ => None
-      }
-
-    newOut match {
-      case StringLiteral(s) =>
-        functionValue match {
-        case StringLiteral(t) =>(
-          if(t.startsWith(s)) {
-            val StringConcats(seq) = function
-            dropRightIfPossible(seq.reverse, t.substring(s.length)).toStream.map(x => ProgramFormula(StringConcats(x), Formula(known = Map(), varsToAssign = Set(), program.freeVars)))
-          } else Stream.empty) #::: (
-          if(t.endsWith(s)) {
-            val StringConcats(seq) = function
-            dropLeftIfPossible(seq, t.substring(0, t.length - s.length)).toStream.map(x => ProgramFormula(StringConcats(x), Formula(known = Map(), varsToAssign = Set(), program.freeVars)))
-          } else Stream.empty
-          )
-          case _ => Stream.empty
-        }
-      case _ => Stream.empty
-    }
-  }*/
 }
