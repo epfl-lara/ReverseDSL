@@ -94,12 +94,6 @@ object ReverseProgram extends lenses.Lenses {
     } yield (newProgram, newMain)*/
   }
 
-  def simplify(expr: Expr)(implicit cache: Cache, symbols: Symbols): Expr = {
-    if(exprOps.variablesOf(expr).isEmpty) {
-      maybeEvalWithCache(expr).getOrElse(expr)
-    } else expr
-  }
-
   /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
   def maybeEvalWithCache(expr: Expr)(implicit cache: Cache, symbols: Symbols): Option[Expr] = {
     if(cache.contains(expr)) {
