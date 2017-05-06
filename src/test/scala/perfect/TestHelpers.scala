@@ -45,7 +45,7 @@ trait TestHelpers extends InoxConvertible.conversions { self: FunSuite =>
 
   /** Returns all the solution, with the first lookInManyFirstSolutions being sorted */
   def repairProgramList(pf: Expr, expected2: ProgramFormula, lookInManyFirstSolutions: Int): Stream[Expr] = {
-    val progfuns2 = ReverseProgram.put(expected2, Some(pf))
+    val progfuns2 = ReverseProgram.put(Some(pf), expected2)
     progfuns2.lengthCompare(0) should be > 0
     val initialValue = pf
     val sorted = sortStreamByDistance(progfuns2, lookInManyFirstSolutions, initialValue)
@@ -65,7 +65,7 @@ trait TestHelpers extends InoxConvertible.conversions { self: FunSuite =>
   }
 
   def generateProgram(expected2: Expr): Expr = {
-    val progfuns2 = ReverseProgram.put(ProgramFormula(expected2), None)
+    val progfuns2 = ReverseProgram.put(None, ProgramFormula(expected2))
     progfuns2.toStream.lengthCompare(1) should be >= 0
     progfuns2.head
   }

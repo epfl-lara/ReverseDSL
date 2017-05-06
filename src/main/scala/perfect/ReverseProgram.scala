@@ -33,7 +33,7 @@ object ReverseProgram extends lenses.Lenses {
     * @param out The output that the program should produce
     * @param in The program to repair. May be empty, in which case it returns out
     * @return The program in such that it locally produces the changes given by out */
-  def put(out: ProgramFormula, in: Option[Expr]): Stream[Expr] = {
+  def put(in: Option[Expr], out: ProgramFormula): Stream[Expr] = {
     if(in == None) {
       val outExpr = out.bodyDefinition.getOrElse(throw new Exception(s"Ill-formed program: $out"))
       return Stream(outExpr)
@@ -52,7 +52,7 @@ object ReverseProgram extends lenses.Lenses {
     * @param out The output that the program should produce
     * @param in The program to repair, along with assignment formulas. May be empty, in which case it returns out
     * @return The program in such that it locally produces the changes given by out */
-  def put(out: ProgramFormula, in: ProgramFormula): Stream[ProgramFormula] = {
+  def put(in: ProgramFormula, out: ProgramFormula): Stream[ProgramFormula] = {
     implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
     implicit val cache = new Cache
     for { r <- repair(in, out) } yield r.insertVariables() /: Log.remaining_program
