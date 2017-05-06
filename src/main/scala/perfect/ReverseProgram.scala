@@ -30,18 +30,18 @@ object ReverseProgram extends lenses.Lenses {
   import Utils.ifEmpty
 
   /** Main entry point to reverse a program.
-    * @param outProg The output that the program should produce
-    * @param prevIn The program to repair. May be empty, in which case it returns outProg
-    * @return The program prevIn such that it locally produces the changes given by outProg */
-  def put(outProg: ProgramFormula, prevIn: Option[Expr]): Stream[Expr] = {
-    if(prevIn == None) {
-      val outExpr = outProg.bodyDefinition.getOrElse(throw new Exception(s"Ill-formed program: $outProg"))
+    * @param out The output that the program should produce
+    * @param in The program to repair. May be empty, in which case it returns out
+    * @return The program in such that it locally produces the changes given by out */
+  def put(out: ProgramFormula, in: Option[Expr]): Stream[Expr] = {
+    if(in == None) {
+      val outExpr = out.bodyDefinition.getOrElse(throw new Exception(s"Ill-formed program: $out"))
       return Stream(outExpr)
     }
 
     implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
     implicit val cache = new Cache
-    for { r <- repair(ProgramFormula(prevIn.get), outProg)
+    for { r <- repair(ProgramFormula(in.get), out)
           ProgramFormula(newOutExpr, f) = r.insertVariables()                    /: Log.remaining_program
           assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toSeq) /:: Log.found_assignments
           finalNewOutExpr = exprOps.replaceFromSymbols(assignments, newOutExpr)  /: Log.final_expression
@@ -49,49 +49,13 @@ object ReverseProgram extends lenses.Lenses {
   }
 
   /** Alternative way of reversing a program.
-    * @param outProg The output that the program should produce
-    * @param prevIn The program to repair, along with assignment formulas. May be empty, in which case it returns outProg
-    * @return The program prevIn such that it locally produces the changes given by outProg */
-  def put(outProg: ProgramFormula, prevIn: ProgramFormula): Stream[ProgramFormula] = {
+    * @param out The output that the program should produce
+    * @param in The program to repair, along with assignment formulas. May be empty, in which case it returns out
+    * @return The program in such that it locally produces the changes given by out */
+  def put(out: ProgramFormula, in: ProgramFormula): Stream[ProgramFormula] = {
     implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
     implicit val cache = new Cache
-    for { r <- repair(prevIn, outProg) } yield r.insertVariables() /: Log.remaining_program
-  }
-    /** Reverses a parameterless function, if possible.*/
-  def putPf(outProg: ProgramFormula, prevIn: Option[(InoxProgram, FunctionEntry)]): Iterable[(InoxProgram, FunctionEntry)] = {
-    val newMain = FreshIdentifier("main")
-    put(outProg, prevIn.map{ case (prevProgram, prevFunctionEntry) =>
-      val prevFunction = prevProgram.symbols.functions.getOrElse(prevFunctionEntry, return Nil)
-      prevFunction.fullBody
-    }).map{ finalNewOutExpr =>
-      implicit val symbols = prevIn.map(_._1.symbols).getOrElse(defaultSymbols)
-      val newFunDef = mkFunDef(newMain)()(stp => (Seq(), finalNewOutExpr.getType, _ => finalNewOutExpr))
-      val newProgram = InoxProgram(context, symbols.withFunctions(newFunDef::ReverseProgram.funDefs))
-      (newProgram, newMain)
-    }
-    /*
-    if(prevIn == None) {
-      implicit val symbols = defaultSymbols
-      val main = FreshIdentifier("main")
-      val fundef = mkFunDef(main)()(stp => (Seq(), outExpr.getType, _ => outExpr))
-      return Stream((InoxProgram(context, Seq(fundef), allConstructors), main))
-    }
-    val (prevProgram, prevFunctionEntry) = prevIn.get
-    implicit val symbols = prevProgram.symbols
-
-    val newMain = FreshIdentifier("main")
-    implicit val cache = new HashMap[Expr, Expr]
-    for { r <- repair(ProgramFormula(prevBody), outProg)
-         ProgramFormula(newOutExpr, f) = r
-         _ = Log("Remaining formula: " + f)
-         _ = Log("Remaining expression: " + newOutExpr)
-         assignments <- f.determinizeAll(exprOps.variablesOf(newOutExpr).toSeq.map(_.toVal))
-         _ = Log("Found assignments: " + assignments)
-         finalNewOutExpr = exprOps.replaceFromSymbols(assignments, newOutExpr)
-         _ = Log("Final  expression: " + finalNewOutExpr)
-         newFunDef = mkFunDef(newMain)()(stp => (Seq(), prevFunction.returnType, _ => finalNewOutExpr))
-         newProgram = InoxProgram(context, symbols.withFunctions(Seq(newFunDef)))
-    } yield (newProgram, newMain)*/
+    for { r <- repair(in, out) } yield r.insertVariables() /: Log.remaining_program
   }
 
   /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
