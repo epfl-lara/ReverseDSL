@@ -13,6 +13,13 @@ import perfect.StringConcatExtended._
   */
 /** To build and extract a StringInsert specification. Works for modifications as well */
 object StringInsert extends Enumeration with CustomProgramFormula  {
+  object Eval {
+    def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
+      case Expr(left, middle, right, direction) => Some(StringLiteral(left + middle + right))
+      case _ => None
+    }
+  }
+
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out match {

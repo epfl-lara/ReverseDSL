@@ -12,6 +12,14 @@ import perfect.StringConcatExtended._
   * Created by Mikael on 04/05/2017.
   */
 object PatternReplace extends CustomProgramFormula {
+  object Eval {
+    def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
+      case Expr(before, variables, after) =>
+        Some(exprOps.replaceFromSymbols(variables.map{ case (k, v) => k.toVal -> v}.toMap, after))
+      case _ => None
+    }
+  }
+
   object Lens extends SemanticLens {
     override def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {

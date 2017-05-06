@@ -14,6 +14,13 @@ import perfect.StringConcatExtended._
   */
 /** Paste a previously cloned variable. Like  StringInsert but with a variable inside it. */
 object PasteVariable extends Enumeration with CustomProgramFormula  {
+  object Eval {
+    def unapply(arg: Expr)(implicit symbols: Symbols): Option[Expr] = arg match {
+      case Expr(left, insertedVar, originalVarValue, right, direction) =>
+        Some(StringLiteral(left + originalVarValue + right))
+      case _ => None
+    }
+  }
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {

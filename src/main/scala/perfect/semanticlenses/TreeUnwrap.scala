@@ -13,6 +13,27 @@ import perfect.StringConcatExtended._
   */
 // The new output is included in the original tree.
 object TreeUnwrap extends CustomProgramFormula  {
+  object Eval {
+    def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
+      case Expr(tpe, a, argsInSequence) =>
+        argsInSequence match {
+          case Nil => Some(a)
+          case head :: tail =>
+            a match {
+              case ADT(ADTType(adtid, tps), args) =>
+                symbols.adts(adtid) match {
+                  case f: ADTConstructor =>
+                    val i = f.selectorID2Index(head)
+                    unapply(Expr(tpe, args(i), tail))
+                  case _ => None
+                }
+              case _ => None
+            }
+        }
+      case _ => None
+    }
+  }
+
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {

@@ -22,8 +22,14 @@ object ProgramFormula {
 
   def apply(e: Expr, f: (Variable, KnownValue)): ProgramFormula = ProgramFormula(e, Formula(Map(f)))
 
+
+
   trait CustomProgramFormula {
     def funDef: FunDef
+
+    def Eval: {
+      def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr]
+    }
   }
 
   /** Inserts a variable for a given selected text. Simpler than CloneTextMultiple. */

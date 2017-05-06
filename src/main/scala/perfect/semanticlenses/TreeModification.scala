@@ -13,6 +13,14 @@ import perfect.StringConcatExtended._
   */
 /** A sub-element of the tree has been modified. */
 object TreeModification extends CustomProgramFormula {
+  object Eval {
+    def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
+      case TreeModification.Expr(tpeGlobal, tpeLocal, original, modified, argsList) =>
+        Some(TreeModification.LambdaPath(original, argsList, modified).getOrElse(e))
+      case _ => None
+    }
+  }
+
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {

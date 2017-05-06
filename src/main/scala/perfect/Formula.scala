@@ -37,17 +37,10 @@ object Formula {
     import StringConcatExtended._
     import semanticlenses._
     implicit val symbols = Utils.defaultSymbols
-    def evalExprIfNeeded(e: Expr) = e match {
-      case StringInsert.Expr(left, middle, right, direction) =>
-        StringLiteral(left + middle + right)
-      case ListInsert.Expr(tpe, left, middle, right) =>
-        ListLiteral(left ++ middle ++ right, tpe)
-      case TreeModification.Expr(tpeGlobal, tpeLocal, original, modified, argsList) =>
-        TreeModification.LambdaPath(original, argsList, modified).getOrElse(e)
-      case PatternMatch.Expr(before, variables, forClone) =>
-        exprOps.replaceFromSymbols(variables.toMap, before)
-      case e => e
-    }
+    def evalExprIfNeeded(e: Expr) =
+      ProgramFormula.customProgramFormulas.view.map{
+        cpf => cpf.Eval.unapply(e)
+      }.find(_.nonEmpty).flatten.getOrElse(e)
     val result = e.known.map{
       case (v, so@StrongOrOriginal(e, builder)) =>
         val newE = evalExprIfNeeded(e)

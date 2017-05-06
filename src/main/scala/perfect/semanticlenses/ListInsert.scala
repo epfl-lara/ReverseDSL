@@ -13,6 +13,14 @@ import perfect.StringConcatExtended._
   * Created by Mikael on 04/05/2017.
   */
 object ListInsert extends CustomProgramFormula  {
+  object Eval {
+    def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
+      case Expr(tpe, left, middle, right) =>
+        Some(ListLiteral(left ++ middle ++ right, tpe))
+      case _ => None
+    }
+  }
+
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {

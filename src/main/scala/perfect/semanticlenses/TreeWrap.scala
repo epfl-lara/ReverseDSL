@@ -13,6 +13,13 @@ import perfect.StringConcatExtended._
   */
 /** The tree is included in the new output */
 object TreeWrap extends CustomProgramFormula {
+  object Eval {
+    def unapply(arg: Expr)(implicit symbols: Symbols): Option[Expr] = arg match {
+      case Expr(tree, wrapper) =>
+        Some(wrapper(tree))
+      case _ => None
+    }
+  }
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {

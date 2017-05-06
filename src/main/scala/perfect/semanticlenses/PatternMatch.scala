@@ -4,7 +4,7 @@ package semanticlenses
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ProgramFormula.CustomProgramFormula
+import perfect.ProgramFormula.{CloneTextMultiple, CustomProgramFormula}
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
 
@@ -12,6 +12,32 @@ import perfect.StringConcatExtended._
   * Created by Mikael on 04/05/2017.
   */
 object PatternMatch extends CustomProgramFormula {
+  object Eval {
+    def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
+      case PatternMatch.Expr(before, variables, forClone) =>
+        Some(exprOps.replaceFromSymbols(variables.toMap, before))
+      case _ => None
+    }
+  }
+  def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
+    e2 match {
+      case PatternMatch.Expr(before, variables, forClone) =>
+        e1 match {
+          case CloneTextMultiple.Expr(left2, textVarRight2) =>
+            e2 match {
+              case CloneTextMultiple.Expr(left1, textVarRight1) =>
+                CloneTextMultiple.Expr.merge(left1, textVarRight1, left2, textVarRight2)
+              case _ => None
+            }
+
+          case PatternMatch.Expr(before2, variables2, forClone2) =>
+            PatternMatch.Expr.merge(before, variables, forClone, before2, variables2, forClone2)
+          case _ => None
+        }
+      case _ => None
+    }
+  }
+
   object Lens extends SemanticLens {
     override def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {

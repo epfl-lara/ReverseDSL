@@ -10,14 +10,12 @@ import perfect.Utils.isValue
 import perfect.semanticlenses._
 import perfect.wraplenses.MaybeWrappedSolutions
 import perfect.lenses.ValueLens
-
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 /**
   * Created by Mikael on 03/03/2017.
   */
 object ReverseProgram extends lenses.Lenses {
-  import StringConcatExtended._
   type FunctionEntry = Identifier
   type ModificationSteps = Unit
   type OutExpr = Expr
