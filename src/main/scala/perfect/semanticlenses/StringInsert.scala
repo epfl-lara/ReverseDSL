@@ -20,6 +20,19 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
     }
   }
 
+  def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
+    e1 match { case Expr(left, insert, right, direction) =>
+      e2 match { case Expr(left1, insert1, right1, direction1) =>
+        Log(s"[internal warning]: Merge of two String insert not supported $e1, $e2")
+        None
+      case _ => None
+      }
+    case _ => None
+    }
+  }
+
+
+
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out match {

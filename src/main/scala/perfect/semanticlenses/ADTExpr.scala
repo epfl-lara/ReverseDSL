@@ -23,7 +23,7 @@ object ADTExpr extends CustomProgramFormula {
       Stream.empty // TODO: Include ADT repair
     }
   }
-  def merge(e1: Expr, e2: Expr): Option[(Expr, Seq[(Variable, KnownValue)])] = e2 match {
+  def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = e2 match {
     case e2@ADT(tpe, vars1) if vars1.forall(_.isInstanceOf[Variable]) =>
       e1 match {
         case ADT(tpe2, vars2) if vars2.forall(_.isInstanceOf[Variable]) && tpe == tpe2 =>

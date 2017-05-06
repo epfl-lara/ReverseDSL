@@ -21,6 +21,17 @@ object PasteVariable extends Enumeration with CustomProgramFormula  {
       case _ => None
     }
   }
+  def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
+    e1 match { case PasteVariable.Expr(left, v, v_value, right, direction) =>
+      e2 match { case PasteVariable.Expr(left2, v2, v2_value, right2, direction2) =>
+        Log(s"[internal warning]: Merge of two paste exprs not supported $e1, $e2")
+        None
+      case _ => None
+      }
+    case _ => None
+    }
+  }
+
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {

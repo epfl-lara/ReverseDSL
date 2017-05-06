@@ -186,49 +186,22 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
               s"(${other.known} contains e as original: ${e.isInstanceOf[Variable] &&  other.known.get(e.asInstanceOf[Variable]).exists(_.isInstanceOf[OriginalValue])}):")*/
             =>
               (known + (e.asInstanceOf[Variable] -> StrongValue(e2)) + (v -> s), nc)
-            case Some(StrongValue(e2@PatternMatch.Expr(before, variables, forClone))) =>
-              e match {
-                case CloneTextMultiple.Expr(left2, textVarRight2) =>
-                  e2 match {
-                    case CloneTextMultiple.Expr(left1, textVarRight1) =>
-                      CloneTextMultiple.Expr.merge(left1, textVarRight1, left2, textVarRight2) match {
-                        case Some((cm, news)) => (known + (v -> StrongValue(cm)) ++ news, nc)
-                        case None => default(e2)
-                      }
-                    case _ => ???
+            case Some(StrongValue(e2)) => //@PatternMatch.Expr(before, variables, forClone))) =>
+              ProgramFormula.customProgramFormulas.view.map{ command => command.merge(e, e2)}.find(_.nonEmpty).flatten match {
+                case Some((newExp, newAssign)) =>
+                  val (newKnown, newConstraint) = ((known, nc) /: newAssign) {
+                    case ((known, nc), xsy@(x, sy)) if !(this.known contains x) || this.known(x).isInstanceOf[OriginalValue] =>
+                      (known + xsy, nc)
+                    case ((known, nc), (x, sy@StrongValue(y: Variable))) if !(this.known contains y) || this.known(y).isInstanceOf[OriginalValue] =>
+                      (known + (y -> StrongValue(x)), nc)
+                    case ((known, nc), (x, sy)) =>
+                      (known, nc &<>& sy.getConstraint(x))
                   }
 
-                case PatternMatch.Expr(before2, variables2, forClone2) =>
-                  PatternMatch.Expr.merge(before, variables, forClone, before2, variables2, forClone2) match {
-                    case Some((cm, news)) => (known + (v -> StrongValue(cm)) ++ news, nc)
-                    case None => default(e2)
-                  }
-                case _ => default(e2)
+                  (newKnown + (v -> StrongValue(newExp)), newConstraint)
+                case None =>
+                  default(e2)
               }
-            case Some(StrongValue(e2@ADT(tpe, vars))) if vars.forall(_.isInstanceOf[Variable]) =>
-              e match {
-                case ADT(tpe2, vars2) if vars2.forall(_.isInstanceOf[Variable]) && tpe == tpe2 =>
-                  val vvars1: Seq[Variable] = vars.collect { case v: Variable => v }
-                  val vvars2: Seq[Variable] = vars2.collect { case v: Variable => v }
-                  ((known, nc) /: vvars1.zip(vvars2)) {
-                    case ((known, nc), (x1: Variable, x2: Variable)) =>
-                      (this.known.get(x1), other.known.get(x2)) match {
-                        case (Some(OriginalValue(o)), Some(StrongOrOriginal(_))) =>
-                          (known + (x1 -> StrongValue(x2)), nc)
-                        case (Some(StrongValue(sv)), Some(OriginalValue(_))) =>
-                          (known + (x2 -> StrongValue(x1)), nc)
-                        case (None, Some(StrongOrOriginal(_))) =>
-                          (known + (x1 -> StrongValue(x2)), nc)
-                        case (Some(StrongOrOriginal(_)), None) =>
-                          (known + (x2 -> StrongValue(x1)), nc)
-                        case (Some(StrongValue(sv1)), Some(StrongValue(sv2))) =>
-                          (known, nc &<>& sv1 === sv2)
-                        case e => throw new Exception("Did not implement something for this case: $e")
-                      }
-                  }
-                case _ => (known, nc &<>& (v === e2))
-              }
-            case Some(StrongValue(e2)) => default(e2)
             case Some(AllValues) => throw new Error(s"Attempt at assigning an universally quantified variable: $this.combineWith($other)")
           }
         case ((known, nc), (v, s@OriginalValue(e))) =>

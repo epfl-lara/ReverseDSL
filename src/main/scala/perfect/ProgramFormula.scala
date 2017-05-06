@@ -30,6 +30,8 @@ object ProgramFormula {
     def Eval: {
       def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr]
     }
+
+    def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])]
   }
 
   /** Inserts a variable for a given selected text. Simpler than CloneTextMultiple. */

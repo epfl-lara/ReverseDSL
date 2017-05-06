@@ -21,6 +21,18 @@ object TreeModification extends CustomProgramFormula {
     }
   }
 
+  def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
+    e1 match { case Expr(tpeGlobal, tpeLocal, before, _, _) =>
+      e2 match { case Expr(tpeGlobal2, tpeLocal2, before2, _, _) =>
+        Log(s"[internal warning]: Merge of two Tree modification not supported $e1, $e2")
+        None
+      case _ => None
+      }
+    case _ => None
+    }
+  }
+
+
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {

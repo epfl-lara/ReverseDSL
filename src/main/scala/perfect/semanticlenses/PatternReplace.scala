@@ -19,6 +19,17 @@ object PatternReplace extends CustomProgramFormula {
       case _ => None
     }
   }
+  def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
+    e1 match { case Expr(before, variables, after) =>
+      e2 match { case Expr(before2, variables2, after2) =>
+        Log(s"[internal warning]: Merge of two pattern replace not supported $e1, $e2")
+        None
+      case _ => None
+      }
+    case _ => None
+    }
+  }
+
 
   object Lens extends SemanticLens {
     override def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {

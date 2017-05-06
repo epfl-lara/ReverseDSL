@@ -20,6 +20,16 @@ object ListInsert extends CustomProgramFormula  {
       case _ => None
     }
   }
+  def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
+    e1 match { case ListInsert.Expr(tpe, left, inserted, right) =>
+      e2 match { case ListInsert.Expr(tpe, left, inserted, right) =>
+          Log(s"[internal warning]: Merge of two list exprs not supported $e1, $e2")
+          None
+        case _ => None
+      }
+    case _ => None
+    }
+  }
 
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
