@@ -59,7 +59,7 @@ trait Lenses { self: ReverseProgram.type =>
       val newOutput = newOutputProgram.expr
       val ProgramFormula(ListLiteral(originalInput, _), listF) = originalArgsValues.head
       Log(s"FilterLens: $originalArgsValues => $newOutputProgram")
-      val filterLambda = (expr: Expr) => evalWithCache(lambdaF.assignments.get(Application(lambda, Seq(expr)))) == BooleanLiteral(true)
+      val filterLambda = (expr: Expr) => maybeEvalWithCache(lambdaF.assignments.get(Application(lambda, Seq(expr)))) == Some(BooleanLiteral(true))
       newOutput match {
         case ListLiteral(newOutputList, _) =>
           filterRev(originalInput, filterLambda, newOutputList).map{ (e: List[Expr]) =>
@@ -123,7 +123,7 @@ trait Lenses { self: ReverseProgram.type =>
       val unknownVar = unknown.toVariable
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
       val mapr = new MapReverseLike[(Expr, Formula), Expr, ((Expr, Lambda), Formula)] {
-        override def f = (exprF: (Expr, Formula)) => evalWithCache(lambdaF.assignments.get(Application(lambda, Seq(exprF._1))))
+        override def f = (exprF: (Expr, Formula)) => maybeEvalWithCache(lambdaF.assignments.get(Application(lambda, Seq(exprF._1)))).getOrElse(throw new Exception(s"Could not evaluate $exprF"))
 
         override def fRev = (prevIn: Option[(Expr, Formula)], out: Expr) => {
           Log(s"Map.fRev: $prevIn, $out")
@@ -716,7 +716,7 @@ trait Lenses { self: ReverseProgram.type =>
 
       val fmapr = new FlatMapReverseLike[(Expr, Formula), Expr, ((Expr, Lambda), Formula)] {
         def f: ((Expr, Formula)) => List[Expr] = { (exprF: (Expr, Formula)) =>
-          val ListLiteral(l, _) = evalWithCache(lambdaF.assignments.get(Application(lambda, Seq(exprF._1))))
+          val ListLiteral(l, _) = maybeEvalWithCache(lambdaF.assignments.get(Application(lambda, Seq(exprF._1)))).getOrElse(throw new Exception(s"Could not evaluate $exprF"))
           l
         }
         def fRev: (Option[(Expr, Formula)], List[Expr]) => Stream[Either[(Expr, Formula), ((Expr, Lambda), Formula)]] = { (prevIn, out) =>
@@ -1252,30 +1252,33 @@ trait Lenses { self: ReverseProgram.type =>
       import ImplicitTuples._
       val ProgramFormula(in@ListLiteral(inList, tpe), inListF) = originalArgsValues.head
       val lambdaProg@ProgramFormula(lambdaComp: Lambda, lambdaF) = originalArgsValues.tail.head
-      lazy val tracingLambdaComp = \("in1"::_TTuple2(tpes.head, Int32Type), "in2"::_TTuple2(tpes.head, Int32Type))((in1, in2) =>
-        Application(lambdaComp, Seq(in1.getField(_1), in2.getField(_1)))
-      )
-      lazy val tracingIn = ListLiteral(inList.zipWithIndex.map{ case (e, i) => _Tuple2(tpes.head, Int32Type)(e, IntLiteral(i)) }, _TTuple2(tpes.head, Int32Type))
-
-      lazy val expectedTracingOutput = evalWithCache(lambdaF.assignments.get(E(identifier)(_TTuple2(tpes.head, Int32Type))(tracingIn, tracingLambdaComp)))
-
-      lazy val ListLiteral(expectedTracedList, _) = expectedTracingOutput
-      lazy val indexOrder = expectedTracedList.map {
-        case ADT(_, Seq(_, IntLiteral(i))) => i
-      }
-      lazy val inverseMap = indexOrder.indices.toList.zip(indexOrder).toMap
 
       // Bidirectionalization for free, we recover the position of the original elements.
-      optVar(newOutput.expr).flatMap(newOutput.formula.findConstraintValue).getOrElse(newOutput.expr) match {
+      newOutput.simplifiedExpr match {
         case TreeModification.Expr(tpeGlobal, tpeLocal, original, modified, arguments) =>
           val (index, remaining) = arguments.span(_ == tail)
           if(remaining.nonEmpty) {
             val n = index.length
-            val prev_n = inverseMap(n)
-            val newArguments = List.fill(prev_n.toInt)(tail) ++ remaining
+            lazy val tracingLambdaComp = \("in1"::_TTuple2(tpes.head, Int32Type), "in2"::_TTuple2(tpes.head, Int32Type))((in1, in2) =>
+              Application(lambdaComp, Seq(in1.getField(_1), in2.getField(_1)))
+            )
+            lazy val tracingIn = ListLiteral(inList.zipWithIndex.map{ case (e, i) => _Tuple2(tpes.head, Int32Type)(e, IntLiteral(i)) }, _TTuple2(tpes.head, Int32Type))
 
-            Stream((Seq(TreeModification(tpeGlobal, tpeLocal, in, modified, newArguments),
-              lambdaProg.assignmentsAsOriginals()), Formula()))
+            lambdaF.assignments.flatMap(assign => maybeEvalWithCache(assign(E(identifier)(_TTuple2(tpes.head, Int32Type))(tracingIn, tracingLambdaComp)))) match {
+              case Some(expectedTracingOutput) =>
+                lazy val ListLiteral(expectedTracedList, _) = expectedTracingOutput
+                lazy val indexOrder = expectedTracedList.map {
+                  case ADT(_, Seq(_, IntLiteral(i))) => i
+                }
+                lazy val inverseMap = indexOrder.indices.toList.zip(indexOrder).toMap
+                val prev_n = inverseMap(n)
+                val newArguments = List.fill(prev_n.toInt)(tail) ++ remaining
+
+                Stream((Seq(TreeModification(tpeGlobal, tpeLocal, in, modified, newArguments),
+                  lambdaProg.assignmentsAsOriginals()), Formula()))
+              case None =>
+                Stream.empty
+            }
           } else ??? // We tried to change one of the tails. Not supported.
         case ListInsert.Expr(tpe, left, inserted, right) => // We care only about deleted elements.
           if(left.length + right.length == inList.length) { // Only inserted elements. We insert them at the end of the original list.

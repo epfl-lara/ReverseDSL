@@ -4,7 +4,7 @@ import inox.FreshIdentifier
 import inox.trees._
 import inox.trees.dsl._
 import perfect.ProgramFormula._
-import perfect.ReverseProgram.{Cache, evalWithCache}
+import perfect.ReverseProgram.Cache
 
 import scala.collection.mutable.ListBuffer
 
@@ -323,7 +323,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
     Log(s"Simplified: $simplified")
     val streamOfSolutions = simplified.partialAssignments match {
       case Some((wrapper, remaining)) if remaining.forall(x => x._2 == AllValues) =>
-        Stream(ReverseProgram.evalWithCache(wrapper(tupleWrap(freeVariables)))(new ReverseProgram.Cache(), symbols))
+        ReverseProgram.maybeEvalWithCache(wrapper(tupleWrap(freeVariables)))(new ReverseProgram.Cache(), symbols).toStream
       case e =>
         if(e.nonEmpty) Log(s"Warning: some equations could not be simplified: $e")
         val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())

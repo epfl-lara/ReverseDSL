@@ -3,7 +3,7 @@ package lenses
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ReverseProgram.{Cache, evalWithCache, repair}
+import perfect.ReverseProgram.{Cache, repair, maybeEvalWithCache}
 import perfect.Utils.isValue
 
 import scala.collection.mutable.ListBuffer
@@ -29,7 +29,10 @@ object MapDataLens extends semanticlenses.SemanticLens {
         } else {
           // Check for changed keys, removals and additions.
           lazy val partEvaledPairs = l.pairs.map{ case (key, value) =>
-            (evalWithCache(in.formula.assignments.get(key)), (key, value, evalWithCache(in.formula.assignments.get(value))))
+            in.formula.assignments.map(assign => (maybeEvalWithCache(assign(key)).getOrElse(throw new Exception(s"Could not evaluate ${assign(key)}")),
+              (key, value, maybeEvalWithCache(assign(value)).getOrElse(throw new Exception(s"Could not evaluate ${assign(value)}"))))).getOrElse{
+              throw new Exception(s"Could not evaluate assignments of $in")
+            }
           }
           def propagateChange(fm: FiniteMap) = {
             val insertedPairs = fm.pairs.collect {
@@ -82,8 +85,8 @@ object MapDataLens extends semanticlenses.SemanticLens {
 
         }
       case MapApply(map, key) => // Variant of ADT selection.
-        val map_v = evalWithCache(in.formula.assignments.get(map)).asInstanceOf[FiniteMap] //originalAdtValue
-        val key_v = evalWithCache(in.formula.assignments.get(key))
+        val map_v = maybeEvalWithCache(in.formula.assignments.get(map)).getOrElse(return Stream.empty).asInstanceOf[FiniteMap] //originalAdtValue
+        val key_v = maybeEvalWithCache(in.formula.assignments.get(key)).getOrElse(return Stream.empty)
 
         val defaultValue = map_v.default
 
@@ -94,7 +97,7 @@ object MapDataLens extends semanticlenses.SemanticLens {
             found = true
             vd -> StrongValue(out.expr)
           } else {
-            vd -> OriginalValue(evalWithCache(MapApply(map_v, k)))
+            vd -> OriginalValue(maybeEvalWithCache(MapApply(map_v, k)).getOrElse(return Stream.empty))
           }
         }).toMap
         val finiteMapRepair = if (!found) { // We should not change the default, rather add a new entry.

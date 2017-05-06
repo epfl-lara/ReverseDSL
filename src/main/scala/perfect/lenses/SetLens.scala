@@ -3,7 +3,7 @@ package lenses
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ReverseProgram.{Cache, evalWithCache, repair}
+import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.Utils.isValue
 
 /**
@@ -14,7 +14,7 @@ object SetLens extends semanticlenses.SemanticLens {
     in.expr match {
       case l: FiniteSet =>
         lazy val evaledElements = l.elements.map{ e =>
-          (evalWithCache(in.formula.assignments.get(e)), e)
+          (maybeEvalWithCache(in.formula.assignments.get(e)).getOrElse(return Stream.empty), e)
         }
         def insertElementsIfNeeded(fs: FiniteSet) = {
           val expectedElements = fs.elements.toSet
@@ -42,8 +42,8 @@ object SetLens extends semanticlenses.SemanticLens {
           }
         }
       case SetAdd(sExpr, elem) =>
-        val sExpr_v = evalWithCache(in.formula.assignments.get(sExpr))
-        val elem_v = evalWithCache(in.formula.assignments.get(elem))
+        val sExpr_v = in.formula.assignments.flatMap(assign => maybeEvalWithCache(assign(sExpr))).getOrElse(return Stream.empty)
+        val elem_v = in.formula.assignments.flatMap(assign => maybeEvalWithCache(assign(elem))).getOrElse(return Stream.empty)
         val FiniteSet(vs, tpe) = sExpr_v
         val FiniteSet(vsNew, _) = out.simplifiedExpr
         val vsSet = vs.toSet

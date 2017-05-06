@@ -3,7 +3,7 @@ package perfect
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ReverseProgram.{Cache, evalWithCache, maybeEvalWithCache, repair}
+import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
 import perfect.Utils.optVar
 import semanticlenses._
@@ -201,7 +201,8 @@ object ProgramFormula {
     StringInsert,
     ListInsert,
     PatternMatch,
-    PasteVariable
+    PasteVariable,
+    TreeModification
   )
 
   val customFunDefs = customProgramFormulas.map(_.funDef)
@@ -299,11 +300,9 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
         } else {
           formula.assignments match {
             case Some(f) =>
-              val res = try evalWithCache(f(expr)) catch {
-                case e: Exception => return None
-              }
-              givenValue = Some(res)
-              givenValue
+              val res = maybeEvalWithCache(f(expr))
+              givenValue = res
+              res
             case None =>
               expr match {
                 case FunctionInvocation(_, _, _) => None
@@ -335,7 +334,7 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
           if((freeVars -- formula.known.keySet).nonEmpty) {
             throw new Exception(s"[Internal error] Tried to compute a function value but not all variables were known (only ${formula.known.keySet} are).\n$this")
           }
-          formula.assignments.map(wrapper => evalWithCache(wrapper(expr))).get
+          formula.assignments.flatMap(wrapper => maybeEvalWithCache(wrapper(expr))).get
         }
         givenValue = Some(res)
         res

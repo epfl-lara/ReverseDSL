@@ -96,25 +96,11 @@ object ReverseProgram extends lenses.Lenses {
 
   def simplify(expr: Expr)(implicit cache: Cache, symbols: Symbols): Expr = {
     if(exprOps.variablesOf(expr).isEmpty) {
-      evalWithCache(expr)
+      maybeEvalWithCache(expr).getOrElse(expr)
     } else expr
   }
 
   /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
-  def evalWithCache(expr: Expr)(implicit cache: Cache, symbols: Symbols) = cache.getOrElseUpdate(expr, {
-    expr match {
-      case l:Lambda => expr
-      case _ =>
-        import evaluators._
-        val p = InoxProgram(context, symbols)
-        val evaluator = LambdaPreservingEvaluator(p)
-        evaluator.eval(expr) match {
-          case EvaluationResults.Successful(e) => e
-          case m => throw new Exception(s"Could not evaluate: $expr, got $m")
-        }
-    }
-  })
-
   def maybeEvalWithCache(expr: Expr)(implicit cache: Cache, symbols: Symbols): Option[Expr] = {
     if(cache.contains(expr)) {
       Some(cache(expr))
@@ -170,8 +156,8 @@ object ReverseProgram extends lenses.Lenses {
             (implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
     val stackLevel = Thread.currentThread().getStackTrace.length
     Log(s"\n@repair$stackLevel(\n  $in\n, $out)")
-    if(in.expr == out.expr) return { Log("@return original without constraints");
-      Stream(in.assignmentsAsOriginals())
+    if(in.expr == out.expr) return {
+      Stream(in.assignmentsAsOriginals()) /:: Log.prefix("@return original without constraints:")
     }
 
     val semanticOriginalLens = semanticLenses andThen DefaultLens

@@ -14,7 +14,6 @@ object DefaultLens extends SemanticLens {
   import ReverseProgram.StringConcatLens
   import Utils.ifEmpty
   import ReverseProgram.maybeEvalWithCache
-  import ReverseProgram.evalWithCache
   import StringConcatExtended._
 
   def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
@@ -117,7 +116,7 @@ object DefaultLens extends SemanticLens {
       }
 
     case as@ADTSelector(adt, selector) =>
-      val originalAdtValue = evalWithCache(in.formula.assignments.get(adt)).asInstanceOf[ADT]
+      val originalAdtValue = in.formula.assignments.flatMap(assign => maybeEvalWithCache(assign(adt))).getOrElse(return Stream.empty).asInstanceOf[ADT]
       val constructor = as.constructor.get
       val fields = constructor.fields
       val index = as.selectorIndex
@@ -345,7 +344,7 @@ object DefaultLens extends SemanticLens {
       }
 
     case IfExpr(cond, thenn, elze) =>
-      val cond_v = evalWithCache(in.formula.assignments.get(cond))
+      val cond_v = in.formula.assignments.flatMap(assign => maybeEvalWithCache(assign(cond))).getOrElse(return Stream.Empty)
       cond_v match {
         case BooleanLiteral(true) =>
           for(pf <- repair(in.subExpr(thenn), out)) yield
