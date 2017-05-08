@@ -50,7 +50,7 @@ object DefaultLens extends SemanticLens {
 
     // Variables are assigned the given value.
     case v: Variable =>
-      Stream(ProgramFormula(v, Formula(v -> StrongValue(out.expr)) combineWith out.formula))
+      Stream(ProgramFormula(v, out.formula combineWith Formula(v -> StrongValue(out.expr))))
 
     case Let(vd, expr, body) =>
       repair(ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), in.formula), out).map {
@@ -110,6 +110,7 @@ object DefaultLens extends SemanticLens {
           val (freshArgsNames, oldToFresh, freshToOld) = freshenArgsList(argNames.map(_.toVariable))
           @inline def renew(e: Expr) = exprOps.replaceFromSymbols(oldToFresh, e)
           @inline def back(e: Expr) = exprOps.replaceFromSymbols(freshToOld, e)
+          object Back { def unapply(e: KnownValue) = Some(e.map(back)) }
 
           val freshBody = renew(body)
           val assignments = in.formula.assignments
@@ -122,27 +123,19 @@ object DefaultLens extends SemanticLens {
             val argumentValues = freshArgsNames.zip(argumentVals.map(_.get)).toMap
             val newpf = (in.subExpr(freshBody) combineWith Formula(argumentValues)).wrappingEnabled
 
-            def backPf(newBodyFresh: Expr, newBodyFreshFormula: Formula): (Expr, Formula) = {
-              val (newKnown, toInline) = ((Map[Variable, KnownValue](), Map[Variable, Expr]()) /: newBodyFreshFormula.known) {
-                case ((newKnown, toInline), (k, v)) =>
-                  val newv = v.map(back)
-                  if(newv != v) { // A value changed, it means that it contained the old variable, so we need to inline this value.
-                    (newKnown, toInline + (k -> back(v.getValue.get)))
-                  } else {
-                    (newKnown + (k -> newv), toInline)
-                  }
+            def backPf(newBodyFresh: Expr, newBodyFreshFormula: Formula): Expr = {
+              val toInline = newBodyFreshFormula.known.collect{
+                case (k, v@Back(newv)) if newv != v => k -> newv.getValue.get
               }
-              val newBody =
-                exprOps.preMap({
-                  case v: Variable => toInline.get(v)
-                  case _ => None
-                }, true)(back(newBodyFresh))
-              (newBody, Formula(newKnown, newBodyFreshFormula.constraints)) /: Log.prefix(s"backpf($newBodyFresh, $newBodyFreshFormula) = ")
+              exprOps.preMap({
+                case v: Variable => toInline.get(v)
+                case _ => None
+              }, true)(back(newBodyFresh)) /: Log.prefix(s"backpf($newBodyFresh, $newBodyFreshFormula) = ")
             }
 
             for {pf <- repair(newpf, out)
-                 ProgramFormula(newBodyFresh, newBodyFreshFormula) = pf
-                 (newBody, newBodyFormula) = backPf(newBodyFresh, newBodyFreshFormula)
+                 ProgramFormula(newBodyFresh, newBodyFormula) = pf
+                 newBody = backPf(newBodyFresh, newBodyFormula)
                  isSameBody = (newBody == body) /: Log.isSameBody
                  args <- ProgramFormula.regroupArguments(arguments.zip(freshArgsNames).map { case (arg, expected) =>
                      repair(in.subExpr(arg), out.subExpr(expected) combineWith newBodyFormula combineWith Formula(expected -> argumentValues(expected)))

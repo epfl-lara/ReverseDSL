@@ -1042,7 +1042,9 @@ trait Lenses { self: ReverseProgram.type =>
             ProgramFormula(left, left -> OriginalValue(leftValue)),
             ProgramFormula(right, right -> OriginalValue(rightValue))),
             f combineWith Formula(
-              newOutput.asInstanceOf[Variable] -> StrongValue(left +& right))))
+              Map(newOutput.asInstanceOf[Variable] -> StrongValue(left +& right),
+                left -> OriginalValue(leftValue),
+              right -> OriginalValue(rightValue)))))
         } else
         Stream((Seq(
           ProgramFormula(left, left -> OriginalValue(leftValue)),

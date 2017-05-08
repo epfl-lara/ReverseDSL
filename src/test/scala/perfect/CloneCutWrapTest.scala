@@ -545,7 +545,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       case moveVar +& moveVar2 => moveVar +& moveVar2 +& cloned
     }
     pfun3 shouldProduce StringLiteral("move it move it  it move ")
-    pfun3 repairFrom StringInsert("move it move i","f","  it move ", AssociativeInsert.InsertAutomatic) shouldProduce
+    pfun3 repairFrom StringInsert("move it move i", "f", "  it move ", AssociativeInsert.InsertAutomatic) shouldProduce
       StringLiteral("move if move if  if move ")
   }
 
@@ -558,7 +558,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
       case moveVar +& moveVar2 +& moveVar3 => moveVar +& moveVar2 +& moveVar3 +& cloned
     }
     pfun3 shouldProduce StringLiteral("mov it mov it mov it it mov it mov ")
-    pfun3 repairFrom StringInsert("mov it mov ","a","t mov it it mov it mov ", AssociativeInsert.InsertAutomatic) shouldProduce
+    pfun3 repairFrom StringInsert("mov it mov ", "a", "t mov it it mov it mov ", AssociativeInsert.InsertAutomatic) shouldProduce
       StringLiteral("mov at mov at mov at at mov at mov ")
   }
 
