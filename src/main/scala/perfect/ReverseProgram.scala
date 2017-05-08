@@ -87,20 +87,26 @@ object ReverseProgram extends lenses.Lenses {
     }
   }
 
+  // Lenses which do not need the value of the program to invert it.
+  val shapeLenses: semanticlenses.SemanticLens =
+    ((TreeWrap.Lens andThen
+      TreeUnwrap.Lens) andThen (
+      TreeModification.Lens andThen
+        ValueLens))
+
+  // Lenses which need the value of the program to invert it.
   val semanticLenses: semanticlenses.SemanticLens =
-      (PatternMatch.Lens andThen
+      (PatternMatch.Lens andThen  // Stand-alone programs on how to repair the program for a given instruction
       PatternReplace.Lens) andThen
       (ListInsert.Lens andThen
       PasteVariable.Lens) andThen
       (StringInsert.Lens andThen
-      perfect.lenses.SetLens) andThen
-      (perfect.lenses.MapDataLens andThen
-      ADTExpr.Lens)
+      perfect.lenses.SetLens) andThen // Matchers for Set and SetApply constructions
+      (perfect.lenses.MapDataLens andThen // Matcher for FiniteMap and MapApply constructions
+      ADTExpr.Lens) // Matcher for ADT and ADTSelector constructions.
 
-  /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
-    * Basically, we solve the problem:
-    *  let variables = values in function = newOut
-    * by trying to change the variables values, or the function body itself.
+  /** Will try its best to transform in so that it produces out or at least incorporates the changes.
+    * Entry point of all lenses.
     *
     * @param in An expression that computed the value before newOut, and the formula contains the current mappings.
     * @param out A ProgramFormula resulting from the action of the user on the datat.
@@ -120,16 +126,7 @@ object ReverseProgram extends lenses.Lenses {
     val semanticOriginalLens = semanticLenses andThen DefaultLens
 
     val finalRepair =
-      ((TreeWrap.Lens andThen
-        TreeUnwrap.Lens) andThen (
-        TreeModification.Lens andThen
-        ValueLens)) andThen {
-        if (in.isWrappingLowPriority) {
-          semanticOriginalLens interleave MaybeWrappedSolutions
-        } else {
-          MaybeWrappedSolutions interleave semanticOriginalLens
-        }
-      }
+      shapeLenses andThen WrapperLens(semanticOriginalLens, MaybeWrappedSolutions)
 
     finalRepair.put(in, out) #:::
       {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $in\n, $out):\n~>")
