@@ -105,6 +105,9 @@ object ReverseProgram extends lenses.Lenses {
       (perfect.lenses.MapDataLens andThen // Matcher for FiniteMap and MapApply constructions
       ADTExpr.Lens) // Matcher for ADT and ADTSelector constructions.
 
+  val finalRepair =
+    shapeLenses andThen WrapperLens(semanticLenses andThen DefaultLens, MaybeWrappedSolutions)
+
   /** Will try its best to transform in so that it produces out or at least incorporates the changes.
     * Entry point of all lenses.
     *
@@ -122,11 +125,6 @@ object ReverseProgram extends lenses.Lenses {
     if(in.expr == out.expr) return {
       Stream(in.assignmentsAsOriginals()) /:: Log.prefix("@return original without constraints:")
     }
-
-    val semanticOriginalLens = semanticLenses andThen DefaultLens
-
-    val finalRepair =
-      shapeLenses andThen WrapperLens(semanticOriginalLens, MaybeWrappedSolutions)
 
     finalRepair.put(in, out) #:::
       {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $in\n, $out):\n~>")
