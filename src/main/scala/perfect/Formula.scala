@@ -204,81 +204,78 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
             }
           }
 
-          s2 match {
-            case AllValues =>
-              known.get(v) match {
-                case None => (known + (v -> s2), nc)
-                case Some(AllValues) => (known, nc)
-                case _ => throw new Exception(s"Tried to updated an universally quantified variable with non-universally quantified variable : $this.combineWith($other)")
-              }
-            case InsertVariable(e2) =>
-              known.get(v) match {
-                case None => (known + (v -> s2), nc)
-                case Some(InsertVariable(e)) if e == e2 => (known, nc)
-                case Some(InsertVariable(_: StringConcat | _: Variable)) if e2.isInstanceOf[StringLiteral] =>
-                  (known, nc)
-                case Some(InsertVariable(StringLiteral(_))) if e2.isInstanceOf[StringConcat] || e2.isInstanceOf[Variable] =>
-                  (known + (v -> s2), nc)
-                case Some(_) => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
-              }
-            case OriginalValue(e2) =>
-              known.get(v) match {
-                case None => (known + (v -> s2), nc)
-                case _ => (known, nc) // No update needed.
-              }
-
-            case StrongValue(EquivalentsVariables(knownSameVarsAse2)) if knownSameVarsAse2(v) =>
-              (known, nc)
-
-            case StrongValue(e2@BestEval(e2_eval)) =>
-              @inline def default(e: Expr) = {
-                println(s"Warning: in this = ${this} and other = ${other}, Combining \n${known.map{case (k, v) => k.toString + "->" + v}.mkString("\n")}\n and\n$v -> StrongValue($e2) not supported")
-                (known, nc &<>& (e === e2))
-              }
-
-              known.get(v) match {
-                case None => (known + (v -> s2), nc)
-                case Some(OriginalValue(e)) => (known + (v -> s2), nc) // We replace the original value with the strong one
-                case Some(StrongValue(e)) if e == e2 => (known, nc)
-                case Some(StrongValue(BestEval(e_eval))) if e_eval == e2_eval =>
-                  (known, nc)
-                case Some(StrongValue(EquivalentsVariables(knownSameVarsAsV))) if e2.isInstanceOf[Variable] && knownSameVarsAsV(e2.asInstanceOf[Variable]) =>
-                  (known, nc) // Don't need to add this.
-
-                case Some(StrongValue(e: Variable)) if !(known contains e) => (known + (e -> StrongValue(v)), nc)
-                case Some(StrongValue(e@WeakLink(e_with_original))) =>
-                  (known + (e_with_original -> StrongValue(e2)), nc)
-                case Some(StrongValue(e)) if e2.isInstanceOf[Variable] && known.get(e2.asInstanceOf[Variable]).forall(_.isInstanceOf[OriginalValue]) =>
-                  (known + (e2.asInstanceOf[Variable] -> StrongValue(v)), nc)
-
-                case Some(StrongValue(e)) =>
-
-
-                  ProgramFormula.mergeProgramFormula.view.map { command => command.merge(e2, e) }.find(_.nonEmpty).flatten match {
-                    case Some((newExp, newAssign)) =>
-                      val (newKnown, newConstraint) = ((known, nc) /: newAssign) {
-                        case ((known, nc), xsy@(x, sy)) if !(this.known contains x) || this.known(x).isInstanceOf[OriginalValue] =>
-                          (known + xsy, nc)
-                        case ((known, nc), xsy@(x, sy@StrongValue(y: Variable))) if !(this.known contains y) || this.known(y).isInstanceOf[OriginalValue] =>
-                          (known + (y -> StrongValue(x)), nc)
-                        case ((known, nc), xsy@(x, sy)) =>
-                          (known, nc &<>& sy.getConstraint(x))
-                      }
-
-                      (newKnown + (v -> StrongValue(newExp)), newConstraint)
-                    case None =>
-                      (e, e2) match {
-                        case (WeakLink(e_weak), BestEval(e2_eval)) =>
-                          (known + (e_weak -> StrongValue(e2_eval)), nc)
-                        case (BestEval(e_eval), WeakLink(e2_weak)) =>
-                          (known + (e2_weak -> StrongValue(e_eval)), nc)
-                        case (WeakLink(e_weak), WeakLink(e2_weak)) if known(e_weak) == known(e2_weak) =>
-                          (known, nc)
-                        case _ =>
-                          default(e)
-                      }
+          known.get(v) match {
+            case None => (known + (v -> s2), nc)
+            case Some(s) =>
+              s2 match {
+                case AllValues =>
+                  s match {
+                    case AllValues => (known, nc)
+                    case _ => throw new Exception(s"Tried to updated an universally quantified variable with non-universally quantified variable : $this.combineWith($other)")
                   }
-                case _ => throw new Error(s"Impossible to merge these values: $this.combineWith($other)")
+                case InsertVariable(e2) =>
+                  s match {
+                    case InsertVariable(e) if e == e2 => (known, nc)
+                    case InsertVariable(_: StringConcat | _: Variable) if e2.isInstanceOf[StringLiteral] =>
+                      (known, nc)
+                    case InsertVariable(StringLiteral(_)) if e2.isInstanceOf[StringConcat] || e2.isInstanceOf[Variable] =>
+                      (known + (v -> s2), nc)
+                    case _ => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
+                  }
+                case OriginalValue(e2) => (known, nc) // No update needed.
+
+                case StrongValue(EquivalentsVariables(knownSameVarsAse2)) if knownSameVarsAse2(v) =>
+                  (known, nc)
+
+                case StrongValue(e2@BestEval(e2_eval)) =>
+                  @inline def default(e: Expr) = {
+                    println(s"Warning: in this = ${this} and other = ${other}, Combining \n${known.map { case (k, v) => k.toString + "->" + v }.mkString("\n")}\n and\n$v -> StrongValue($e2) not supported")
+                    (known, nc &<>& (e === e2))
+                  }
+
+                  s match {
+                    case OriginalValue(e) => (known + (v -> s2), nc) // We replace the original value with the strong one
+                    case StrongValue(e) if e == e2 => (known, nc)
+                    case StrongValue(BestEval(e_eval)) if e_eval == e2_eval =>
+                      (known, nc)
+                    case StrongValue(EquivalentsVariables(knownSameVarsAsV)) if e2.isInstanceOf[Variable] && knownSameVarsAsV(e2.asInstanceOf[Variable]) =>
+                      (known, nc) // Don't need to add this.
+
+                    case StrongValue(e: Variable) if !(known contains e) => (known + (e -> StrongValue(v)), nc)
+                    case StrongValue(e@WeakLink(e_with_original)) =>
+                      (known + (e_with_original -> StrongValue(e2)), nc)
+                    case StrongValue(e) if e2.isInstanceOf[Variable] && known.get(e2.asInstanceOf[Variable]).forall(_.isInstanceOf[OriginalValue]) =>
+                      (known + (e2.asInstanceOf[Variable] -> StrongValue(v)), nc)
+
+                    case StrongValue(e) =>
+
+
+                      ProgramFormula.mergeProgramFormula.view.map { command => command.merge(e2, e) }.find(_.nonEmpty).flatten match {
+                        case Some((newExp, newAssign)) =>
+                          val (newKnown, newConstraint) = ((known, nc) /: newAssign) {
+                            case ((known, nc), xsy@(x, sy)) if !(this.known contains x) || this.known(x).isInstanceOf[OriginalValue] =>
+                              (known + xsy, nc)
+                            case ((known, nc), xsy@(x, sy@StrongValue(y: Variable))) if !(this.known contains y) || this.known(y).isInstanceOf[OriginalValue] =>
+                              (known + (y -> StrongValue(x)), nc)
+                            case ((known, nc), xsy@(x, sy)) =>
+                              (known, nc &<>& sy.getConstraint(x))
+                          }
+
+                          (newKnown + (v -> StrongValue(newExp)), newConstraint)
+                        case None =>
+                          (e, e2) match {
+                            case (WeakLink(e_weak), BestEval(e2_eval)) =>
+                              (known + (e_weak -> StrongValue(e2_eval)), nc)
+                            case (BestEval(e_eval), WeakLink(e2_weak)) =>
+                              (known + (e2_weak -> StrongValue(e_eval)), nc)
+                            case (WeakLink(e_weak), WeakLink(e2_weak)) if known(e_weak) == known(e2_weak) =>
+                              (known, nc)
+                            case _ =>
+                              default(e)
+                          }
+                      }
+                    case _ => throw new Error(s"Impossible to merge these values: $this.combineWith($other)")
+                  }
               }
           }
       }

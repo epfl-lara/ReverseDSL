@@ -130,38 +130,67 @@ trait ContExps { self: ProgramUpdater =>
       if(this eq other) this else {
         val newConstraint = And(constraints, other.constraints)
         val (k, nc) = ((known, newConstraint: Exp) /: other.known.toSeq) {
-          case ((known, nc), (v, s)) =>
+          case ((known, nc), (v, s2)) =>
+            object EquivalentsVariables {
+              def unapply(e: Var): Some[Set[Var]] = {
+                known.get(e) match {
+                  case Some(StrongValue(Var(e_next))) => Some(Set(e, e_next) ++ unapply(e_next).get)
+                  case _ => Some(Set())
+                }
+              }
+            }
+
+            object BestEval {
+              def unapply(e: Exp): Some[Exp] = e match {
+                case Var(e_next) => Some(known.get(e_next).flatMap{
+                  case StrongValue(e2) => unapply(e2)
+                  case _ => None
+                }.getOrElse(e))
+                case e => Some(e)
+              }
+            }
+
+            object WeakLink {
+              def unapply(e: Var): Option[Var] = {
+                if(known.get(e).forall(_.isInstanceOf[OriginalValue])) {
+                  Some(e)
+                } else {
+                  known.get(e).flatMap{
+                    case StrongValue(Var(e_next)) => unapply(e_next)
+                    case _ => None
+                  }
+                }
+              }
+            }
+
             known.get(v) match {
-              case None => (known + (v -> s), nc)
-              case Some(prev_s) =>
-                s match {
+              case None => (known + (v -> s2), nc)
+              case Some(s) =>
+                s2 match {
                   case AllValues =>
-                    prev_s match {
+                    s match {
                       case AllValues => (known, nc)
                       case _ => throw new Exception(s"Tried to updated an universally quantified variable with non-universally quantified variable : $this.combineWith($other)")
                     }
                   case InsertVariable(e) =>
-                    prev_s match {
-                      case s2@InsertVariable(e2) if e2 == e => (known, nc)
-                      case s2@InsertVariable(e2) if !isValue(e2) && isValue(e) => (known, nc)
-                      case s2@InsertVariable(e2) if isValue(e2) && !isValue(e) => (known + (v -> s), nc)
+                    s match {
+                      case InsertVariable(e) if e == e => (known, nc)
+                      case InsertVariable(e) if !isValue(e) && isValue(e) => (known, nc)
+                      case InsertVariable(e) if isValue(e) && !isValue(e) => (known + (v -> s2), nc)
                       case _ => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
                     }
                   case StrongValue(e) =>
                     @inline def default(e2: Exp) = (known, nc &<>& (e === e2))
 
-                    prev_s match {
-                      case OriginalValue(e) => (known + (v -> s), nc) // We replace the original value with the strong one
+                    s match {
+                      case OriginalValue(e) => (known + (v -> s2), nc) // We replace the original value with the strong one
                       case StrongValue(e2) if e2 == e => (known, nc)
                       case StrongValue(Var(e2)) if !(known contains e2) => (known + (e2 -> StrongValue(v)), nc)
                       case StrongValue(e2) if freeVariables(e2).isEmpty && isVar(e) && // Particular merging case quite useful.
                         !(this.known contains e.asInstanceOf[Var]) &&
-                        other.known.get(e.asInstanceOf[Var]).exists(_.isInstanceOf[OriginalValue]) /* /:
-                Log.prefix(s"shortcut ($e2 is value: ${Utils.isValue(e2)}) (e = $e is variable: ${e.isInstanceOf[Var]}) " +
-                  s"(this.known contains e: ${e.isInstanceOf[Var] && !(known contains e.asInstanceOf[Var])})" +
-                  s"(${other.known} contains e as original: ${e.isInstanceOf[Var] &&  other.known.get(e.asInstanceOf[Var]).exists(_.isInstanceOf[OriginalValue])}):")*/
+                        other.known.get(e.asInstanceOf[Var]).exists(_.isInstanceOf[OriginalValue])
                       =>
-                        (known + (e.asInstanceOf[Var] -> StrongValue(e2)) + (v -> s), nc)
+                        (known + (e.asInstanceOf[Var] -> StrongValue(e2)) + (v -> s2), nc)
                       case StrongValue(e2) =>
                         commands.view.map{ command => command.merge(e, e2)}.find(_.nonEmpty).flatten match {
                           case Some((newExp, newAssign)) =>
