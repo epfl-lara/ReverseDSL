@@ -105,7 +105,7 @@ object ReverseProgram extends lenses.Lenses {
       (perfect.lenses.MapDataLens andThen // Matcher for FiniteMap and MapApply constructions
       ADTExpr.Lens) // Matcher for ADT and ADTSelector constructions.
 
-  val finalRepair =
+  val lens = NoChangeLens andThen
     shapeLenses andThen WrapperLens(semanticLenses andThen DefaultLens, MaybeWrappedSolutions)
 
   /** Will try its best to transform in so that it produces out or at least incorporates the changes.
@@ -120,13 +120,14 @@ object ReverseProgram extends lenses.Lenses {
     **/
   def repair(in: ProgramFormula, out: ProgramFormula)
             (implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
-    val stackLevel = Thread.currentThread().getStackTrace.length
-    Log(s"\n@repair$stackLevel(\n  $in\n, $out)")
-    if(in.expr == out.expr) return {
-      Stream(in.assignmentsAsOriginals()) /:: Log.prefix("@return original without constraints:")
-    }
+    if(!Log.activate) {
+      lens.put(in, out)
+    } else {
+      val stackLevel = Thread.currentThread().getStackTrace.length
+      Log(s"\n@repair$stackLevel(\n  $in\n, $out)")
 
-    finalRepair.put(in, out) #:::
-      {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $in\n, $out):\n~>")
+      lens.put(in, out) #:::
+        {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $in\n, $out):\n~>")
+    }
   }
 }
