@@ -179,20 +179,24 @@ trait ContExps { self: ProgramUpdater =>
                       case InsertVariable(e) if isValue(e) && !isValue(e) => (known + (v -> s2), nc)
                       case _ => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
                     }
-                  case StrongValue(e) =>
-                    @inline def default(e2: Exp) = (known, nc &<>& (e === e2))
+                  case OriginalValue(e) => (known, nc) // No update needed.
+                  case StrongValue(Var(EquivalentsVariables(knownSameVarsAse2))) if knownSameVarsAse2(v) => (known, nc)
+                  case StrongValue(e2@BestEval(e2_eval)) =>
+                    @inline def default(e: Exp) = (known, nc &<>& (e === e2))
 
                     s match {
                       case OriginalValue(e) => (known + (v -> s2), nc) // We replace the original value with the strong one
-                      case StrongValue(e2) if e2 == e => (known, nc)
-                      case StrongValue(Var(e2)) if !(known contains e2) => (known + (e2 -> StrongValue(v)), nc)
-                      case StrongValue(e2) if freeVariables(e2).isEmpty && isVar(e) && // Particular merging case quite useful.
-                        !(this.known contains e.asInstanceOf[Var]) &&
-                        other.known.get(e.asInstanceOf[Var]).exists(_.isInstanceOf[OriginalValue])
-                      =>
-                        (known + (e.asInstanceOf[Var] -> StrongValue(e2)) + (v -> s2), nc)
-                      case StrongValue(e2) =>
-                        commands.view.map{ command => command.merge(e, e2)}.find(_.nonEmpty).flatten match {
+                      case StrongValue(e) if e == e2 => (known, nc)
+                      case StrongValue(BestEval(e_eval)) if e_eval == e2_eval => (known, nc)
+                      case StrongValue(Var(EquivalentsVariables(knownSameVarsAsV))) if isVar(e2) && knownSameVarsAsV(e2.asInstanceOf[Var]) =>
+                        (known, nc) // Don't need to add this.
+                      case StrongValue(Var(e)) if !(known contains e) => (known + (e -> StrongValue(v)), nc)
+                      case StrongValue(Var(e@WeakLink(e_with_original))) =>
+                        (known + (e_with_original -> StrongValue(e2)), nc)
+                      case StrongValue(e) if isVar(e2) && known.get(e2.asInstanceOf[Var]).forall(_.isInstanceOf[OriginalValue]) =>
+                        (known + (e2.asInstanceOf[Var] -> StrongValue(v)), nc)
+                      case StrongValue(e) =>
+                        commands.view.map{ command => command.merge(e2, e)}.find(_.nonEmpty).flatten match {
                           case Some((newExp, newAssign)) =>
                             val (newKnown, newConstraint) = ((known, nc) /: newAssign) {
                               case ((known, nc), xsy@(x, sy)) if !(this.known contains x) || this.known(x).isInstanceOf[OriginalValue] =>
@@ -205,12 +209,19 @@ trait ContExps { self: ProgramUpdater =>
 
                             (newKnown + (v -> StrongValue(newExp)), newConstraint)
                           case None =>
-                            default(e2)
+                            (e, e2) match {
+                              case (Var(WeakLink(e_weak)), BestEval(e2_eval)) =>
+                                (known + (e_weak -> StrongValue(e2_eval)), nc)
+                              case (BestEval(e_eval), Var(WeakLink(e2_weak))) =>
+                                (known + (e2_weak -> StrongValue(e_eval)), nc)
+                              case (Var(WeakLink(e_weak)), Var(WeakLink(e2_weak))) if known(e_weak) == known(e2_weak) =>
+                                (known, nc)
+                              case _ =>
+                                default(e)
+                            }
                         }
-                      case AllValues => throw new Error(s"Attempt at assigning an universally quantified variable: $this.combineWith($other)")
+                      case _ => throw new Error(s"Impossible to merge these values: $this.combineWith($other)")
                     }
-                  case OriginalValue(e) =>
-                    (known, nc) // No update needed.
                 }
             }
         }

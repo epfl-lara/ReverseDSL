@@ -203,6 +203,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
               }
             }
           }
+          import Utils.isValue
 
           known.get(v) match {
             case None => (known + (v -> s2), nc)
@@ -216,16 +217,13 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
                 case InsertVariable(e2) =>
                   s match {
                     case InsertVariable(e) if e == e2 => (known, nc)
-                    case InsertVariable(_: StringConcat | _: Variable) if e2.isInstanceOf[StringLiteral] =>
-                      (known, nc)
-                    case InsertVariable(StringLiteral(_)) if e2.isInstanceOf[StringConcat] || e2.isInstanceOf[Variable] =>
-                      (known + (v -> s2), nc)
+                    case InsertVariable(e) if isValue(e2) && !isValue(e) => (known, nc)
+                    case InsertVariable(e) if isValue(e) && !isValue(e2) => (known + (v -> s2), nc)
                     case _ => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
                   }
                 case OriginalValue(e2) => (known, nc) // No update needed.
 
-                case StrongValue(EquivalentsVariables(knownSameVarsAse2)) if knownSameVarsAse2(v) =>
-                  (known, nc)
+                case StrongValue(EquivalentsVariables(knownSameVarsAse2)) if knownSameVarsAse2(v) => (known, nc)
 
                 case StrongValue(e2@BestEval(e2_eval)) =>
                   @inline def default(e: Expr) = {
@@ -236,8 +234,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
                   s match {
                     case OriginalValue(e) => (known + (v -> s2), nc) // We replace the original value with the strong one
                     case StrongValue(e) if e == e2 => (known, nc)
-                    case StrongValue(BestEval(e_eval)) if e_eval == e2_eval =>
-                      (known, nc)
+                    case StrongValue(BestEval(e_eval)) if e_eval == e2_eval => (known, nc)
                     case StrongValue(EquivalentsVariables(knownSameVarsAsV)) if e2.isInstanceOf[Variable] && knownSameVarsAsV(e2.asInstanceOf[Variable]) =>
                       (known, nc) // Don't need to add this.
 
