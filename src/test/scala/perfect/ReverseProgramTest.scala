@@ -771,9 +771,11 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       )
 
     checkProg("Mikael Mikael", pfun)
-    checkProg("Mar Mar", repairProgram(pfun, "Mar Mar"))
-    checkProg("Mar Mar", repairProgram(pfun, "Mikael Mar"))
-    checkProg("Mar Mar", repairProgram(pfun, "Mar Mikael"))
+    Log activated {
+      checkProg("Mar Mar", repairProgram(pfun, "Mar Mar"))
+      checkProg("Mar Mar", repairProgram(pfun, "Mikael Mar"))
+      checkProg("Mar Mar", repairProgram(pfun, "Mar Mikael"))
+    }
   }
 
   test("Tuple conflict") {

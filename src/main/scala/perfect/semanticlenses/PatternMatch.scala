@@ -4,14 +4,14 @@ package semanticlenses
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ProgramFormula.{CloneTextMultiple, CustomProgramFormula}
+import perfect.ProgramFormula.{CloneTextMultiple, CustomProgramFormula, MergeProgramFormula}
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
 
 /**
   * Created by Mikael on 04/05/2017.
   */
-object PatternMatch extends CustomProgramFormula {
+object PatternMatch extends CustomProgramFormula with MergeProgramFormula {
   object Eval {
     def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
       case PatternMatch.Expr(before, variables, forClone) =>

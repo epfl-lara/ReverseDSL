@@ -30,7 +30,9 @@ object ProgramFormula {
     def Eval: {
       def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr]
     }
+  }
 
+  trait MergeProgramFormula {
     def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])]
   }
 
@@ -211,6 +213,11 @@ object ProgramFormula {
     PatternMatch,
     PasteVariable,
     TreeModification
+  )
+
+  val mergeProgramFormula = List[MergeProgramFormula](
+    ADTExpr,
+    PatternMatch
   )
 
   val customFunDefs = customProgramFormulas.map(_.funDef)

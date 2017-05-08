@@ -186,20 +186,24 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
               s"(${other.known} contains e as original: ${e.isInstanceOf[Variable] &&  other.known.get(e.asInstanceOf[Variable]).exists(_.isInstanceOf[OriginalValue])}):")*/
             =>
               (known + (e.asInstanceOf[Variable] -> StrongValue(e2)) + (v -> s), nc)
-            case Some(StrongValue(e2)) => //@PatternMatch.Expr(before, variables, forClone))) =>
-              ProgramFormula.customProgramFormulas.view.map{ command => command.merge(e, e2)}.find(_.nonEmpty).flatten match {
+            case Some(StrongValue(e2)) =>
+              ProgramFormula.mergeProgramFormula.view.map{ command => command.merge(e, e2)}.find(_.nonEmpty).flatten match {
                 case Some((newExp, newAssign)) =>
                   val (newKnown, newConstraint) = ((known, nc) /: newAssign) {
                     case ((known, nc), xsy@(x, sy)) if !(this.known contains x) || this.known(x).isInstanceOf[OriginalValue] =>
+                      println(s"Adding $xsy directly because this.known = ${this.known}")
                       (known + xsy, nc)
-                    case ((known, nc), (x, sy@StrongValue(y: Variable))) if !(this.known contains y) || this.known(y).isInstanceOf[OriginalValue] =>
+                    case ((known, nc), xsy@(x, sy@StrongValue(y: Variable))) if !(this.known contains y) || this.known(y).isInstanceOf[OriginalValue] =>
+                      println(s"Adding $xsy as as assignment over $y because this.known = ${this.known}")
                       (known + (y -> StrongValue(x)), nc)
-                    case ((known, nc), (x, sy)) =>
+                    case ((known, nc), xsy@(x, sy)) =>
+                      println(s"Adding $xsy as constraint because this.known = ${this.known}")
                       (known, nc &<>& sy.getConstraint(x))
                   }
 
                   (newKnown + (v -> StrongValue(newExp)), newConstraint)
                 case None =>
+                  println(s"Default add for ${known} and $v => $s")
                   default(e2)
               }
             case Some(AllValues) => throw new Error(s"Attempt at assigning an universally quantified variable: $this.combineWith($other)")

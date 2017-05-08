@@ -18,7 +18,7 @@ object DefaultLens extends SemanticLens {
 
   def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
     in.expr match {
-    // Values (including lambdas) should be immediately replaced by the new value
+    // Literals without any free variables should be immediately replaced by the new value
     case l: Literal[_] => Stream(out)
 
     case fun@Lambda(vds, body) =>
@@ -49,7 +49,7 @@ object DefaultLens extends SemanticLens {
       unify #::: Stream(out)
 
     // Variables are assigned the given value.
-    case v@Variable(id, tpe, flags) =>
+    case v: Variable =>
       Stream(ProgramFormula(v, Formula(v -> StrongValue(out.expr)) combineWith out.formula))
 
     case Let(vd, expr, body) =>
@@ -86,49 +86,6 @@ object DefaultLens extends SemanticLens {
           => Stream(in.subExpr(expr1 +& StringLiteral(inserted) +& expr2).assignmentsAsOriginals())
           case _ => Stream.empty[ProgramFormula]
         }
-      }
-
-    case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
-      out.simplifiedExpr match {
-        case outExpr@ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && in.getFunctionValue != Some(outExpr) => // Same type ! Maybe the arguments will change or move.
-          Log("ADT 2")
-          val argsInValue = in.getFunctionValue match {
-            case Some(ADT(ADTType(_, _), argsInValue)) => argsInValue.map(x => Some(x))
-            case _ => argsIn.map(_ => None)
-          }
-
-          val seqOfStreamSolutions = (argsIn.zip(argsInValue)).zip(argsOut).map { case ((aFun, aFunVal), newOutArg) =>
-            repair(ProgramFormula(aFun, in.formula).withComputedValue(aFunVal), out.subExpr(newOutArg))
-          }
-          val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
-          for {seq <- streamOfSeqSolutions
-               _ = Log(s"combineResults($seq)")
-               (newArgs, assignments) = ProgramFormula.combineResults(seq)
-          } yield {
-            ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
-          }
-        case _: Variable | ADT(ADTType(_, _), _) =>
-          Stream(out)
-
-        case a =>
-          Log(s"[Warning] Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
-          Stream(out)
-      }
-
-    case as@ADTSelector(adt, selector) =>
-      val originalAdtValue = in.formula.assignments.flatMap(assign => maybeEvalWithCache(assign(adt))).getOrElse(return Stream.empty).asInstanceOf[ADT]
-      val constructor = as.constructor.get
-      val fields = constructor.fields
-      val index = as.selectorIndex
-      val vrs = fields.map{ fd => Variable(FreshIdentifier("x", true), fd.getType, Set())}
-      val constraints = vrs.zipWithIndex.map{
-        case (vd, i) => vd -> (if(i == index) StrongValue(out.expr) else OriginalValue(originalAdtValue.args(i)))
-      }.toMap
-      val newConstraint = Formula(constraints)
-
-      for{ pf <- repair(in.subExpr(adt),
-        out.subExpr(ADT(ADTType(constructor.id, constructor.tps), vrs)) combineWith newConstraint) } yield {
-        pf.wrap(x => ADTSelector(x, selector))
       }
 
     case Application(lambdaExpr, arguments) => // TODO: Put this into a lense.

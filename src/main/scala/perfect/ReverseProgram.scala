@@ -88,13 +88,14 @@ object ReverseProgram extends lenses.Lenses {
   }
 
   val semanticLenses: semanticlenses.SemanticLens =
-    PatternMatch.Lens andThen
-      PatternReplace.Lens andThen
-      ListInsert.Lens andThen
-      PasteVariable.Lens andThen
-      StringInsert.Lens andThen
-      perfect.lenses.SetLens andThen
-      perfect.lenses.MapDataLens
+      (PatternMatch.Lens andThen
+      PatternReplace.Lens) andThen
+      (ListInsert.Lens andThen
+      PasteVariable.Lens) andThen
+      (StringInsert.Lens andThen
+      perfect.lenses.SetLens) andThen
+      (perfect.lenses.MapDataLens andThen
+      ADTExpr.Lens)
 
   /** Will try its best to transform prevOutExpr so that it produces newOut or at least incorporates the changes.
     * Basically, we solve the problem:
