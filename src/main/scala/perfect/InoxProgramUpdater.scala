@@ -1,6 +1,6 @@
 package perfect
 
-object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps {
+object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with core.Lenses {
   type Exp = inox.trees.Expr
   type Symbols = inox.trees.Symbols
   type Var = inox.trees.Variable
@@ -100,4 +100,8 @@ object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps {
   def isValue(e: Expr): Boolean = perfect.Utils.isValue(e)
   def isVar(e: Expr): Boolean = e.isInstanceOf[Variable]
   def postMap(f: Expr => Option[Expr])(e: Expr): Expr = exprOps.postMap(f)(e)
+
+  def lens: SemanticLens = {
+    ???
+  }
 }

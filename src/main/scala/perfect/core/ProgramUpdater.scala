@@ -8,7 +8,7 @@ import scala.collection.mutable.HashMap
 /**
   * Created by Mikael on 06/05/2017.
   */
-trait ProgramUpdater { self: ContExps =>
+trait ProgramUpdater { self: ContExps with Lenses =>
   //////////////// Abstract members
   type Exp
   type Symbols
@@ -43,6 +43,9 @@ trait ProgramUpdater { self: ContExps =>
 
   /** All free variables of an expression */
   def freeVariables(e: Exp): Set[Var]
+
+  /** The main reversion lens */
+  def lens: SemanticLens
 
   type Cache = HashMap[Exp, Exp]
 
@@ -109,7 +112,9 @@ trait ProgramUpdater { self: ContExps =>
     for { r <- repair(in, out) } yield r.insertVariables() /: Log.remaining_program
   }
 
+  lazy val theLens = lens
+
   def repair(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
-    ???
+    theLens.put(in, out)
   }
 }
