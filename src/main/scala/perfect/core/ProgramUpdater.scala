@@ -44,6 +44,9 @@ trait ProgramUpdater { self: ContExps with Lenses =>
   /** All free variables of an expression */
   def freeVariables(e: Exp): Set[Var]
 
+  /** Freshen a variable, i.e. gives it a new name. */
+  def freshen(a: Var, others: Var*): Var
+
   /** The main reversion lens */
   def lens: SemanticLens
 

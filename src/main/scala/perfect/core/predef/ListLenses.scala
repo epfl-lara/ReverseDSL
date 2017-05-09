@@ -17,8 +17,6 @@ trait ListLenses { self: ProgramUpdater with ContExps with Lenses with Invocatio
     def unapply(e: Exp) = extractList(e)
   }
 
-  def freshen(a: Var): Var
-
   /** Lense-like filter */
   case object FilterLens extends SemanticLens with FilterLike[Exp] with MultiArgsSemanticLens { // TODO: Incorporate filterRev as part of the sources.
     def extract(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[( Seq[Exp],

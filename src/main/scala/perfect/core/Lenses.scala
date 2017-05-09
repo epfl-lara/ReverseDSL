@@ -108,4 +108,20 @@ trait Lenses { self: ProgramUpdater with ContExps =>
       }
     }
   }
+
+  /**
+    * Created by Mikael on 08/05/2017.
+    * Controls a normal lens. vs a wrapping lens by order of priority.
+    * This avoids wrapping around let-expressions (which would be useless)
+    */
+  case class WrapperLens(normal: SemanticLens, wrapping: SemanticLens) extends SemanticLens {
+    def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
+      if (in.isWrappingLowPriority) {
+        (normal interleave wrapping).put(in, out)
+      } else {
+        (wrapping interleave normal).put(in, out)
+      }
+    }
+  }
+
 }

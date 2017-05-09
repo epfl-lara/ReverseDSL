@@ -4,6 +4,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with core.ContExps
     with core.Lenses
     with lenses.ShapeLenses
+    with lenses.ValueLenses
     with core.predef.InvocationLenses
     with core.predef.ListLenses {
   type Exp = inox.trees.Expr
@@ -116,7 +117,13 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case perfect.ListLiteral(elements, builder) => Some((elements, builder))
     case _ => None
   }
-  def freshen(a: Var): Var = a.freshen
+  def freshen(a: Var, others: Var*): Var = {
+    if(others.isEmpty) {
+      a.freshen
+    } else {
+      Variable(inox.FreshIdentifier(perfect.Utils.uniqueName(a.id.name, others.map(v => v.id.name).toSet)), a.tpe, Set())
+    }
+  }
 
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =
@@ -127,6 +134,17 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   val functions: List[SemanticLens] = List(
     FilterLens
+    // TODO: Add all lenses from lenses.Lenses
+    /*MapLens,
+    ListConcatLens,
+    FlattenLens,
+    FlatMapLens,
+    StringConcatLens,
+    SplitEvenLens,
+    MergeLens,
+    SortWithLens,
+    MkStringLens,
+    RecLens2*/
   )
   val reversions = Map[inox.Identifier, SemanticLens](
     perfect.Utils.filter -> FilterLens
@@ -138,25 +156,15 @@ object InoxProgramUpdater extends core.ProgramUpdater
       case _ => None
     })
   import perfect.lenses._
-/*
-  // Lenses which need the value of the program to invert it.
-  val semanticLenses: semanticlenses.SemanticLens =
-    (PatternMatch.Lens andThen  // Stand-alone programs on how to repair the program for a given instruction
-      PatternReplace.Lens) andThen
-      (ListInsert.Lens andThen
-        PasteVariable.Lens) andThen
-      (StringInsert.Lens andThen
-        functionInvocationLens) andThen // Matcher for function invocation in out.
-      (FunctionInvocationUnificationLens andThen // Unification of arguments for function invocation.
-        SetLens) andThen // Matchers for Set and SetApply constructions
-      (MapDataLens andThen // Matcher for FiniteMap and MapApply constructions
-        ADTExpr.Lens) // Matcher for ADT and ADTSelector constructions.
+
+// Lenses which need the value of the program to invert it.
+  val semanticLenses: SemanticLens = valueLenses // andThen
+
 
 
   val lens = NoChangeLens andThen
-    shapeLenses andThen WrapperLens(semanticLenses andThen DefaultLens, MaybeWrappedSolutions)*/
+    shapeLenses andThen /*WrapperLens(*/semanticLenses/* andThen DefaultLens, MaybeWrappedSolutions)*/
 
-  val lens = ???
 }
 
 
