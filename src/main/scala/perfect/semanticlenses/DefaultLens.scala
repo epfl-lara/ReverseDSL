@@ -11,7 +11,7 @@ import ReverseProgram.Cache
 
 object DefaultLens extends SemanticLens {
   import ReverseProgram.repair
-  import ReverseProgram.StringConcatLens
+  import lenses.Lenses.StringConcatLens
   import Utils.ifEmpty
   import ReverseProgram.maybeEvalWithCache
   import StringConcatExtended._

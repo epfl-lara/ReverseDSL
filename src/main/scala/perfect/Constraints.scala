@@ -24,7 +24,7 @@ abstract class GeneralConstraint[A <: GeneralConstraint[A]](protected val formul
   import SolverResponses._
 
   implicit val symbols = {
-    Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs)
+    Utils.defaultSymbols.withFunctions(lenses.Lenses.funDefs)
   }
 
   // The program

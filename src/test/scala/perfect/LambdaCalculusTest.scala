@@ -15,7 +15,7 @@ class LambdaCalculusTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import XmlTrees._
   import StringConcatExtended._
-  import ProgramFormula.{AssociativeInsert, StringInsert, ListInsert, TreeWrap, TreeUnwrap, TreeModification, CloneText, PasteVariable}
+  import semanticlenses._
 
   val churchIntegerTupledType = inoxTypeOf[((Int => Int), Int) => Int]
   val churchIntegerType = inoxTypeOf[(Int => Int) => Int => Int]

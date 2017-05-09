@@ -15,7 +15,7 @@ import scala.collection.mutable.{HashMap, ListBuffer}
 /**
   * Created by Mikael on 03/03/2017.
   */
-object ReverseProgram extends lenses.Lenses {
+object ReverseProgram {
   type FunctionEntry = Identifier
   type ModificationSteps = Unit
   type OutExpr = Expr
@@ -37,7 +37,7 @@ object ReverseProgram extends lenses.Lenses {
       return Stream(outExpr)
     }
 
-    implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
+    implicit val symbols = defaultSymbols.withFunctions(lenses.Lenses.funDefs)
     implicit val cache = new Cache
     for { r <- repair(ProgramFormula(in.get), out)
           ProgramFormula(newOutExpr, f) = r.insertVariables()                    /: Log.remaining_program
@@ -51,7 +51,7 @@ object ReverseProgram extends lenses.Lenses {
     * @param in The program to repair, along with assignment formulas. May be empty, in which case it returns out
     * @return The program in such that it locally produces the changes given by out */
   def put(in: ProgramFormula, out: ProgramFormula): Stream[ProgramFormula] = {
-    implicit val symbols = defaultSymbols.withFunctions(ReverseProgram.funDefs)
+    implicit val symbols = defaultSymbols.withFunctions(lenses.Lenses.funDefs)
     implicit val cache = new Cache
     for { r <- repair(in, out) } yield r.insertVariables() /: Log.remaining_program
   }
@@ -95,7 +95,7 @@ object ReverseProgram extends lenses.Lenses {
         ValueLens))
 
   val functionInvocationLens: semanticlenses.SemanticLens =
-    ShortcutLens(reversions, {
+    ShortcutLens(lenses.Lenses.reversions, {
       case FunctionInvocation(id, _, _) => Some(id)
       case _ => None
     })

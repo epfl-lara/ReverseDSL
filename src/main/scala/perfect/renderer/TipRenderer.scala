@@ -9,7 +9,7 @@ import inox.trees._
 object TipRenderer extends inox.ast.Printer {
   val trees = inox.trees
   implicit val symbols = {
-    Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs)
+    Utils.defaultSymbols.withFunctions(lenses.Lenses.funDefs)
   }
   lazy val context = Context.empty.copy(options = Options(Seq(optSelectedSolvers(Set("smt-cvc4")))))
   lazy val prog = InoxProgram(context, symbols)

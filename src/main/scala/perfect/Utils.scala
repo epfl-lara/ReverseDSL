@@ -197,7 +197,7 @@ object Utils {
     } else None
 
   def explainTyping(e: Expr) = {
-    Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs).
+    Utils.defaultSymbols.withFunctions(lenses.Lenses.funDefs).
       explainTyping(e)(inox.trees.PrinterOptions.fromSymbols(Utils.defaultSymbols, ReverseProgram.context))
   }
 

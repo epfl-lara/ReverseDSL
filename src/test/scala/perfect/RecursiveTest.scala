@@ -17,7 +17,7 @@ class RecursiveTest extends FunSuite with TestHelpers {
   import semanticlenses._
   implicit val symbols = Utils.defaultSymbols
 
-  val mapDef = ReverseProgram.RecLens.build("map",
+  val mapDef = lenses.Lenses.RecLens.build("map",
     "l"::inoxTypeOf[List[String]], "f"::inoxTypeOf[String => String])(inoxTypeOf[List[String]])((mprec, ls, f) =>
     if_(ls.isInstOf(TCons[String])) {
       let("c"::TCons[String], ls.asInstOf(TCons[String]))(c =>

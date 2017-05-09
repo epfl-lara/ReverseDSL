@@ -32,7 +32,7 @@ trait TestHelpers extends InoxConvertible.conversions { self: FunSuite =>
   private def mkProg(funDef: FunDef) = {
     InoxProgram(
       ReverseProgram.context,
-      funDef::ReverseProgram.funDefs, allConstructors
+      funDef::lenses.Lenses.funDefs, allConstructors
     )
   }
 
@@ -71,14 +71,14 @@ trait TestHelpers extends InoxConvertible.conversions { self: FunSuite =>
   }
 
   def eval(e: Expr): Expr = {
-    val symbols = Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs)
+    val symbols = Utils.defaultSymbols.withFunctions(lenses.Lenses.funDefs)
 
     val funDef = mkFunDef(main)()(_ => (Seq(), e.getType(symbols), _ => e))
     (mkProg(funDef), funDef.id)
 
     val prog = InoxProgram(
       ReverseProgram.context,
-      funDef::ReverseProgram.funDefs, allConstructors
+      funDef::lenses.Lenses.funDefs, allConstructors
     )
 
     ReverseProgram.LambdaPreservingEvaluator(prog).eval(FunctionInvocation(main, Seq(), Seq())) match {

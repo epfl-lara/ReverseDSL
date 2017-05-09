@@ -10,8 +10,10 @@ import perfect.ImplicitTuples.{_1, _2, tuple2}
 import ProgramFormula._
 import StringConcatExtended._
 
-trait Lenses { self: ReverseProgram.type =>
+object Lenses {
   import perfect.semanticlenses._
+  import ReverseProgram.{maybeEvalWithCache, Cache, repair}
+
   val lenses = List[Lens](
     FilterLens,
     MapLens,

@@ -59,7 +59,7 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
                 } else {
                   val expr1v = expr1val.get
                   val expr2v = expr2val.get
-                  ReverseProgram.StringConcatLens.put(Nil)(Seq(in.subExpr(expr1v), in.subExpr(expr2v)), out).flatMap { case (args, f) =>
+                  lenses.Lenses.StringConcatLens.put(Nil)(Seq(in.subExpr(expr1v), in.subExpr(expr2v)), out).flatMap { case (args, f) =>
                     ProgramFormula.repairArguments(in.formula, Seq((expr1, args(0)), (expr2, args(1)))).map{ case (args2, f2) =>
                       ProgramFormula(StringConcat(args2(0), args2(1)), f combineWith f2 combineWith args(0).formula combineWith args(1).formula)
                     }
@@ -89,8 +89,8 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
   import AssociativeInsert._
 
   def computeDirection(left: String, s: String, right: String): InsertDirection = {
-    val leftJump = ReverseProgram.StringConcatLens.typeJump(left, s)
-    val rightJump = ReverseProgram.StringConcatLens.typeJump(s, right)
+    val leftJump = lenses.Lenses.StringConcatLens.typeJump(left, s)
+    val rightJump = lenses.Lenses.StringConcatLens.typeJump(s, right)
     if(leftJump < rightJump) {
       InsertToLeft
     } else if(leftJump > rightJump) {

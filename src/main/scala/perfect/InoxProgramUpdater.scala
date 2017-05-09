@@ -29,7 +29,7 @@ object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with co
 
   lazy val context = inox.Context.empty.copy(options = inox.Options(Seq(inox.optSelectedSolvers(Set("smt-cvc4")))))
 
-  implicit def symbols = perfect.Utils.defaultSymbols.withFunctions(ReverseProgram.funDefs)
+  implicit def symbols = perfect.Utils.defaultSymbols.withFunctions(lenses.Lenses.funDefs)
 
   /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
   def maybeEvalWithCache(expr: inox.trees.Expr)(implicit cache: Cache, symbols: Symbols): Option[inox.trees.Expr] = {
@@ -101,27 +101,36 @@ object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with co
   def isVar(e: Expr): Boolean = e.isInstanceOf[Variable]
   def postMap(f: Expr => Option[Expr])(e: Expr): Expr = exprOps.postMap(f)(e)
 
-  def lens: SemanticLens = {
-    // Lenses which do not need the value of the program to invert it.
-    /*val shapeLenses: semanticlenses.SemanticLens =
-      ((TreeWrap.Lens andThen
-        TreeUnwrap.Lens) andThen (
-        TreeModification.Lens andThen
-          ValueLens))
+  // Lenses which do not need the value of the program to invert it.
+  /*val shapeLenses: semanticlenses.SemanticLens =
+    ((TreeWrap.Lens andThen
+      TreeUnwrap.Lens) andThen (
+      TreeModification.Lens andThen
+        ValueLens))
 
-    // Lenses which need the value of the program to invert it.
-    val semanticLenses: semanticlenses.SemanticLens =
-      (PatternMatch.Lens andThen  // Stand-alone programs on how to repair the program for a given instruction
-        PatternReplace.Lens) andThen
-        (ListInsert.Lens andThen
-          PasteVariable.Lens) andThen
-        (StringInsert.Lens andThen
-          perfect.lenses.SetLens) andThen // Matchers for Set and SetApply constructions
-        (perfect.lenses.MapDataLens andThen // Matcher for FiniteMap and MapApply constructions
-          ADTExpr.Lens) // Matcher for ADT and ADTSelector constructions.
+  val functionInvocationLens: semanticlenses.SemanticLens =
+    ShortcutLens(reversions, {
+      case FunctionInvocation(id, _, _) => Some(id)
+      case _ => None
+    })
+  import perfect.lenses._
 
-    NoChangeLens andThen
-      shapeLenses andThen WrapperLens(semanticLenses andThen DefaultLens, MaybeWrappedSolutions)*/
-    ???
-  }
+  // Lenses which need the value of the program to invert it.
+  val semanticLenses: semanticlenses.SemanticLens =
+    (PatternMatch.Lens andThen  // Stand-alone programs on how to repair the program for a given instruction
+      PatternReplace.Lens) andThen
+      (ListInsert.Lens andThen
+        PasteVariable.Lens) andThen
+      (StringInsert.Lens andThen
+        functionInvocationLens) andThen // Matcher for function invocation in out.
+      (FunctionInvocationUnificationLens andThen // Unification of arguments for function invocation.
+        SetLens) andThen // Matchers for Set and SetApply constructions
+      (MapDataLens andThen // Matcher for FiniteMap and MapApply constructions
+        ADTExpr.Lens) // Matcher for ADT and ADTSelector constructions.
+
+
+  val lens = NoChangeLens andThen
+    shapeLenses andThen WrapperLens(semanticLenses andThen DefaultLens, MaybeWrappedSolutions)*/
+
+  val lens = ???
 }

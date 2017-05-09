@@ -1,14 +1,6 @@
 package perfect
 package semanticlenses
 
-import inox._
-import inox.trees._
-import inox.trees.dsl._
-import perfect.ProgramFormula.CustomProgramFormula
-import perfect.ReverseProgram.{Cache, maybeEvalWithCache, regroupArguments, repair}
-import perfect.StringConcatExtended._
-
-
 /**
   * Created by Mikael on 05/05/2017.
   */
