@@ -7,11 +7,14 @@ import perfect.InoxProgramUpdater
   */
 trait ValueLenses
   extends perfect.lenses.PatternMatchLenses
-     with perfect.lenses.PatternReplaceLenses { self: InoxProgramUpdater.type =>
+     with perfect.lenses.PatternReplaceLenses
+     with perfect.lenses.ListInsertLenses { self: InoxProgramUpdater.type =>
 
   val valueLenses = combine(
     PatternMatchLens,
-    PatternReplaceLens)
+    PatternReplaceLens,
+    ListInsertLens
+  )
 /*
   (  // Stand-alone programs on how to repair the program for a given instruction
     PatternReplaceLens) andThen

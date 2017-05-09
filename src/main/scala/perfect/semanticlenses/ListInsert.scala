@@ -108,42 +108,6 @@ object ListInsert extends CustomProgramFormula  {
   def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr])] = {
     Goal.unapply(f.expr)
   }
-
-  object Goal extends FunDefGoal {
-    private val InsertList = FreshIdentifier("insertList")
-
-    def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr]): Expr = {
-      E(InsertList)(tpe)(
-        ListLiteral(leftUnmodified, tpe),
-        ListLiteral(inserted, tpe),
-        ListLiteral(rightUnmodified, tpe),
-        StringLiteral(".") // Not used direction
-      )
-    }
-
-    def unapply(e: Expr): Option[(Type, List[Expr], List[Expr], List[Expr])] = {
-      e match {
-        case FunctionInvocation(InsertList, Seq(tpe0), Seq(
-        ListLiteral(leftBefore, _),
-        ListLiteral(inserted, tpe3),
-        ListLiteral(rightBefore, _),
-        _)) =>
-          Some((tpe0, leftBefore, inserted, rightBefore))
-        case _ => None
-      }
-    }
-
-    def funDef = mkFunDef(InsertList)("A"){ case Seq(tA) =>
-      (Seq("left"::T(Utils.list)(tA), "inserted"::T(Utils.list)(tA), "right"::T(Utils.list)(tA), "direction"::StringType),
-        T(Utils.list)(tA), {
-        case Seq(left, inserted, right, direction) =>
-          E(Utils.listconcat)(tA)(E(Utils.listconcat)(tA)(
-            left,
-            inserted),
-            right)
-      })
-    }
-  }
-
+  val Goal = perfect.lenses.ListInsertGoal
 }
 
