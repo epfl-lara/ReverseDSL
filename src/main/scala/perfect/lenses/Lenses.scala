@@ -117,7 +117,8 @@ object Lenses {
     def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
       Log(s"map.apply($newOutput)")
       val ProgramFormula(lambda: Lambda, lambdaF) = originalArgsValues.tail.head
-      val ProgramFormula(ListLiteral(originalInput, inputType), listF) = originalArgsValues.head
+      val ProgramFormula(ListLiteral(originalInput, listBuilder), listF) = originalArgsValues.head
+      val inputType = tpes.head
       val argType = lambda.args.head.getType
       val valueByDefault: Expr = originalInput.headOption.getOrElse(defaultValue(argType))
       val unknown = ValDef(FreshIdentifier("unknown"), argType)

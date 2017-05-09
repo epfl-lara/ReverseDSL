@@ -8,11 +8,11 @@ import inox.trees._
   */
 object ListLiteral {
   import Utils._
-  def unapply(e: Expr): Option[(List[Expr], Type)] = e match {
+  def unapply(e: Expr): Option[(List[Expr], List[Expr] => Expr)] = e match {
     case ADT(ADTType(cons, Seq(tp)), Seq(head, tail)) =>
-      unapply(tail).map(res => (head :: res._1, tp))
+      unapply(tail).map(res => (head :: res._1, args => apply(args, tp)))
     case ADT(ADTType(nil, Seq(tp)), Seq()) =>
-      Some((Nil, tp))
+      Some((Nil, args => apply(args, tp)))
     case _ => None
   }
   def apply(e: List[Expr], tp: Type): Expr = e match {

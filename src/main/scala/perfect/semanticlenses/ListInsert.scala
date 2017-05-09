@@ -50,8 +50,8 @@ object ListInsert extends CustomProgramFormula  {
                 } else { // after.length > 0
                   Log("afterLength > 0")
                   in.getFunctionValue match {
-                    case Some(ListLiteral(functionValueList, tpe)) =>
-                      val newTail = ListLiteral(functionValueList.tail, tpe)
+                    case Some(ListLiteral(functionValueList, listBuilder)) =>
+                      val newTail = listBuilder(functionValueList.tail)
 
                       if(after.length == functionValueList.length) { // No deletion.
                         Log("afterLength == functionValueList.length")

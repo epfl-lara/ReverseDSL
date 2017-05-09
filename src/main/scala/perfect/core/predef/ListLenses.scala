@@ -7,14 +7,11 @@ package predef
   *
   * Make sure the symbols contain the reference to the filter function taht it is mapped to.
   */
-trait ListLenses { self: ProgramUpdater with ContExps with Lenses =>
-
-  def extractInvocation(e: Exp)(implicit cache: Cache, symbols: Symbols):
-      Option[( Seq[Exp], Seq[Exp] => Exp )]
-
+trait ListLenses { self: ProgramUpdater with ContExps with Lenses with InvocationLenses =>
+  /** Returns the elements and a builder to build back the list. */
   def extractList(e: Exp): Option[(List[Exp], List[Exp] => Exp)]
 
-  def Application(a: Exp, b: Seq[Exp]): Exp
+  def Application(lambda: Exp, args: Seq[Exp]): Exp
 
   object ListLiteral {
     def unapply(e: Exp) = extractList(e)

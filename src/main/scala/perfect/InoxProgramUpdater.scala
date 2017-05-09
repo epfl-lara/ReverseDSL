@@ -4,6 +4,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with core.ContExps
     with core.Lenses
     with lenses.ShapeLenses
+    with core.predef.InvocationLenses
     with core.predef.ListLenses {
   type Exp = inox.trees.Expr
   type Symbols = inox.trees.Symbols
@@ -112,7 +113,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case _ => None
   }
   def extractList(e: Exp): Option[(List[Exp], List[Exp] => Exp)] = e match {
-    case perfect.ListLiteral(elements, tpe) => Some((elements, newElems => perfect.ListLiteral(newElems, tpe)))
+    case perfect.ListLiteral(elements, builder) => Some((elements, builder))
     case _ => None
   }
   def freshen(a: Var): Var = a.freshen
