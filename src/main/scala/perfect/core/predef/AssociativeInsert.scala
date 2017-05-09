@@ -1,5 +1,4 @@
-package perfect
-package semanticlenses
+package perfect.core.predef
 
 /**
   * Created by Mikael on 05/05/2017.

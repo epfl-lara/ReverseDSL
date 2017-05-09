@@ -323,6 +323,8 @@ trait ContExps { self: ProgramUpdater =>
       }
       (lb.toList, f)
     }
+
+    def apply(e: Exp, f: (Var, KnownValue)): ContExp = ContExp(e, Cont(Map(f)))
   }
 
   /** Previously 'ProgramFormula'*/

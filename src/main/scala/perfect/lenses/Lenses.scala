@@ -9,11 +9,13 @@ import inox.solvers._
 import perfect.ImplicitTuples.{_1, _2, tuple2}
 import ProgramFormula._
 import StringConcatExtended._
+import perfect.core.predef
 import perfect.core.predef.FilterLike
 
 object Lenses {
   import perfect.semanticlenses._
   import ReverseProgram.{maybeEvalWithCache, Cache, repair}
+  import perfect.core.predef.AssociativeInsert
 
   val lenses = List[Lens](
     FilterLens,

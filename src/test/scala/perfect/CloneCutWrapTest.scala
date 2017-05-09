@@ -16,6 +16,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   import StringConcatExtended._
   import ProgramFormula.CloneText
   import semanticlenses._
+  import core.predef.AssociativeInsert
   implicit val symbols = Utils.defaultSymbols
 
   test("Formula assignment") {

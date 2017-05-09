@@ -6,7 +6,9 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with lenses.ShapeLenses
     with lenses.ValueLenses
     with core.predef.InvocationLenses
-    with core.predef.ListLenses {
+    with core.predef.ListLenses
+    with core.predef.AssociativeLenses
+    with lenses.StringConcatLenses {
   type Exp = inox.trees.Expr
   type Symbols = inox.trees.Symbols
   type Var = inox.trees.Variable
@@ -123,6 +125,10 @@ object InoxProgramUpdater extends core.ProgramUpdater
     } else {
       Variable(inox.FreshIdentifier(perfect.Utils.uniqueName(a.id.name, others.map(v => v.id.name).toSet)), a.tpe, Set())
     }
+  }
+
+  def mkStringVar(name: String, avoid: Var*): Var = {
+    Variable(inox.FreshIdentifier(perfect.Utils.uniqueName(name, avoid.map(_.id.name).toSet)), StringType, Set())
   }
 
   // Lenses which do not need the value of the program to invert it.

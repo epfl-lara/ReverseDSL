@@ -15,6 +15,7 @@ class RecursiveTest extends FunSuite with TestHelpers {
   import Utils._
   import StringConcatExtended._
   import semanticlenses._
+  import core.predef.AssociativeInsert
   implicit val symbols = Utils.defaultSymbols
 
   val mapDef = lenses.Lenses.RecLens.build("map",

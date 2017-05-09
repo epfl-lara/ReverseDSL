@@ -10,13 +10,15 @@ trait ValueLenses
   extends PatternMatchLenses
      with PatternReplaceLenses
      with ListInsertLenses
-     with PasteVariableLenses { self: InoxProgramUpdater.type =>
+     with PasteVariableLenses
+     with StringInsertLenses { self: InoxProgramUpdater.type =>
 
   val valueLenses = ShortcutGoal(Map(
     PatternMatchGoal.id -> PatternMatchLens,
     PatternReplaceGoal.id -> PatternReplaceLens,
     ListInsertGoal.id -> ListInsertLens,
-    PasteVariableGoal.id -> PasteVariableLens
+    PasteVariableGoal.id -> PasteVariableLens,
+    StringInsertGoal.id -> StringInsertLens
   ), {(e: Exp) =>
     e match {
       case FunctionInvocation(id, _, _) => Some(id)

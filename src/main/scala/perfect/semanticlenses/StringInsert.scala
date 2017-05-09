@@ -84,7 +84,7 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
       }
     }
   }
-  import AssociativeInsert._
+  import perfect.core.predef.AssociativeInsert._
 
   def computeDirection(left: String, s: String, right: String): InsertDirection = {
     val leftJump = lenses.Lenses.StringConcatLens.typeJump(left, s)
@@ -111,33 +111,6 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
   def unapply(f: ProgramFormula): Option[(String, String, String, InsertDirection)] = {
     Goal.unapply(f.expr)
   }
-
-  object Goal extends FunDefGoal {
-    private val InsertString = FreshIdentifier("insertString")
-
-    def apply(left: String, s: String, right: String, direction: InsertDirection): Expr = {
-      E(InsertString)(StringLiteral(left), StringLiteral(s), StringLiteral(right), StringLiteral(direction.toString))
-    }
-
-    def unapply(e: Expr): Option[(String, String, String, InsertDirection)] = {
-      e match {
-        case FunctionInvocation(InsertString, Seq(), Seq(
-        StringLiteral(leftBefore), StringLiteral(inserted), StringLiteral(rightBefore), StringLiteral(AssociativeInsert(direction))
-        )) =>
-          Some((leftBefore, inserted, rightBefore, direction))
-        case _ =>
-          None
-      }
-    }
-
-    def funDef = mkFunDef(InsertString)(){ case _ =>
-      (Seq("left"::StringType, "inserted"::StringType, "right"::StringType, "direction"::StringType),
-        StringType,
-        {
-          case Seq(left, inserted, right, direction) =>
-            left +& inserted +& right // Dummy
-        })
-    }
-  }
+  val Goal = perfect.lenses.StringInsertGoal
 }
 
