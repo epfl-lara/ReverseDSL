@@ -229,7 +229,7 @@ object DefaultLens extends SemanticLens {
         case _ => throw new Exception(s"Don't know how to handle this case : $originalValueMaybe of type ${originalValueMaybe.get.getClass.getName}")
       }
 
-    case StringConcat(expr1, expr2) =>
+    /*case StringConcat(expr1, expr2) =>
       val replacement = in.subExpr(FunctionInvocation(StringConcatLens.identifier, Nil,
         Seq(expr1, expr2)))
       val replacementOut = out.wrap{
@@ -257,7 +257,7 @@ object DefaultLens extends SemanticLens {
           case _ => Stream.empty[ProgramFormula]
         }
       }
-
+*/
     case IfExpr(cond, thenn, elze) =>
       val cond_v = in.formula.assignments.flatMap(assign => maybeEvalWithCache(assign(cond))).getOrElse(return Stream.Empty)
       cond_v match {

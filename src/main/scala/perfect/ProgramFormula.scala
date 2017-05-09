@@ -224,12 +224,12 @@ object ProgramFormula {
 
   /** Given a sequence of (arguments expression, expectedValue),
       returns the cartesian product of all argument programs and solutions. */
-  def repairArguments(pf: ProgramFormula,
-       arguments: Seq[(Expr, ProgramFormula)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
-    Log(s"combining arguments for $pf")
+  def repairArguments(inFormula: Formula,
+                      arguments: Seq[(Expr, ProgramFormula)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
+    Log(s"combining arguments for $inFormula")
     val argumentsReversed = arguments.map { case (arg, expected) =>
       Log(s"repairing argument $arg should equal $expected")
-      repair(ProgramFormula(arg, pf.formula), expected)
+      repair(ProgramFormula(arg, inFormula), expected)
     }
     regroupArguments(argumentsReversed)
   }

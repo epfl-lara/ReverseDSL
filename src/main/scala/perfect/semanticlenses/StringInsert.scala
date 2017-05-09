@@ -30,20 +30,56 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
     case _ => None
     }
   }
-
-
-
+  
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
-      out match {
-        case StringInsert(left, inserted, right, direction) =>
+      out.simplifiedExpr match {
+        case StringConcat(outArg1, outArg2) =>
           in.expr match {
-            // Values (including lambdas) should be immediately replaced by the new value
-            case l: Literal[_] =>
-              Stream(ProgramFormula(StringLiteral(left + inserted + right)))
+            case StringConcat(expr1, expr2) =>
+              ProgramFormula.repairArguments(in.formula, Seq((expr1, out.subExpr(outArg1)), (expr2, out.subExpr(outArg2)))).map{ case (args, f) =>
+                ProgramFormula(StringConcat(args(0), args(1)), f)
+              }
             case _ => Stream.empty
           }
-        case _ => Stream.empty
+        case _ =>
+          in.expr match {
+            case StringLiteral(_) =>
+              out.expr match {
+                case StringInsert.Expr(left, inserted, right, direction) =>
+                  Stream(ProgramFormula(StringLiteral(left + inserted + right)))
+                case _ => Stream(out)
+              }
+            case StringConcat(expr1, expr2) =>
+              val expr1val = in.formula.assignments.flatMap(assign => maybeEvalWithCache(assign(expr1)))
+              val expr2val = in.formula.assignments.flatMap(assign => maybeEvalWithCache(assign(expr2)))
+              Utils.ifEmpty {
+                if (expr1val.isEmpty || expr2val.isEmpty) {
+                  Stream.empty
+                } else {
+                  val expr1v = expr1val.get
+                  val expr2v = expr2val.get
+                  ReverseProgram.StringConcatLens.put(Nil)(Seq(in.subExpr(expr1v), in.subExpr(expr2v)), out).flatMap { case (args, f) =>
+                    ProgramFormula.repairArguments(in.formula, Seq((expr1, args(0)), (expr2, args(1)))).map{ case (args2, f2) =>
+                      ProgramFormula(StringConcat(args2(0), args2(1)), f combineWith f2 combineWith args(0).formula combineWith args(1).formula)
+                    }
+                  }
+                }
+              } {
+                // We want to avoid at maximum having to solve constraints.
+                Stream(ProgramFormula(in.expr, Formula(Map(), out.expr === in.expr)))
+              } #::: {
+                out.expr match {
+                  // Handles insertion between two non-constants as a possible constant at the last resort.
+                  case StringInsert.Expr(left, inserted, right, direction) if !expr1.isInstanceOf[StringLiteral] && !expr2.isInstanceOf[StringLiteral] &&
+                    expr1val == Some(StringLiteral(left)) &&
+                    expr2val == Some(StringLiteral(right)) =>
+                    Stream(in.subExpr(expr1 +& StringLiteral(inserted) +& expr2).assignmentsAsOriginals())
+                  case _ => Stream.empty
+                }
+              }
+            case _ => Stream.empty
+          }
       }
     }
   }

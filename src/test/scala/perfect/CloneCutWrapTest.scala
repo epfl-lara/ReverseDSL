@@ -88,13 +88,11 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     implicit val symbols = Utils.defaultSymbols
     val newOut = _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Good morning")))))
 
-    Log activated {
-      pfun repairFrom newOut shouldProduce {
-        _Node("b", children = _List[Node](_Node("i", children = _List[Node](_Node("Good morning")))))
-      } match {
-        case Let(ad, ADT(ADTType(Utils.xmlNode, Seq()), Seq(StringLiteral("Good morning"), _, _)), e) =>
-          exprOps.variablesOf(e) should contain(ad.toVariable)
-      }
+    pfun repairFrom newOut shouldProduce {
+      _Node("b", children = _List[Node](_Node("i", children = _List[Node](_Node("Good morning")))))
+    } match {
+      case Let(ad, ADT(ADTType(Utils.xmlNode, Seq()), Seq(StringLiteral("Good morning"), _, _)), e) =>
+        exprOps.variablesOf(e) should contain(ad.toVariable)
     }
   }
 

@@ -13,7 +13,6 @@ object FunctionInvocationUnificationLens extends SemanticLens {
     out.expr match {
       case FunctionInvocation(f2, tpes2, args2) =>
         in.expr match {
-          // Values (including lambdas) should be immediately replaced by the new value
           case FunctionInvocation(f, tpes, args) if f == f2 && tpes == tpes2 =>
             val argsRepaired = args.zip(args2) map {
               case (a1, a2) => ReverseProgram.repair(in.subExpr(a1), out.subExpr(a2))

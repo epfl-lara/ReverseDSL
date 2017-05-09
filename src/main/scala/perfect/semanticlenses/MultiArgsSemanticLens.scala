@@ -18,7 +18,7 @@ trait MultiArgsSemanticLens extends SemanticLens with MultipleArgExtractor {
               val argsFormulas = argsOptValue.map(x => in.subExpr(x.get))
               val lenseResult = wrapper(argsFormulas, out)
               for {l <- lenseResult; (newArgsValues, newForm) = l
-                   a <- ProgramFormula.repairArguments(in, args.zip(newArgsValues))
+                   a <- ProgramFormula.repairArguments(in.formula, args.zip(newArgsValues))
                    (newArguments, newArgumentsFormula) = a
               } yield {
                 val formula = newForm combineWith newArgumentsFormula
