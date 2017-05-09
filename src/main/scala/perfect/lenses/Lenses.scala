@@ -159,7 +159,7 @@ object Lenses {
             ???
           } else {
             repair(ProgramFormula(Application(lambda, Seq(original))),
-              newOutput.subExpr(TreeModification.Expr(tpeGlobal, tpeLocal, originalOutputModifList2(index.length), modified, remaining.tail))) map {
+              newOutput.subExpr(TreeModification.Goal(tpeGlobal, tpeLocal, originalOutputModifList2(index.length), modified, remaining.tail))) map {
               case pf@ProgramFormula(Application(lExpr, Seq(expr2)), formula2) =>
                 val lambda2 = castOrFail[Expr, Lambda](lExpr)
                 if (lambda2 != lambda && expr2 == original) {
@@ -814,13 +814,13 @@ object Lenses {
 
       // Prioritize changes that touch only one of the two expressions.
       newOutput match {
-        case ListInsert.Expr(tpe, leftAfter, inserted, rightAfter) =>
+        case ListInsert.Goal(tpe, leftAfter, inserted, rightAfter) =>
           associativeInsert(leftValue_s, rightValue_s, leftAfter, inserted, rightAfter,
             AssociativeInsert.InsertAutomatic,
             ListLiteral(_, tpe),
             ListInsert(tpe, _, _, _))
 
-        case TreeModification.Expr(tpeGlobal, tpeLocal, original@ADT(adt, Seq(hdOriginal, tlOriginal)), modified, path) =>
+        case TreeModification.Goal(tpeGlobal, tpeLocal, original@ADT(adt, Seq(hdOriginal, tlOriginal)), modified, path) =>
           val (index, remaining) = path.span(_ == Utils.tail)
           leftValue match {
             case ListLiteral(l, _) =>
@@ -1053,7 +1053,7 @@ object Lenses {
 
       // Prioritize changes that touch only one of the two expressions.
       newOutputProgram.expr match {
-        case StringInsert.Expr(leftAfter, inserted, rightAfter, direction) =>
+        case StringInsert.Goal(leftAfter, inserted, rightAfter, direction) =>
           val StringLiteral(rightValue_s) = rightValue
           val StringLiteral(leftValue_s) = leftValue
 
@@ -1062,7 +1062,7 @@ object Lenses {
             StringLiteral,
             (l: String, i: String, r: String) => StringInsert(l, i, r, direction)
           )
-        case pc@CloneTextMultiple.Expr(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
+        case pc@CloneTextMultiple.Goal(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
           def cloneToLeft: List[ArgumentsFormula] = {
             if(right.endsWith(rv)) {
               val newLeft = left
@@ -1096,7 +1096,7 @@ object Lenses {
           }
           (cloneToLeft ++ cloneToRight ++ cloneBoth).toStream
 
-        case pv@PasteVariable.Expr(left, v, v_value, right, direction) =>
+        case pv@PasteVariable.Goal(left, v, v_value, right, direction) =>
           def pasteToLeft: List[(ArgumentsFormula, Int)] = {
             /*Log(s"Right:'$right'")
             Log(s"Right:'$right'")*/
@@ -1257,7 +1257,7 @@ object Lenses {
 
       // Bidirectionalization for free, we recover the position of the original elements.
       newOutput.simplifiedExpr match {
-        case TreeModification.Expr(tpeGlobal, tpeLocal, original, modified, arguments) =>
+        case TreeModification.Goal(tpeGlobal, tpeLocal, original, modified, arguments) =>
           val (index, remaining) = arguments.span(_ == tail)
           if(remaining.nonEmpty) {
             val n = index.length
@@ -1282,7 +1282,7 @@ object Lenses {
                 Stream.empty
             }
           } else ??? // We tried to change one of the tails. Not supported.
-        case ListInsert.Expr(tpe, left, inserted, right) => // We care only about deleted elements.
+        case ListInsert.Goal(tpe, left, inserted, right) => // We care only about deleted elements.
           if(left.length + right.length == inList.length) { // Only inserted elements. We insert them at the end of the original list.
             Stream((Seq(ListInsert(tpe, inList, inserted, Nil) combineWith inListF.assignmentsAsOriginals,
               lambdaProg.assignmentsAsOriginals()), Formula()))

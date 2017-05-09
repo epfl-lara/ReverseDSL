@@ -7,6 +7,7 @@ import inox.trees.dsl._
 import perfect.ProgramFormula.CustomProgramFormula
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
+import perfect.lenses.FunDefGoal
 
 
 /**
@@ -15,14 +16,14 @@ import perfect.StringConcatExtended._
 object ListInsert extends CustomProgramFormula  {
   object Eval {
     def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
-      case Expr(tpe, left, middle, right) =>
+      case Goal(tpe, left, middle, right) =>
         Some(ListLiteral(left ++ middle ++ right, tpe))
       case _ => None
     }
   }
   def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
-    e1 match { case ListInsert.Expr(tpe, left, inserted, right) =>
-      e2 match { case ListInsert.Expr(tpe, left, inserted, right) =>
+    e1 match { case ListInsert.Goal(tpe, left, inserted, right) =>
+      e2 match { case ListInsert.Goal(tpe, left, inserted, right) =>
           Log(s"[internal warning]: Merge of two list exprs not supported $e1, $e2")
           None
         case _ => None
@@ -34,7 +35,7 @@ object ListInsert extends CustomProgramFormula  {
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {
-        case ListInsert.Expr(tpe, before, inserted, after) =>
+        case ListInsert.Goal(tpe, before, inserted, after) =>
           in.expr match {
             case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
               Log("ListInsert")
@@ -100,16 +101,17 @@ object ListInsert extends CustomProgramFormula  {
     isPreemptive = true
   }
 
-  private val InsertList = FreshIdentifier("insertList")
   def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr]): ProgramFormula = {
-    ProgramFormula(Expr(tpe, leftUnmodified, inserted, rightUnmodified))
+    ProgramFormula(Goal(tpe, leftUnmodified, inserted, rightUnmodified))
   }
 
   def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr])] = {
-    Expr.unapply(f.expr)
+    Goal.unapply(f.expr)
   }
 
-  object Expr {
+  object Goal extends FunDefGoal {
+    private val InsertList = FreshIdentifier("insertList")
+
     def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr]): Expr = {
       E(InsertList)(tpe)(
         ListLiteral(leftUnmodified, tpe),
@@ -130,17 +132,18 @@ object ListInsert extends CustomProgramFormula  {
         case _ => None
       }
     }
+
+    def funDef = mkFunDef(InsertList)("A"){ case Seq(tA) =>
+      (Seq("left"::T(Utils.list)(tA), "inserted"::T(Utils.list)(tA), "right"::T(Utils.list)(tA), "direction"::StringType),
+        T(Utils.list)(tA), {
+        case Seq(left, inserted, right, direction) =>
+          E(Utils.listconcat)(tA)(E(Utils.listconcat)(tA)(
+            left,
+            inserted),
+            right)
+      })
+    }
   }
 
-  def funDef = mkFunDef(InsertList)("A"){ case Seq(tA) =>
-    (Seq("left"::T(Utils.list)(tA), "inserted"::T(Utils.list)(tA), "right"::T(Utils.list)(tA), "direction"::StringType),
-      T(Utils.list)(tA), {
-      case Seq(left, inserted, right, direction) =>
-        E(Utils.listconcat)(tA)(E(Utils.listconcat)(tA)(
-          left,
-          inserted),
-          right)
-    })
-  }
 }
 

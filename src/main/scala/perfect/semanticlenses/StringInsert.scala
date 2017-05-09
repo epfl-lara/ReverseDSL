@@ -7,6 +7,7 @@ import inox.trees.dsl._
 import perfect.ProgramFormula.CustomProgramFormula
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
+import perfect.lenses.FunDefGoal
 
 /**
   * Created by Mikael on 05/05/2017.
@@ -15,14 +16,14 @@ import perfect.StringConcatExtended._
 object StringInsert extends Enumeration with CustomProgramFormula  {
   object Eval {
     def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
-      case Expr(left, middle, right, direction) => Some(StringLiteral(left + middle + right))
+      case Goal(left, middle, right, direction) => Some(StringLiteral(left + middle + right))
       case _ => None
     }
   }
 
   def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
-    e1 match { case Expr(left, insert, right, direction) =>
-      e2 match { case Expr(left1, insert1, right1, direction1) =>
+    e1 match { case Goal(left, insert, right, direction) =>
+      e2 match { case Goal(left1, insert1, right1, direction1) =>
         Log(s"[internal warning]: Merge of two String insert not supported $e1, $e2")
         None
       case _ => None
@@ -46,7 +47,7 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
           in.expr match {
             case StringLiteral(_) =>
               out.expr match {
-                case StringInsert.Expr(left, inserted, right, direction) =>
+                case StringInsert.Goal(left, inserted, right, direction) =>
                   Stream(ProgramFormula(StringLiteral(left + inserted + right)))
                 case _ => Stream(out)
               }
@@ -71,7 +72,7 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
               } #::: {
                 out.expr match {
                   // Handles insertion between two non-constants as a possible constant at the last resort.
-                  case StringInsert.Expr(left, inserted, right, direction) if !expr1.isInstanceOf[StringLiteral] && !expr2.isInstanceOf[StringLiteral] &&
+                  case StringInsert.Goal(left, inserted, right, direction) if !expr1.isInstanceOf[StringLiteral] && !expr2.isInstanceOf[StringLiteral] &&
                     expr1val == Some(StringLiteral(left)) &&
                     expr2val == Some(StringLiteral(right)) =>
                     Stream(in.subExpr(expr1 +& StringLiteral(inserted) +& expr2).assignmentsAsOriginals())
@@ -83,9 +84,6 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
       }
     }
   }
-
-  private val InsertString = FreshIdentifier("insertString")
-
   import AssociativeInsert._
 
   def computeDirection(left: String, s: String, right: String): InsertDirection = {
@@ -107,14 +105,16 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
     * @param direction -1 if the insertion should be inserted to left, 1 to right, 0 if automatically guessed.
     **/
   def apply(left: String, s: String, right: String, direction: InsertDirection): ProgramFormula = {
-    ProgramFormula(Expr(left, s, right, direction))
+    ProgramFormula(Goal(left, s, right, direction))
   }
 
   def unapply(f: ProgramFormula): Option[(String, String, String, InsertDirection)] = {
-    Expr.unapply(f.expr)
+    Goal.unapply(f.expr)
   }
 
-  object Expr {
+  object Goal extends FunDefGoal {
+    private val InsertString = FreshIdentifier("insertString")
+
     def apply(left: String, s: String, right: String, direction: InsertDirection): Expr = {
       E(InsertString)(StringLiteral(left), StringLiteral(s), StringLiteral(right), StringLiteral(direction.toString))
     }
@@ -129,15 +129,15 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
           None
       }
     }
-  }
 
-  def funDef = mkFunDef(InsertString)(){ case _ =>
-    (Seq("left"::StringType, "inserted"::StringType, "right"::StringType, "direction"::StringType),
-      StringType,
-      {
-        case Seq(left, inserted, right, direction) =>
-          left +& inserted +& right // Dummy
-      })
+    def funDef = mkFunDef(InsertString)(){ case _ =>
+      (Seq("left"::StringType, "inserted"::StringType, "right"::StringType, "direction"::StringType),
+        StringType,
+        {
+          case Seq(left, inserted, right, direction) =>
+            left +& inserted +& right // Dummy
+        })
+    }
   }
 }
 

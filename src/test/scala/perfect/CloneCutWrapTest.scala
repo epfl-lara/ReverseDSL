@@ -441,7 +441,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("Add space after clone") {
     val pfun:Expr = let("move_it"::StringType, "move it")(move_it => "I like to "+&move_it)
 
-    repairProgramList(pfun, StringInsert.Expr("I like to move it", " ", "", AssociativeInsert.InsertAutomatic), 2).map{
+    repairProgramList(pfun, StringInsert("I like to move it", " ", "", AssociativeInsert.InsertAutomatic), 2).map{
       case Let(p, StringLiteral("move it"), body) => 1
       case Let(p, StringLiteral("move it "), body) => 2
     }.sum shouldEqual 3
@@ -538,7 +538,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("Clone accross a StringConcat of same variables but wider") {
     val pfun = let("move"::String, "move it ")(move => move +& move)
 
-    val ct@ProgramFormula(CloneTextMultiple.Expr(_, (_, cloned, _)::Nil), _) = CloneText("move", " it move ", "it ")
+    val ct@ProgramFormula(CloneTextMultiple.Goal(_, (_, cloned, _)::Nil), _) = CloneText("move", " it move ", "it ")
     val pfun2 = pfun repairFrom ct shouldProduce StringLiteral("move it move it ")
 
     val pfun3 = updateBody(pfun2){
@@ -552,7 +552,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
   test("Clone accross a StringConcat of same variables with identical overlap") {
     val pfun = let("move"::String, "mov it ")(move => move +& move +& move)
 
-    val ct@ProgramFormula(CloneTextMultiple.Expr(_, (_, cloned, _)::Nil), _) = CloneText("mov ", "it mov it mov ", "it ")
+    val ct@ProgramFormula(CloneTextMultiple.Goal(_, (_, cloned, _)::Nil), _) = CloneText("mov ", "it mov it mov ", "it ")
     val pfun2 = pfun repairFrom ct shouldProduce StringLiteral("mov it mov it mov it ")
     val pfun3 = updateBody(pfun2){
       case moveVar +& moveVar2 +& moveVar3 => moveVar +& moveVar2 +& moveVar3 +& cloned

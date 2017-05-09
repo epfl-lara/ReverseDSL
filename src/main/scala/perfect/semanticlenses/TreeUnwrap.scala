@@ -15,7 +15,7 @@ import perfect.StringConcatExtended._
 object TreeUnwrap extends CustomProgramFormula  {
   object Eval {
     def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
-      case Expr(tpe, a, argsInSequence) =>
+      case Goal(tpe, a, argsInSequence) =>
         argsInSequence match {
           case Nil => Some(a)
           case head :: tail =>
@@ -24,7 +24,7 @@ object TreeUnwrap extends CustomProgramFormula  {
                 symbols.adts(adtid) match {
                   case f: ADTConstructor =>
                     val i = f.selectorID2Index(head)
-                    unapply(Expr(tpe, args(i), tail))
+                    unapply(Goal(tpe, args(i), tail))
                   case _ => None
                 }
               case _ => None
@@ -34,8 +34,8 @@ object TreeUnwrap extends CustomProgramFormula  {
     }
   }
   def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
-    e1 match { case Expr(tpeGlobal, unwrap, l) =>
-      e2 match { case Expr(tpeGlobal2, unwrap2, l2) =>
+    e1 match { case Goal(tpeGlobal, unwrap, l) =>
+      e2 match { case Goal(tpeGlobal2, unwrap2, l2) =>
         Log(s"[internal warning]: Merge of two Tree unwrap not supported $e1, $e2")
         None
       case _ => None
@@ -49,7 +49,7 @@ object TreeUnwrap extends CustomProgramFormula  {
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {
-      case TreeUnwrap.Expr(tpe, original, l) =>
+      case TreeUnwrap.Goal(tpe, original, l) =>
         l match {
         case Nil => Stream(in.assignmentsAsOriginals())
         case head :: tail =>
@@ -70,60 +70,12 @@ object TreeUnwrap extends CustomProgramFormula  {
     isPreemptive = true
   }
 
-  private val Unwrap = FreshIdentifier("unwrap")
-
   def apply(tpe: Type, original: Expr, argsInSequence: List[Identifier]): ProgramFormula = {
-    ProgramFormula(Expr(tpe, original, argsInSequence))
+    ProgramFormula(Goal(tpe, original, argsInSequence))
   }
   def unapply(pf: ProgramFormula): Option[(Type, Expr, List[Identifier])] = {
-    Expr.unapply(pf.expr)
+    Goal.unapply(pf.expr)
   }
-  object Expr {
-    def apply(tpe: Type, original: Expr, argsInSequence: List[Identifier]): Expr = {
-      E(Unwrap)(tpe)(original, Select(tpe, argsInSequence))
-    }
-    def unapply(e: Expr): Option[(Type, Expr, List[Identifier])] = {
-      e match {
-        case FunctionInvocation(Unwrap, Seq(tpe), Seq(original, Lambda(Seq(unwrapvd), adtselectors))) =>
-          def unbuild(e: Expr): (Type, Expr, List[Identifier]) = e match {
-            case ADTSelector(e, i) =>
-              val (t, res, l) = unbuild(e)
-              (t, res, l :+ i)
-            case res => (tpe, original, Nil)
-          }
-          Some(unbuild(adtselectors))
-        case _ => None
-      }
-    }
-  }
-
-  /** Builds and Unbuilds a lambda to select parts of the expression */
-  object Select {
-    def apply(tpe: Type, argsInSequence: List[Identifier]): Expr = {
-      \("original"::tpe)(original =>
-        ((original: Expr) /: argsInSequence){ case (e, i) => ADTSelector(e, i)}
-      )
-    }
-    def unapply(e: Expr): Option[(Type, List[Identifier])] = {
-      e match {
-        case Lambda(Seq(ValDef(_, tpe, _)), body) =>
-          def unbuild(e: Expr): Option[(Type, List[Identifier])] = e match {
-            case ADTSelector(e, i) => unbuild(e) map { case (t, l) => (t, l :+ i) }
-            case v: Variable => Some((tpe, Nil))
-            case _ => None
-          }
-          unbuild(body)
-        case _ => None
-      }
-    }
-  }
-
-  def funDef = mkFunDef(Unwrap)("A"){ case Seq(tA) =>
-    (Seq("original"::tA, "unwrapper"::FunctionType(Seq(tA), tA)),
-      tA, {
-      case Seq(original, unwrapper) =>
-        Application(unwrapper, Seq(original))
-    })
-  }
+  val Goal = lenses.TreeUnwrapGoal
 }
 

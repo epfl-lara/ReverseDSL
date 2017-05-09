@@ -7,6 +7,7 @@ import inox.trees.dsl._
 import perfect.ProgramFormula.CustomProgramFormula
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
+import perfect.lenses.FunDefGoal
 
 
 /**
@@ -16,14 +17,14 @@ import perfect.StringConcatExtended._
 object PasteVariable extends Enumeration with CustomProgramFormula  {
   object Eval {
     def unapply(arg: Expr)(implicit symbols: Symbols): Option[Expr] = arg match {
-      case Expr(left, insertedVar, originalVarValue, right, direction) =>
+      case Goal(left, insertedVar, originalVarValue, right, direction) =>
         Some(StringLiteral(left + originalVarValue + right))
       case _ => None
     }
   }
   def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
-    e1 match { case PasteVariable.Expr(left, v, v_value, right, direction) =>
-      e2 match { case PasteVariable.Expr(left2, v2, v2_value, right2, direction2) =>
+    e1 match { case PasteVariable.Goal(left, v, v_value, right, direction) =>
+      e2 match { case PasteVariable.Goal(left2, v2, v2_value, right2, direction2) =>
         Log(s"[internal warning]: Merge of two paste exprs not supported $e1, $e2")
         None
       case _ => None
@@ -35,7 +36,7 @@ object PasteVariable extends Enumeration with CustomProgramFormula  {
   object Lens extends SemanticLens {
     def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {
-        case PasteVariable.Expr(left, v2, v2_value, right, direction) =>
+        case PasteVariable.Goal(left, v2, v2_value, right, direction) =>
           in.expr match {
             case l: Literal[_] =>
               val newExpr = StringLiteral(left) +<>& v2 +<>& StringLiteral(right)
@@ -78,8 +79,6 @@ object PasteVariable extends Enumeration with CustomProgramFormula  {
     isPreemptive = true
   }
 
-  private val Paste = FreshIdentifier("pastevariable")
-
   type PasteDirection = Value
   val PasteToLeft, PasteToRight, PasteAutomatic = Value
   private object Direction {
@@ -87,14 +86,15 @@ object PasteVariable extends Enumeration with CustomProgramFormula  {
       values.find(_.toString == s)
   }
   def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: PasteDirection): ProgramFormula = {
-    ProgramFormula(Expr(left, insertedVar, originalVarValue, right, direction))
+    ProgramFormula(Goal(left, insertedVar, originalVarValue, right, direction))
   }
 
   def unapply(f: ProgramFormula): Option[(String, Variable, String, String, PasteDirection)] = {
-    Expr.unapply(f.expr)
+    Goal.unapply(f.expr)
   }
 
-  object Expr {
+  object Goal extends FunDefGoal {
+    private val Paste = FreshIdentifier("pastevariable")
     def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: PasteDirection): Expr = {
       E(Paste)(
         StringLiteral(left),
@@ -119,15 +119,15 @@ object PasteVariable extends Enumeration with CustomProgramFormula  {
           None
       }
     }
-  }
 
-  def funDef = mkFunDef(Paste)(){ case _ =>
-    (Seq("left"::StringType, "pasted"::StringType,  "originalvalue"::StringType, "right"::StringType, "direction"::StringType),
-      StringType,
-      {
-        case Seq(left, pasted, originalvalue, right, direction) =>
-          left +& originalvalue +& right // Dummy
-      })
+    def funDef = mkFunDef(Paste)(){ case _ =>
+      (Seq("left"::StringType, "pasted"::StringType,  "originalvalue"::StringType, "right"::StringType, "direction"::StringType),
+        StringType,
+        {
+          case Seq(left, pasted, originalvalue, right, direction) =>
+            left +& originalvalue +& right // Dummy
+        })
+    }
   }
 }
 

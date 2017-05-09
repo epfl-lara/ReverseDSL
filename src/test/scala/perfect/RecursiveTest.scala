@@ -45,7 +45,7 @@ class RecursiveTest extends FunSuite with TestHelpers {
       mp(_List[String]("brother", "boss"), \("s"::String)(s => "Big " +& s))
     )
     val original = _List[String]("Big brother", "Big boss")
-    val modified = StringInsert.Expr("Big brother", "s", "", AssociativeInsert.InsertAutomatic)
+    val modified = StringInsert.Goal("Big brother", "s", "", AssociativeInsert.InsertAutomatic)
     prog shouldProduce original
     Log activated (prog repairFrom
       TreeModification(

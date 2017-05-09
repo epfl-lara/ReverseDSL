@@ -25,11 +25,13 @@ object ProgramFormula {
 
 
   trait CustomProgramFormula {
-    def funDef: FunDef
-
     def Eval: {
       def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr]
     }
+
+    def Goal: lenses.FunDefGoal
+
+    def funDef = Goal.funDef
   }
 
   trait MergeProgramFormula {
@@ -58,17 +60,17 @@ object ProgramFormula {
 
   object CloneTextMultiple {
     def apply(left: String, textVarRights: List[(String, Variable, String)])(implicit symbols: Symbols): ProgramFormula =
-      ProgramFormula(Expr(left, textVarRights))
+      ProgramFormula(Goal(left, textVarRights))
 
-    object Expr {
+    object Goal {
       def apply(left: String, textVarRights: List[(String, Variable, String)])(implicit symbols: Symbols) = {
         val before = ((StringLiteral(left): Expr) /: textVarRights) {
           case (e: Expr, (middle, v, right)) => e +<>& v +<>& StringLiteral(right)
         }
-        PatternMatch.Expr(before, textVarRights.map(x => x._2 -> StringLiteral(x._1)), true)
+        PatternMatch.Goal(before, textVarRights.map(x => x._2 -> StringLiteral(x._1)), true)
       }
       def unapply(e: Expr)(implicit symbols: Symbols): Option[(String, List[(String, Variable, String)])] = e match {
-        case PatternMatch.Expr(StringConcats.Exhaustive(strs), variables, true) =>
+        case PatternMatch.Goal(StringConcats.Exhaustive(strs), variables, true) =>
           def getVarValue(v: Variable): String = variables.collectFirst {
             case (v2, StringLiteral(s)) if v2 == v => s
           }.get
@@ -100,8 +102,8 @@ object ProgramFormula {
             assert(left2.startsWith(left1))
             merge("", textVarRight1,
               left2.substring(0, left1.length), textVarRight2, inserted).map{
-              case (Expr(newLeft1, newTextVarRight1), vk) =>
-                (Expr(left1 + newLeft1, newTextVarRight1), vk)
+              case (Goal(newLeft1, newTextVarRight1), vk) =>
+                (Goal(left1 + newLeft1, newTextVarRight1), vk)
             }
           } else { // if(left1.length > left2.length)
             merge(left2, textVarRight2, left1, textVarRight1, inserted)
@@ -122,8 +124,8 @@ object ProgramFormula {
                   val updatedLeft2 = left2.substring(middle1.length)
                   val updatedRight1 = right1
                   merge(updatedRight1, tail1, updatedLeft2, textVarRight2, inserted).map {
-                    case (Expr(leftNew, textVarRightNew), mp) =>
-                      (Expr(left1, (middle1, v1, leftNew) :: textVarRightNew), mp)
+                    case (Goal(leftNew, textVarRightNew), mp) =>
+                      (Goal(left1, (middle1, v1, leftNew) :: textVarRightNew), mp)
                   }
                 } else if(left2.length == 0) { // Overlapping between variables
                   if(middle1.length == middle2.length) {
@@ -133,8 +135,8 @@ object ProgramFormula {
                         None
                       } else {
                         merge(right1, tail1, right2, tail2, inserted) map {
-                          case (Expr(leftNew, textVarRightNew), mp) =>
-                            (Expr("", (middle1, v1, leftNew)::textVarRightNew),
+                          case (Goal(leftNew, textVarRightNew), mp) =>
+                            (Goal("", (middle1, v1, leftNew)::textVarRightNew),
                               (v2 -> InsertVariable(v1)) +: mp)
                         }
                       }
@@ -144,8 +146,8 @@ object ProgramFormula {
                       } else { // We insert a new variable and link the two other variables.
                         val v = CloneText.Var(v1.id.name, Seq(v2.id.name))
                         merge(right1, tail1, right2, tail2, inserted) map {
-                          case (Expr(leftNew, textVarRightNew), mp) =>
-                            (Expr("", (middle1, v, leftNew)::textVarRightNew),
+                          case (Goal(leftNew, textVarRightNew), mp) =>
+                            (Goal("", (middle1, v, leftNew)::textVarRightNew),
                               (v1 -> InsertVariable(v)) +: (v2 -> InsertVariable(v)) +: mp)
                         }
                       }
@@ -162,8 +164,8 @@ object ProgramFormula {
                         val positionSplit = middle1.length
                         val newMiddle2 = middle2.substring(positionSplit)
                         merge(right1, tail1, "", (newMiddle2, v2p2, right2)::tail2, inserted) map {
-                          case (Expr(leftNew, textVarRightNew), mp) =>
-                            (Expr("", (middle1, v1, leftNew)::textVarRightNew), news +: mp)
+                          case (Goal(leftNew, textVarRightNew), mp) =>
+                            (Goal("", (middle1, v1, leftNew)::textVarRightNew), news +: mp)
                         }
                       }
                     } else {

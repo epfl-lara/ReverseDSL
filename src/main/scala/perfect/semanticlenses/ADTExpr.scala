@@ -7,6 +7,7 @@ import inox.trees.dsl._
 import perfect.ProgramFormula.{CustomProgramFormula, MergeProgramFormula}
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
+import perfect.lenses.FunDefGoal
 
 /**
   * Created by Mikael on 04/05/2017.
@@ -81,10 +82,14 @@ object ADTExpr extends CustomProgramFormula with MergeProgramFormula {
     case _ => None
   }
 
-  def funDef = mkFunDef(FreshIdentifier("ADT"))("A"){ case Seq(tA) =>
-    (Seq("id"::tA), tA,
-      { case Seq(id) =>
-        id // Dummy
-      })
+
+  object Goal extends FunDefGoal {
+    def funDef = mkFunDef(FreshIdentifier("ADT"))("A"){ case Seq(tA) =>
+      (Seq("id"::tA), tA,
+        { case Seq(id) =>
+          id // Dummy
+        })
+    }
   }
+
 }

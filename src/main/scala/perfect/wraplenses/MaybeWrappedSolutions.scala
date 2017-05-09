@@ -188,8 +188,8 @@ object MaybeWrappedSolutions extends SemanticLens {
               (if(s.endsWith(t)) wrapToLeft(s.substring(0, s.length - t.length)) else Stream.empty)
             ) /:: Log.prefix("@return wrapped: ")
         }
-      case StringInsert.Expr("", inserted, right, direction) if t == right => wrapToLeft(inserted)
-      case StringInsert.Expr(left, inserted, "", direction) if t == left => wrapToRight(inserted)
+      case StringInsert.Goal("", inserted, right, direction) if t == right => wrapToLeft(inserted)
+      case StringInsert.Goal(left, inserted, "", direction) if t == left => wrapToRight(inserted)
       case _ => Stream.empty
     }
   }

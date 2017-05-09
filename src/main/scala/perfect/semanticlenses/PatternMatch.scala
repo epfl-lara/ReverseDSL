@@ -7,6 +7,7 @@ import inox.trees.dsl._
 import perfect.ProgramFormula.{CloneTextMultiple, CustomProgramFormula, MergeProgramFormula}
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
+import perfect.lenses.FunDefGoal
 
 /**
   * Created by Mikael on 04/05/2017.
@@ -14,24 +15,24 @@ import perfect.StringConcatExtended._
 object PatternMatch extends CustomProgramFormula with MergeProgramFormula {
   object Eval {
     def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr] = e match {
-      case PatternMatch.Expr(before, variables, forClone) =>
+      case PatternMatch.Goal(before, variables, forClone) =>
         Some(exprOps.replaceFromSymbols(variables.toMap, before))
       case _ => None
     }
   }
   def merge(e1: Expr, e2: Expr)(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
     e2 match {
-      case PatternMatch.Expr(before, variables, forClone) =>
+      case PatternMatch.Goal(before, variables, forClone) =>
         e1 match {
-          case CloneTextMultiple.Expr(left2, textVarRight2) =>
+          case CloneTextMultiple.Goal(left2, textVarRight2) =>
             e2 match {
-              case CloneTextMultiple.Expr(left1, textVarRight1) =>
-                CloneTextMultiple.Expr.merge(left1, textVarRight1, left2, textVarRight2)
+              case CloneTextMultiple.Goal(left1, textVarRight1) =>
+                CloneTextMultiple.Goal.merge(left1, textVarRight1, left2, textVarRight2)
               case _ => None
             }
 
-          case PatternMatch.Expr(before2, variables2, forClone2) =>
-            PatternMatch.Expr.merge(before, variables, forClone, before2, variables2, forClone2)
+          case PatternMatch.Goal(before2, variables2, forClone2) =>
+            PatternMatch.Goal.merge(before, variables, forClone, before2, variables2, forClone2)
           case _ => None
         }
       case _ => None
@@ -41,7 +42,7 @@ object PatternMatch extends CustomProgramFormula with MergeProgramFormula {
   object Lens extends SemanticLens {
     override def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       out.simplifiedExpr match {
-        case PatternMatch.Expr(pattern, variables, forClone) =>
+        case PatternMatch.Goal(pattern, variables, forClone) =>
           in.expr match {
             case l: Literal[_] =>
               pattern match {
@@ -80,8 +81,8 @@ object PatternMatch extends CustomProgramFormula with MergeProgramFormula {
                     val newLeftPattern = StringConcats(patterns.take(shortestTailForLeft.length))
                     val newRightPattern = StringConcats(patterns.drop(shortestTailForLeft.length))
                     val arguments = List(
-                      repair(in.subExpr(expr1), out.subExpr(PatternMatch.Expr(newLeftPattern, variables, forClone))),
-                      repair(in.subExpr(expr2), out.subExpr(PatternMatch.Expr(newRightPattern, variables, forClone))))
+                      repair(in.subExpr(expr1), out.subExpr(PatternMatch.Goal(newLeftPattern, variables, forClone))),
+                      repair(in.subExpr(expr2), out.subExpr(PatternMatch.Goal(newRightPattern, variables, forClone))))
                     for{ regroupped <- ProgramFormula.regroupArguments(arguments)
                          (Seq(newLeft1, newLeft2), formula) = regroupped
                     } yield {
@@ -120,8 +121,8 @@ object PatternMatch extends CustomProgramFormula with MergeProgramFormula {
                             (rightVar, StringLiteral(lastValue.substring(extra))))
 
                         val arguments = List(
-                          repair(in.subExpr(expr1), out.subExpr(PatternMatch.Expr(newLeftPattern, newVariables, forClone))),
-                          repair(in.subExpr(expr2), out.subExpr(PatternMatch.Expr(newRightPattern, newVariables, forClone))))
+                          repair(in.subExpr(expr1), out.subExpr(PatternMatch.Goal(newLeftPattern, newVariables, forClone))),
+                          repair(in.subExpr(expr2), out.subExpr(PatternMatch.Goal(newRightPattern, newVariables, forClone))))
                         for{ regroupped <- ProgramFormula.regroupArguments(arguments)
                              (Seq(newLeft1, newLeft2), formula) = regroupped
                         } yield {
@@ -137,7 +138,7 @@ object PatternMatch extends CustomProgramFormula with MergeProgramFormula {
                 case ADT(adtType2, argsIn2) if adtType2 == adtType =>
                   val argumentsRepaired = for{ (argIn, argIn2) <- argsIn.zip(argsIn2) } yield {
                     repair(in.subExpr(argIn), out.subExpr(
-                      PatternMatch.Expr(
+                      PatternMatch.Goal(
                         argIn2, variables, forClone
                       )
                     )
@@ -168,16 +169,16 @@ object PatternMatch extends CustomProgramFormula with MergeProgramFormula {
     isPreemptive = true
   }
 
-  private val PMId = FreshIdentifier("matcher")
 
   def apply(before: Expr, variables: List[(Variable, Expr)], forClone: Boolean)(implicit symbols: Symbols) =
-    ProgramFormula(Expr(before, variables, forClone))
+  ProgramFormula(Goal(before, variables, forClone))
   def unapply(e: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)], Boolean)] = {
-    Expr.unapply(e.expr)
+    Goal.unapply(e.expr)
   }
 
-  object Expr {
+  object Goal extends FunDefGoal {
     import ImplicitTuples._
+    private val PMId = FreshIdentifier("matcher")
 
     def merge(before1: Expr, variables1: List[(Variable, Expr)], forClone1: Boolean,
               before2: Expr, variables2: List[(Variable, Expr)], forClone2: Boolean, insertedVariables: Set[Variable] = Set())(implicit symbols: Symbols): Option[(Expr, Seq[(Variable, KnownValue)])] = {
@@ -206,12 +207,12 @@ object PatternMatch extends CustomProgramFormula with MergeProgramFormula {
         case _ => None
       }
     }
-  }
 
-  def funDef = mkFunDef(PMId)("A"){ case Seq(tA) =>
-    (Seq("id"::tA), tA,
-      { case Seq(id) =>
-        id // Dummy
-      })
+    def funDef = mkFunDef(PMId)("A"){ case Seq(tA) =>
+      (Seq("id"::tA), tA,
+        { case Seq(id) =>
+          id // Dummy
+        })
+    }
   }
 }

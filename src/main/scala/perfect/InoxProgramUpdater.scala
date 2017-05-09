@@ -1,6 +1,6 @@
 package perfect
 
-object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with core.Lenses {
+object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with core.Lenses with ShapeLenses {
   type Exp = inox.trees.Expr
   type Symbols = inox.trees.Symbols
   type Var = inox.trees.Variable
@@ -102,12 +102,13 @@ object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with co
   def postMap(f: Expr => Option[Expr])(e: Expr): Expr = exprOps.postMap(f)(e)
 
   // Lenses which do not need the value of the program to invert it.
-  /*val shapeLenses: semanticlenses.SemanticLens =
-    ((TreeWrap.Lens andThen
-      TreeUnwrap.Lens) andThen (
-      TreeModification.Lens andThen
+  val shapeLenses: SemanticLens =
+    ((TreeWrapLens andThen
+      TreeUnwrapLens) andThen (
+      TreeModificationLens andThen
         ValueLens))
 
+  /*
   val functionInvocationLens: semanticlenses.SemanticLens =
     ShortcutLens(reversions, {
       case FunctionInvocation(id, _, _) => Some(id)
@@ -133,4 +134,12 @@ object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with co
     shapeLenses andThen WrapperLens(semanticLenses andThen DefaultLens, MaybeWrappedSolutions)*/
 
   val lens = ???
+}
+
+
+trait ShapeLenses
+  extends perfect.lenses.TreeWrapLenses
+  with perfect.lenses.TreeUnwrapLenses
+  with perfect.lenses.TreeModificationLenses { self: InoxProgramUpdater.type =>
+
 }

@@ -38,7 +38,7 @@ class WebTest extends FunSuite with TestHelpers {
     val pfun = _Element("div", _List[WebElement](
       _WebElement(_TextNode("This is some text"))
     ))
-    val repaired = PatternReplace.Expr.Build(
+    val repaired = PatternReplace.Goal.Build(
       ("t" :: StringType, "This "),
       ("is_some" :: StringType, "is some"),
       ("text" :: StringType, " text")) { case Seq(t, is_some, text) =>
@@ -52,7 +52,7 @@ class WebTest extends FunSuite with TestHelpers {
         )))
     }
 
-    val PatternReplace.Expr(_, varVals, _) = repaired
+    val PatternReplace.Goal(_, varVals, _) = repaired
     val variables = varVals.map(_._1)
 
     Utils.inlineVariables(pfun repairFrom repaired, variables.toSet) shouldEqual
@@ -70,7 +70,7 @@ class WebTest extends FunSuite with TestHelpers {
       )))
     val original = eval(pfun)
 
-    val repaired = PatternReplace.Expr.Build(
+    val repaired = PatternReplace.Goal.Build(
       ("t" :: StringType, "This is "),
       ("some" :: StringType, "some"),
       ("text" :: StringType, " text")) { case Seq(this_is, some, text) =>
@@ -83,7 +83,7 @@ class WebTest extends FunSuite with TestHelpers {
           _WebElement(_TextNode(text))
         )))
     }
-    val PatternReplace.Expr(_, varVals, _) = repaired
+    val PatternReplace.Goal(_, varVals, _) = repaired
     val variables = varVals.map(_._1)
 
     val (someV, body) = Utils.inlineVariables(pfun repairFrom repaired, variables.toSet) match {
@@ -107,7 +107,7 @@ class WebTest extends FunSuite with TestHelpers {
       )))
     val original = eval(pfun)
 
-    val repaired = PatternReplace.Expr.Build(
+    val repaired = PatternReplace.Goal.Build(
       ("t" :: StringType, "This "),
       ("is_some" :: StringType, "is some"),
       ("text" :: StringType, " text")) { case Seq(t, is_some, text) =>
@@ -120,7 +120,7 @@ class WebTest extends FunSuite with TestHelpers {
           _WebElement(_TextNode(text))
         )))
     }
-    val PatternReplace.Expr(_, varVals, _) = repaired
+    val PatternReplace.Goal(_, varVals, _) = repaired
     val variables = varVals.map(_._1)
 
     val pfun2 = pfun repairFrom repaired
