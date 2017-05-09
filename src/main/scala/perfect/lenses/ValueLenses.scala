@@ -1,6 +1,7 @@
 package perfect.lenses
 
 import perfect.InoxProgramUpdater
+import inox.trees.FunctionInvocation
 
 /**
   * Created by Mikael on 09/05/2017.
@@ -11,12 +12,18 @@ trait ValueLenses
      with ListInsertLenses
      with PasteVariableLenses { self: InoxProgramUpdater.type =>
 
-  val valueLenses = combine(
-    PatternMatchLens,
-    PatternReplaceLens,
-    ListInsertLens,
-    PasteVariableLens
-  )
+  val valueLenses = ShortcutGoal(Map(
+    PatternMatchGoal.id -> PatternMatchLens,
+    PatternReplaceGoal.id -> PatternReplaceLens,
+    ListInsertGoal.id -> ListInsertLens,
+    PasteVariableGoal.id -> PasteVariableLens
+  ), {(e: Exp) =>
+    e match {
+      case FunctionInvocation(id, _, _) => Some(id)
+      case _ => None
+    }
+  })
+
 /*
   (  // Stand-alone programs on how to repair the program for a given instruction
       PasteVariableLens) andThen

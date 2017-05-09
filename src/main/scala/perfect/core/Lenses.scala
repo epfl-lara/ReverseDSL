@@ -95,11 +95,27 @@ trait Lenses { self: ProgramUpdater with ContExps =>
 
   /**
     * Created by Mikael on 09/05/2017.
-    * Wrapper around a set of indexable lenses to quickly reach them.
+    * Wrapper around a set of indexable lenses by the input program to quickly reach them.
     */
   case class ShortcutLens[A](map: Map[A, SemanticLens], f: Exp => Option[A]) extends SemanticLens {
     override def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       f(in.exp) match {
+        case Some(a) => map.get(a) match {
+          case Some(lens) => lens.put(in, out)
+          case _ => Stream.empty
+        }
+        case _ => Stream.empty
+      }
+    }
+  }
+
+  /**
+    * Created by Mikael on 09/05/2017.
+    * Wrapper around a set of indexable output expressions to quickly reach them.
+    */
+  case class ShortcutGoal[A](map: Map[A, SemanticLens], f: Exp => Option[A]) extends SemanticLens {
+    override def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
+      f(out.exp) match {
         case Some(a) => map.get(a) match {
           case Some(lens) => lens.put(in, out)
           case _ => Stream.empty
