@@ -297,7 +297,35 @@ trait ContExps { self: ProgramUpdater =>
     }*/
   }
 
-  /** Previously 'ProgramCont'*/
+
+  /** Previously 'ProgramFormula'*/
+  object ContExp {
+    def repairArguments(inFormula: Cont,
+                        arguments: Seq[(Exp, ContExp)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Exp], Cont)] = {
+      val argumentsReversed = arguments.map { case (arg, expected) =>
+        repair(ContExp(arg, inFormula), expected)
+      }
+      regroupArguments(argumentsReversed)
+    }
+
+    // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
+    def regroupArguments(arguments: Seq[Stream[ContExp]])
+                        (implicit symbols: Symbols, cache: Cache): Stream[(List[Exp], Cont)] = {
+      inox.utils.StreamUtils.cartesianProduct(arguments).map(combineResults)
+    }
+
+    // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
+    def combineResults(seq: List[ContExp])
+                      (implicit symbols: Symbols, cache: Cache): (List[Exp], Cont) = {
+      val (lb, f) = ((ListBuffer[Exp](), Cont()) /: seq) {
+        case total@((ls, f1), (ContExp(l, f2))) =>
+          (ls += l, f1 combineWith f2)
+      }
+      (lb.toList, f)
+    }
+  }
+
+  /** Previously 'ProgramFormula'*/
   case class ContExp(exp: Exp, context: Cont = Cont()) {
     lazy val freeVars: Set[Var] = freeVariables(exp)
     lazy val unchanged: Set[Var] = freeVars -- context.varsToAssign
