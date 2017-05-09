@@ -12,6 +12,7 @@ import InoxConvertible._
 import inox.evaluators.EvaluationResults
 import legacy.Implicits._
 import org.apache.commons.lang3.StringEscapeUtils
+import perfect.core.predef.FilterLike
 
 import scala.annotation.tailrec
 
@@ -687,8 +688,6 @@ case class MapReverse[A: InoxConvertible, B: InoxConvertible](fr: A ~~> B) exten
     }).flatMap(filterOnlyValChangeOrFail(_))
   }
 }
-
-import perfect.lenses.FilterLike
 
 case class FilterReverse[A: InoxConvertible](f: A => Boolean) extends (List[A] %~> List[A]) with FilterLike[A] {
   def get(in: Input) = filter(in, f)

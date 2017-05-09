@@ -1,6 +1,10 @@
 package perfect
 
-object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with core.Lenses with ShapeLenses {
+object InoxProgramUpdater extends core.ProgramUpdater
+    with core.ContExps
+    with core.Lenses
+    with lenses.ShapeLenses
+    with core.predef.ListLenses {
   type Exp = inox.trees.Expr
   type Symbols = inox.trees.Symbols
   type Var = inox.trees.Variable
@@ -89,7 +93,7 @@ object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with co
     }
   }
   // Members declared in perfect.core.ContExps
-  def commands: List[perfect.InoxProgramUpdater.ContExpCommand] = {
+  def commands: List[ContExpCommand] = {
     // TODO: Add commands
     List()
   }
@@ -101,6 +105,18 @@ object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with co
   def isVar(e: Expr): Boolean = e.isInstanceOf[Variable]
   def postMap(f: Expr => Option[Expr])(e: Expr): Expr = exprOps.postMap(f)(e)
 
+  // Members declared in perfect.core.predef.ListLenses
+  def Application(a: Exp,b: Seq[Exp]): Exp = inox.trees.Application(a, b)
+  def extractInvocation(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(Seq[Exp], Seq[Exp] => Exp)] = e match {
+    case inox.trees.FunctionInvocation(id, tpe, args) => Some((args, newArgs => inox.trees.FunctionInvocation(id, tpe, newArgs)))
+    case _ => None
+  }
+  def extractList(e: Exp): Option[(List[Exp], List[Exp] => Exp)] = e match {
+    case perfect.ListLiteral(elements, tpe) => Some((elements, newElems => perfect.ListLiteral(newElems, tpe)))
+    case _ => None
+  }
+  def freshen(a: Var): Var = a.freshen
+
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =
     ((TreeWrapLens andThen
@@ -108,14 +124,20 @@ object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with co
       TreeModificationLens andThen
         ValueLens))
 
-  /*
-  val functionInvocationLens: semanticlenses.SemanticLens =
+  val functions: List[SemanticLens] = List(
+    FilterLens
+  )
+  val reversions = Map[inox.Identifier, SemanticLens](
+    perfect.Utils.filter -> FilterLens
+  )
+
+  val functionInvocationLens: SemanticLens =
     ShortcutLens(reversions, {
       case FunctionInvocation(id, _, _) => Some(id)
       case _ => None
     })
   import perfect.lenses._
-
+/*
   // Lenses which need the value of the program to invert it.
   val semanticLenses: semanticlenses.SemanticLens =
     (PatternMatch.Lens andThen  // Stand-alone programs on how to repair the program for a given instruction
@@ -137,9 +159,3 @@ object InoxProgramUpdater extends core.ProgramUpdater with core.ContExps with co
 }
 
 
-trait ShapeLenses
-  extends perfect.lenses.TreeWrapLenses
-  with perfect.lenses.TreeUnwrapLenses
-  with perfect.lenses.TreeModificationLenses { self: InoxProgramUpdater.type =>
-
-}
