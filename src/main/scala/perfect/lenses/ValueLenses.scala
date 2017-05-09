@@ -6,19 +6,19 @@ import perfect.InoxProgramUpdater
   * Created by Mikael on 09/05/2017.
   */
 trait ValueLenses
-  extends perfect.lenses.PatternMatchLenses
-     with perfect.lenses.PatternReplaceLenses
-     with perfect.lenses.ListInsertLenses { self: InoxProgramUpdater.type =>
+  extends PatternMatchLenses
+     with PatternReplaceLenses
+     with ListInsertLenses
+     with PasteVariableLenses { self: InoxProgramUpdater.type =>
 
   val valueLenses = combine(
     PatternMatchLens,
     PatternReplaceLens,
-    ListInsertLens
+    ListInsertLens,
+    PasteVariableLens
   )
 /*
   (  // Stand-alone programs on how to repair the program for a given instruction
-    PatternReplaceLens) andThen
-    (ListInsertLens andThen
       PasteVariableLens) andThen
     (StringInsertLens andThen
       functionInvocationLens) andThen // Matcher for function invocation in out.

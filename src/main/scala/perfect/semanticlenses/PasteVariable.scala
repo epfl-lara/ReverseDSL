@@ -79,55 +79,14 @@ object PasteVariable extends Enumeration with CustomProgramFormula  {
     isPreemptive = true
   }
 
-  type PasteDirection = Value
-  val PasteToLeft, PasteToRight, PasteAutomatic = Value
-  private object Direction {
-    def unapply(s: String): Option[PasteDirection] =
-      values.find(_.toString == s)
-  }
-  def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: PasteDirection): ProgramFormula = {
+  def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: Goal.PasteDirection): ProgramFormula = {
     ProgramFormula(Goal(left, insertedVar, originalVarValue, right, direction))
   }
 
-  def unapply(f: ProgramFormula): Option[(String, Variable, String, String, PasteDirection)] = {
+  def unapply(f: ProgramFormula): Option[(String, Variable, String, String, Goal.PasteDirection)] = {
     Goal.unapply(f.expr)
   }
 
-  object Goal extends FunDefGoal {
-    private val Paste = FreshIdentifier("pastevariable")
-    def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: PasteDirection): Expr = {
-      E(Paste)(
-        StringLiteral(left),
-        insertedVar,
-        StringLiteral(originalVarValue),
-        StringLiteral(right),
-        StringLiteral(direction.toString)
-      )
-    }
-
-    def unapply(f: Expr): Option[(String, Variable, String, String, PasteDirection)] = {
-      f match {
-        case FunctionInvocation(Paste, Seq(), Seq(
-        StringLiteral(leftBefore),
-        inserted: Variable,
-        StringLiteral(insertedValue),
-        StringLiteral(rightBefore),
-        StringLiteral(Direction(direction))
-        )) =>
-          Some((leftBefore, inserted, insertedValue, rightBefore, direction))
-        case _ =>
-          None
-      }
-    }
-
-    def funDef = mkFunDef(Paste)(){ case _ =>
-      (Seq("left"::StringType, "pasted"::StringType,  "originalvalue"::StringType, "right"::StringType, "direction"::StringType),
-        StringType,
-        {
-          case Seq(left, pasted, originalvalue, right, direction) =>
-            left +& originalvalue +& right // Dummy
-        })
-    }
-  }
+  val Goal = perfect.lenses.PasteVariableGoal
 }
 
