@@ -6,9 +6,12 @@ import perfect.InoxProgramUpdater
   * Created by Mikael on 09/05/2017.
   */
 trait ValueLenses
-  extends perfect.lenses.PatternMatchLenses { self: InoxProgramUpdater.type =>
+  extends perfect.lenses.PatternMatchLenses
+     with perfect.lenses.PatternReplaceLenses { self: InoxProgramUpdater.type =>
 
-  val valueLenses = PatternMatchLens // andThen
+  val valueLenses = combine(
+    PatternMatchLens,
+    PatternReplaceLens)
 /*
   (  // Stand-alone programs on how to repair the program for a given instruction
     PatternReplaceLens) andThen

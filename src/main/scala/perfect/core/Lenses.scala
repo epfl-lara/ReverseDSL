@@ -124,4 +124,16 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     }
   }
 
+  // Executes lenses in parallel, join on the first element of the results
+  // case class ParallelLenses
+
+  /** Saves the stack trace by combining lenses on a balanced tree. */
+  def combine(lenses: SemanticLens*): SemanticLens = {
+    if(lenses.length == 0) {
+      ValueLens // should not happen
+    } else if(lenses.length == 1) lenses(0) else {
+      val (left, right) = lenses.splitAt(lenses.length / 2)
+      CombinedLens(combine(left: _*), combine(right: _*))
+    }
+  }
 }

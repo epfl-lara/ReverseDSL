@@ -127,10 +127,10 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =
-    ((TreeWrapLens andThen
-      TreeUnwrapLens) andThen (
-      TreeModificationLens andThen
-        ValueLens))
+    combine(TreeWrapLens,
+      TreeUnwrapLens,
+      TreeModificationLens,
+      ValueLens)
 
   val functions: List[SemanticLens] = List(
     FilterLens
