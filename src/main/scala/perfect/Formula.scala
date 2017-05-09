@@ -163,6 +163,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
   }
 
   import semanticlenses._
+
   def combineWith(other: Formula)(implicit symbols: Symbols): Formula = {
     if(this eq other) this else
     if(this.known.isEmpty && this.constraints == BooleanLiteral(true)) other else {

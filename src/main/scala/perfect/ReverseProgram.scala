@@ -94,16 +94,25 @@ object ReverseProgram extends lenses.Lenses {
       TreeModification.Lens andThen
         ValueLens))
 
+  val functionInvocationLens: semanticlenses.SemanticLens =
+    ShortcutLens(reversions, {
+      case FunctionInvocation(id, _, _) => Some(id)
+      case _ => None
+    })
+
   // Lenses which need the value of the program to invert it.
   val semanticLenses: semanticlenses.SemanticLens =
       (PatternMatch.Lens andThen  // Stand-alone programs on how to repair the program for a given instruction
       PatternReplace.Lens) andThen
       (ListInsert.Lens andThen
       PasteVariable.Lens) andThen
-      (StringInsert.Lens andThen
+      (FunctionInvocationUnificationLens andThen // Matcher for function invocation in out.
+      functionInvocationLens) andThen
+     (StringInsert.Lens andThen
       perfect.lenses.SetLens) andThen // Matchers for Set and SetApply constructions
       (perfect.lenses.MapDataLens andThen // Matcher for FiniteMap and MapApply constructions
       ADTExpr.Lens) // Matcher for ADT and ADTSelector constructions.
+
 
   val lens = NoChangeLens andThen
     shapeLenses andThen WrapperLens(semanticLenses andThen DefaultLens, MaybeWrappedSolutions)

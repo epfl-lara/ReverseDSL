@@ -41,14 +41,12 @@ trait Lenses { self: ReverseProgram.type =>
 
   type ArgumentsFormula = (Seq[ProgramFormula], Formula)
   
-  abstract class Lens {
+  abstract class Lens extends MultiArgsSemanticLens with FunctionInvocationExtractor {
     def identifier: Identifier
     def funDef: FunDef
     def mapping = identifier -> this
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula]
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], out: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula]
   }
-
-
 
   /** Lense-like filter */
   case object FilterLens extends Lens with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.

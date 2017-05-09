@@ -4,7 +4,7 @@ package lenses
 import inox._
 import inox.trees._
 import inox.trees.dsl._
-import perfect.ReverseProgram.{Cache, evalWithCache, repair}
+import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.Utils.isValue
 
 /**

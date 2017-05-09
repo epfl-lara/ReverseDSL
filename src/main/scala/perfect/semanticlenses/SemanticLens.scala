@@ -1,7 +1,7 @@
 package perfect
 package semanticlenses
 
-import inox.trees.Symbols
+import inox.trees._
 import perfect.ReverseProgram.Cache
 
 /**

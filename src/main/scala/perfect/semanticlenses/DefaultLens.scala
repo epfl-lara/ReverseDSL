@@ -59,35 +59,6 @@ object DefaultLens extends SemanticLens {
         case e  => throw new Exception(s"Don't know how to get a Let back from $e")
       }
 
-    case StringConcat(expr1, expr2) =>
-      val replacement = in.subExpr(FunctionInvocation(StringConcatLens.identifier, Nil,
-        Seq(expr1, expr2)))
-      val replacementOut = out.wrap{
-        case StringConcat(a, b) =>
-          FunctionInvocation(StringConcatLens.identifier, Nil, Seq(a, b))
-        case e => e
-      }
-
-      ifEmpty(for (out <- repair(replacement, replacementOut)) yield {
-        out match {
-          case ProgramFormula(FunctionInvocation(StringConcatLens.identifier, Nil, Seq(x, y)), f) =>
-            ProgramFormula(StringConcat(x, y), f)
-        }
-      }) {
-        val constraint = out.expr === in.expr // We want to avoid at maximum having to solve constraints.
-        Stream(ProgramFormula(in.expr, Formula(Map(), constraint)))
-      } #::: {
-        // Handle insertion between two non-constants as a possible constant at the last resort.
-        out match {
-          case StringInsert(left, inserted, right, direction)
-            if !expr1.isInstanceOf[StringLiteral] && !expr2.isInstanceOf[StringLiteral] &&
-              maybeEvalWithCache(in.formula.assignments.get(expr1)) == Some(StringLiteral(left)) &&
-              maybeEvalWithCache(in.formula.assignments.get(expr2)) == Some(StringLiteral(right))
-          => Stream(in.subExpr(expr1 +& StringLiteral(inserted) +& expr2).assignmentsAsOriginals())
-          case _ => Stream.empty[ProgramFormula]
-        }
-      }
-
     case Application(lambdaExpr, arguments) => // TODO: Put this into a lense.
       val originalValueMaybe: Option[Expr] = (Utils.optVar(lambdaExpr).flatMap(in.formula.findConstraintValue).getOrElse(lambdaExpr) match {
         /*case v: Variable =>
@@ -258,39 +229,33 @@ object DefaultLens extends SemanticLens {
         case _ => throw new Exception(s"Don't know how to handle this case : $originalValueMaybe of type ${originalValueMaybe.get.getClass.getName}")
       }
 
-    case funInv@FunctionInvocation(f, tpes, args) =>
-      // We need to reverse the invocation arguments.
-      ReverseProgram.reversions.get(f) match {
-        case None => Stream.empty  /: Log.prefix(s"No in.expr $f reversible for : $funInv.\nIt evaluates to:\n${in.getFunctionValue}.")
-        case Some(lens) =>
-          val assignments = in.formula.partialAssignments.map(_._1)
-          val argsOptValue = args.map(arg => assignments.flatMap(assign => maybeEvalWithCache(assign(arg)).map(in.subExpr)))
-          if(argsOptValue.forall(_.nonEmpty)) {
-            val lenseResult = lens.put(tpes)(argsOptValue.map(_.get), out)
-            for {l <- lenseResult; (newArgsValues, newForm) = l
-                 a <- ProgramFormula.repairArguments(in, args.zip(newArgsValues))
-                 (newArguments, newArgumentsFormula) = a
-            } yield {
-              val formula = newForm combineWith newArgumentsFormula
-              ProgramFormula(FunctionInvocation(f, tpes, newArguments), formula)
-            }
-          } else { // There are universally quantified variables.
-            out.expr match {
-              case FunctionInvocation(`f`, tpes2, args2) if tpes2 == tpes =>
-                // There must be equivalence between arguments. Unification.
-                val argsRepaired = args.zip(args2) map {
-                  case (a1, a2) => repair(in.subExpr(a1), out.subExpr(a2))
-                }
-                for{psf <- ProgramFormula.regroupArguments(argsRepaired)
-                    (ps, formula) = psf} yield {
-                  ProgramFormula(FunctionInvocation(`f`, tpes, ps), formula)
-                }
+    case StringConcat(expr1, expr2) =>
+      val replacement = in.subExpr(FunctionInvocation(StringConcatLens.identifier, Nil,
+        Seq(expr1, expr2)))
+      val replacementOut = out.wrap{
+        case StringConcat(a, b) =>
+          FunctionInvocation(StringConcatLens.identifier, Nil, Seq(a, b))
+        case e => e
+      }
 
-              case _ =>
-                Log("Warning: impossible to merge")
-                Stream.empty
-            }
-          }
+      ifEmpty(for (out <- repair(replacement, replacementOut)) yield {
+        out match {
+          case ProgramFormula(FunctionInvocation(StringConcatLens.identifier, Nil, Seq(x, y)), f) =>
+            ProgramFormula(StringConcat(x, y), f)
+        }
+      }) {
+        val constraint = out.expr === in.expr // We want to avoid at maximum having to solve constraints.
+        Stream(ProgramFormula(in.expr, Formula(Map(), constraint)))
+      } #::: {
+        // Handle insertion between two non-constants as a possible constant at the last resort.
+        out match {
+          case StringInsert(left, inserted, right, direction)
+            if !expr1.isInstanceOf[StringLiteral] && !expr2.isInstanceOf[StringLiteral] &&
+              maybeEvalWithCache(in.formula.assignments.get(expr1)) == Some(StringLiteral(left)) &&
+              maybeEvalWithCache(in.formula.assignments.get(expr2)) == Some(StringLiteral(right))
+          => Stream(in.subExpr(expr1 +& StringLiteral(inserted) +& expr2).assignmentsAsOriginals())
+          case _ => Stream.empty[ProgramFormula]
+        }
       }
 
     case IfExpr(cond, thenn, elze) =>
