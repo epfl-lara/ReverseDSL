@@ -229,35 +229,6 @@ object DefaultLens extends SemanticLens {
         case _ => throw new Exception(s"Don't know how to handle this case : $originalValueMaybe of type ${originalValueMaybe.get.getClass.getName}")
       }
 
-    /*case StringConcat(expr1, expr2) =>
-      val replacement = in.subExpr(FunctionInvocation(StringConcatLens.identifier, Nil,
-        Seq(expr1, expr2)))
-      val replacementOut = out.wrap{
-        case StringConcat(a, b) =>
-          FunctionInvocation(StringConcatLens.identifier, Nil, Seq(a, b))
-        case e => e
-      }
-
-      ifEmpty(for (out <- repair(replacement, replacementOut)) yield {
-        out match {
-          case ProgramFormula(FunctionInvocation(StringConcatLens.identifier, Nil, Seq(x, y)), f) =>
-            ProgramFormula(StringConcat(x, y), f)
-        }
-      }) {
-        val constraint = out.expr === in.expr // We want to avoid at maximum having to solve constraints.
-        Stream(ProgramFormula(in.expr, Formula(Map(), constraint)))
-      } #::: {
-        // Handle insertion between two non-constants as a possible constant at the last resort.
-        out match {
-          case StringInsert(left, inserted, right, direction)
-            if !expr1.isInstanceOf[StringLiteral] && !expr2.isInstanceOf[StringLiteral] &&
-              maybeEvalWithCache(in.formula.assignments.get(expr1)) == Some(StringLiteral(left)) &&
-              maybeEvalWithCache(in.formula.assignments.get(expr2)) == Some(StringLiteral(right))
-          => Stream(in.subExpr(expr1 +& StringLiteral(inserted) +& expr2).assignmentsAsOriginals())
-          case _ => Stream.empty[ProgramFormula]
-        }
-      }
-*/
     case IfExpr(cond, thenn, elze) =>
       val cond_v = in.formula.assignments.flatMap(assign => maybeEvalWithCache(assign(cond))).getOrElse(return Stream.Empty)
       cond_v match {
