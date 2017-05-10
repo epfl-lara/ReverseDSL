@@ -9,7 +9,6 @@ import perfect.ReverseProgram.Cache
 import perfect.Utils.isValue
 import perfect.semanticlenses._
 import perfect.wraplenses.MaybeWrappedSolutions
-import perfect.lenses.ValueLens
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 /**
