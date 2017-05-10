@@ -72,5 +72,5 @@ object TreeModification extends CustomProgramFormula {
   def unapply(pf: ProgramFormula)(implicit symbols: Symbols): Option[(Type, Type, Expr, Expr, List[Identifier])] =
     Goal.unapply(pf.expr)
 
-  val Goal = lenses.TreeModificationGoal
+  val Goal = TreeModificationGoal
 }

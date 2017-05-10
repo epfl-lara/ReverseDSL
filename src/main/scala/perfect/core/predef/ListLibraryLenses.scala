@@ -40,7 +40,7 @@ trait ListLibraryLenses { self: ProgramUpdater
                 newOutputProgram.context combineWith listF.assignmentsAsOriginals combineWith Cont(Map(), builder(Seq(newVar, lambda)) === newOutput))))
           }
 
-        case _ => ???
+        case _ => Stream.empty // We don't know what to do.
       }
     }
   }

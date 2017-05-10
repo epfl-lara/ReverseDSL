@@ -1,48 +1,13 @@
-package perfect.lenses
-import inox.{FreshIdentifier, Identifier}
-import perfect.InoxProgramUpdater
-import perfect.semanticlenses.TreeWrap
-import inox.trees._
+package perfect.semanticlenses
+
 import inox._
+import inox.trees._
 import inox.trees.dsl._
+import perfect.lenses.FunDefGoal
 
 /**
-  * Created by Mikael on 09/05/2017.
+  * Created by Mikael on 10/05/2017.
   */
-trait TreeModificationLenses {  self: InoxProgramUpdater.type =>
-
-  object TreeModificationLens extends SemanticLens {
-    def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
-      out.simplifiedExpr match {
-        case TreeModificationGoal(tpeG, tpeL, original, modified, l) =>
-          l match {
-            case Nil =>
-              repair(in, out.subExpr(modified))
-            case head :: tail =>
-              in.exp match {
-                case l@inox.trees.ADT(ADTType(adtid, tps), args) =>
-                  symbols.adts(adtid) match {
-                    case f: ADTConstructor =>
-                      val i = f.selectorID2Index(head)
-                      original match {
-                        case inox.trees.ADT(_, argsOriginal) =>
-                          val subOriginal = argsOriginal(i)
-                          for {pf <- repair(in.subExpr(args(i)),
-                            out.subExpr(TreeModificationGoal(subOriginal.getType, tpeL, subOriginal, modified, tail)))} yield {
-                            pf.wrap(x => inox.trees.ADT(l.adt, args.take(i) ++ List(x) ++ args.drop(i + 1)))
-                          }
-                      }
-                    case _ => Stream.empty
-                  }
-                case _ => Stream.empty
-              }
-          }
-        case _ => Stream.empty
-      }
-    }
-  }
-}
-
 object TreeModificationGoal extends FunDefGoal {
   private val Modif = FreshIdentifier("modif")
 

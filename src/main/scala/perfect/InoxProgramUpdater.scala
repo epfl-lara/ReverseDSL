@@ -149,7 +149,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
 
 
-  import perfect.semanticlenses.ListInsertGoal
+  import perfect.semanticlenses.{ListInsertGoal, TreeModificationGoal}
 
   /** Returns the head, the tail and a way to build a list from a sequence of elements. */
   def extractCons(e: Exp): Option[(Exp, Exp, List[Exp] => Exp)] = e match {
@@ -245,6 +245,28 @@ object InoxProgramUpdater extends core.ProgramUpdater
         vd.tpe == body.getType && output == StringLiteral("")
       case _ => false
     }
+  }
+
+  /** Returns the original tree, the modified subtree, and instead of a path,
+    * an index indicating where the next change should happen with a way to rebuild the goal with the new original subtree */
+  def extractTreeModificationGoal(goal: Exp)(implicit symbols: Symbols):
+      Option[(Exp, Exp, Option[(Int, Exp => Exp)])] = goal match {
+    case TreeModificationGoal(tpeGlobal, tpeLocal, original, modified, l) =>
+      Some((original, modified, l match {
+        case head::tail =>
+          original match {
+            case l@inox.trees.ADT(ADTType(adtid, tps), args) =>
+              symbols.adts(adtid) match {
+                case f: ADTConstructor =>
+                  val i = f.selectorID2Index(head)
+                  Some((i, newOriginal => TreeModificationGoal(newOriginal.getType, tpeLocal, newOriginal, modified, tail)))
+                case _ => return None
+              }
+            case _ => return None
+          }
+        case _ => None
+      }))
+    case _ => None
   }
 
 

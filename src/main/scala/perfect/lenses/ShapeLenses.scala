@@ -1,6 +1,7 @@
 package perfect.lenses
 
 import perfect.InoxProgramUpdater
+import perfect.core.predef.TreeModificationLenses
 
 /**
   * Created by Mikael on 09/05/2017.
@@ -8,5 +9,5 @@ import perfect.InoxProgramUpdater
 trait ShapeLenses
   extends perfect.lenses.TreeWrapLenses
   with perfect.lenses.TreeUnwrapLenses
-  with perfect.lenses.TreeModificationLenses { self: InoxProgramUpdater.type =>
+  with TreeModificationLenses { self: InoxProgramUpdater.type =>
 }
