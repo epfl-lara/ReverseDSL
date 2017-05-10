@@ -1,50 +1,63 @@
-package perfect.lenses
+package perfect.core.predef
+
 import perfect.core._
-import perfect.core.predef._
-import inox.trees.{FiniteSet, SetAdd}
-import perfect.InoxProgramUpdater
 
 /**
   * Created by Mikael on 10/05/2017.
   */
-trait SetLenses { self: InoxProgramUpdater.type =>
+trait SetLenses { self: ProgramUpdater with ContExps with Lenses =>
+  /** Returns the elements defining the set, and a way to build it back. */
+  def extractSet(e: Exp): Option[(Seq[Exp], Seq[Exp] => Exp)]
+
+  /** Returns the set and the added element */
+  def extractSetAdd(e: Exp): Option[(Exp, Exp)]
+  def buildSetAdd(set: Exp, elem: Exp): Exp
+
+  object FiniteSet {
+    def unapply(e: Exp) = extractSet(e)
+  }
+
+  object FiniteSetAdd {
+    def unapply(e: Exp) = extractSetAdd(e)
+    def apply(set: Exp, elem: Exp) = buildSetAdd(set, elem)
+  }
+
   object SetLens extends SemanticLens {
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       in.exp match {
-        case l: FiniteSet =>
-          lazy val evaledElements = l.elements.map{ e =>
+        case l@FiniteSet(elements, builder) =>
+          lazy val evaledElements = elements.map{ e =>
             (in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(e))).getOrElse(return Stream.empty), e)
           }
-          def insertElementsIfNeeded(fs: FiniteSet) = {
-            val expectedElements = fs.elements.toSet
+          def insertElementsIfNeeded(fsElements: Seq[Exp], fsBuilder: Seq[Exp] => Exp) = {
+            val expectedElements = fsElements.toSet
             val newElements = evaledElements.filter{
               case (v, e) => expectedElements contains v
             }.map(_._2) ++ expectedElements.filter(x =>
               !evaledElements.exists(_._1 == x))
-            Stream(out.subExpr(FiniteSet(newElements, fs.base)))
+            Stream(out.subExpr(fsBuilder(newElements)))
           }
 
-          if(isValue(l) && out.simplifiedExpr.isInstanceOf[FiniteSet]) { // We should keep the same order if possible.
-            out.simplifiedExpr match {
-              case fs: FiniteSet => insertElementsIfNeeded(fs)
-              case _ => Stream(out)
-            }
-          } else {
-            out.simplifiedExpr match {
-              case fs: FiniteSet =>
+          out.simplifiedExpr match { // Todo: Repair if exactly one addition, one deletion ?
+            case outFs@FiniteSet(outElements, outBuilder) =>
                 // Since there is no order, there is no point repairing expressions,
                 // only adding new ones and deleting old ones.
-                insertElementsIfNeeded(fs)
+                insertElementsIfNeeded(outElements, outBuilder)
 
-              case newOut => // Maybe it has a context ?
-                Stream(out)
-            }
+            case newOut => // Maybe it has a context ?
+              Stream(out)
           }
-        case SetAdd(sExpr, elem) =>
+        case FiniteSetAdd(sExpr, elem) =>
           val sExpr_v = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(sExpr))).getOrElse(return Stream.empty)
           val elem_v = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(elem))).getOrElse(return Stream.empty)
-          val FiniteSet(vs, tpe) = sExpr_v
-          val FiniteSet(vsNew, _) = out.simplifiedExpr
+          val (vs, builder) = sExpr_v match {
+            case FiniteSet(vs, builder) => (vs, builder)
+            case _ => return Stream.empty
+          }
+          val (vsNew, _) = out.simplifiedExpr match {
+            case FiniteSet(vsNew, builderNew) => (vsNew, builderNew)
+            case _ => return Stream.empty
+          }
           val vsSet = vs.toSet
           val vsNewSet = vsNew.toSet
           val maybeAddedElements = vsNewSet -- vsSet
@@ -59,35 +72,35 @@ trait SetLenses { self: InoxProgramUpdater.type =>
               (if(vsSet contains old) {
                 //Log.prefix("#1") :=
                   (for(pf <- repair(in.subExpr(sExpr),
-                    out.subExpr(FiniteSet((vsSet - old + fresh).toSeq, tpe)))) yield {
-                    pf.wrap(x => SetAdd(x, elem))
+                    out.subExpr(builder((vsSet - old + fresh).toSeq)))) yield {
+                    pf.wrap(x => FiniteSetAdd(x, elem))
                   })
               } else Stream.empty) #::: (
                 //Log.prefix("#2") :=
                   (if(elem_v == old) {
                     for(pf <- repair(in.subExpr(elem), out.subExpr(fresh))) yield {
-                      pf.wrap(x => SetAdd(sExpr, x))
+                      pf.wrap(x => FiniteSetAdd(sExpr, x))
                     }
                   } else Stream.empty)
                 )
             case None => // Just added and removed elements.
               if(removed.isEmpty) { // Just added elements.
                 for {pf <- repair(in.subExpr(sExpr),
-                  out.subExpr(FiniteSet((vsSet ++ (added - elem_v)).toSeq, tpe)))
+                  out.subExpr(builder((vsSet ++ (added - elem_v)).toSeq)))
                      pfElem <- repair(in.subExpr(elem), ContExp(elem_v))
                 } yield {
-                  pf.wrap(x => SetAdd(x, pfElem.exp)) combineWith pfElem.context
+                  pf.wrap(x => FiniteSetAdd(x, pfElem.exp)) combineWith pfElem.context
                 }
               } else {
                 if(removed contains elem_v) { // We replace SetAdd(f, v) by f
                   for(pf <- repair(in.subExpr(sExpr),
-                    out.subExpr(FiniteSet(vsSet.toSeq, tpe))
+                    out.subExpr(builder(vsSet.toSeq))
                   )) yield pf
                 } else { // All changes happened in the single set.
                   for{pf <- repair(in.subExpr(sExpr),
-                    out.subExpr(FiniteSet((vsSet ++ (added-elem_v) -- removed).toSeq, tpe)))
+                    out.subExpr(builder((vsSet ++ (added-elem_v) -- removed).toSeq)))
                       pfElem <- repair(in.subExpr(elem), ContExp(elem_v))
-                  } yield pf.wrap(x => SetAdd(x, pfElem.exp)) combineWith pfElem.context
+                  } yield pf.wrap(x => FiniteSetAdd(x, pfElem.exp)) combineWith pfElem.context
                 }
               }
           }

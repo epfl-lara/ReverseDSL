@@ -149,7 +149,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
     val vrs = fields.map { fd => Variable(FreshIdentifier("x", true), fd.getType, Set()) }
     (vrs, index, (x: Seq[Expr]) => ADT(ADTType(constructor.id, constructor.tps), x))
   }
-  
+
+  // Members declared in perfect.core.predef.MapDataLenses
   def buildMapApply(e: Exp,g: Exp): Exp = inox.trees.MapApply(e, g)
   def extractMap(e: Exp)(implicit symbols: Symbols): Option[(Seq[(Exp, Exp)], Exp, (Seq[(Exp, Exp)], Exp) => Exp)] = e match {
     case FiniteMap(pairs, default, keyt, valuet) => Some((pairs, default, (pairs, default) => FiniteMap(pairs, default, keyt, valuet)))
@@ -164,6 +165,17 @@ object InoxProgramUpdater extends core.ProgramUpdater
       }
     case _ => None
   }
+
+  // Members declared in perfect.core.predef.SetLenses
+  def extractSet(e: Exp): Option[(Seq[Exp], Seq[Exp] => Exp)] = e match {
+    case inox.trees.FiniteSet(elems, base) => Some((elems, elems => inox.trees.FiniteSet(elems, base)))
+    case _ => None
+  }
+  def extractSetAdd(e: Exp): Option[(Exp, Exp)] = e match {
+    case inox.trees.SetAdd(set, elem) => Some((set, elem))
+    case _ => None
+  }
+  def buildSetAdd(set: Exp, elem: Exp): Exp = inox.trees.SetAdd(set, elem)
 
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =
