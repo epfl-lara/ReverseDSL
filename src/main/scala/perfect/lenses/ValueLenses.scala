@@ -3,7 +3,7 @@ package perfect.lenses
 import inox.FreshIdentifier
 import perfect.InoxProgramUpdater
 import inox.trees._
-import perfect.core.predef.{MapDataLenses, SetLenses}
+import perfect.core.predef.{ADTLenses, MapDataLenses, SetLenses}
 
 /**
   * Created by Mikael on 09/05/2017.

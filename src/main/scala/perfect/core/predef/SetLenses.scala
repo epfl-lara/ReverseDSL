@@ -13,11 +13,11 @@ trait SetLenses { self: ProgramUpdater with ContExps with Lenses =>
   def extractSetAdd(e: Exp): Option[(Exp, Exp)]
   def buildSetAdd(set: Exp, elem: Exp): Exp
 
-  object FiniteSet {
+  private object FiniteSet {
     def unapply(e: Exp) = extractSet(e)
   }
 
-  object FiniteSetAdd {
+  private object FiniteSetAdd {
     def unapply(e: Exp) = extractSetAdd(e)
     def apply(set: Exp, elem: Exp) = buildSetAdd(set, elem)
   }

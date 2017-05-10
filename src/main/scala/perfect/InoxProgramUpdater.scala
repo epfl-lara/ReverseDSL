@@ -142,13 +142,6 @@ object InoxProgramUpdater extends core.ProgramUpdater
     }
     case _ => false
   }
-  def freshVarsForConstructor(as: ADTSelector)(implicit symbols: Symbols): (Seq[Variable], Int, Seq[Expr] => ADT) = {
-    val constructor = as.constructor.get
-    val fields = constructor.fields
-    val index = as.selectorIndex
-    val vrs = fields.map { fd => Variable(FreshIdentifier("x", true), fd.getType, Set()) }
-    (vrs, index, (x: Seq[Expr]) => ADT(ADTType(constructor.id, constructor.tps), x))
-  }
 
   // Members declared in perfect.core.predef.MapDataLenses
   def buildMapApply(e: Exp,g: Exp): Exp = inox.trees.MapApply(e, g)
@@ -176,6 +169,31 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case _ => None
   }
   def buildSetAdd(set: Exp, elem: Exp): Exp = inox.trees.SetAdd(set, elem)
+
+  // Members declared in perfect.core.predef.ADTLenses
+  /** Returns the arguments of the ADT and a builder for it.*/
+  def extractADT(e: Exp): Option[(Seq[Exp], Seq[Exp] => Exp)] = e match {
+    case inox.trees.ADT(tpe, args) => Some((args, x => ADT(tpe, args)))
+    case _ => None
+  }
+
+  def extractADTSelector(e: Exp)(implicit symbols: Symbols): Option[(Exp, Exp => Exp, Seq[Var], Int)]  = e match {
+    case as@inox.trees.ADTSelector(expr, id) =>
+      val constructor = as.constructor.get
+      val fields = constructor.fields
+      val index = as.selectorIndex
+      val vrs = fields.map { fd => Variable(FreshIdentifier("x", true), fd.getType, Set()) }
+      Some((expr, x => ADTSelector(x, id), vrs, index))
+    case _ => None
+  }
+  /** Returns true if e and g are two instances of the same ADT type */
+  def isSameADT(e: Exp, g: Exp): Boolean = e match {
+    case inox.trees.ADT(tpe, _) => g match {
+      case inox.trees.ADT(tpe2, _) => tpe == tpe2
+      case _ => false
+    }
+    case _ => false
+  }
 
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =

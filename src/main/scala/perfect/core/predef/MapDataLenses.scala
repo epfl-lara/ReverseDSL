@@ -15,11 +15,11 @@ trait MapDataLenses { self: ProgramUpdater with ContExps with Lenses =>
   def extractMapApply(e: Exp)(implicit symbols: Symbols): Option[(Exp, Exp, String => Var)]
   def buildMapApply(e: Exp, g: Exp): Exp
 
-  object MapData {
+  private object MapData {
     def unapply(e: Exp) = extractMap(e)
   }
 
-  object MapDataApply {
+  private object MapDataApply {
     def unapply(e: Exp) = extractMapApply(e)
     def apply(e: Exp, g: Exp) = buildMapApply(e, g)
   }
