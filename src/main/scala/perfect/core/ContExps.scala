@@ -311,7 +311,7 @@ trait ContExps { self: ProgramUpdater =>
     // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
     def regroupArguments(arguments: Seq[Stream[ContExp]])
                         (implicit symbols: Symbols, cache: Cache): Stream[(List[Exp], Cont)] = {
-      inox.utils.StreamUtils.cartesianProduct(arguments).map(combineResults)
+      Utils.StreamUtils.cartesianProduct(arguments).map(combineResults)
     }
 
     // Given a ProgramFormula for each of the fields, returns a list of expr and a single formulas
