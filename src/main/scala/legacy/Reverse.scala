@@ -12,7 +12,7 @@ import InoxConvertible._
 import inox.evaluators.EvaluationResults
 import legacy.Implicits._
 import org.apache.commons.lang3.StringEscapeUtils
-import perfect.core.predef.FilterLike
+import perfect.core.predef.{FilterLike, MapReverseLike}
 
 import scala.annotation.tailrec
 
@@ -667,8 +667,6 @@ case class Flatten[A: InoxConvertible]() extends %~>[List[List[A]], List[A]]()(l
     }
   } // ensuring res => res.forall(sol => sol.flatten == out && lehvenstein(l, sol) == lehvenstein(out, sol.flatten))
 }
-
-import perfect.lenses.MapReverseLike
 
 case class MapReverse[A: InoxConvertible, B: InoxConvertible](fr: A ~~> B) extends (List[A] %~> List[B]) with MapReverseLike[A, B, Nothing] {
   val f: A => B = fr.get _

@@ -18,7 +18,7 @@ trait TreeUnwrapLenses { self: InoxProgramUpdater.type =>
             case Nil => Stream(in.assignmentsAsOriginals())
             case head :: tail =>
               in.exp match {
-                case l@ADT(ADTType(adtid, tps), args) =>
+                case l@inox.trees.ADT(ADTType(adtid, tps), args) =>
                   symbols.adts(adtid) match {
                     case f: ADTConstructor =>
                       val i = f.selectorID2Index(head)

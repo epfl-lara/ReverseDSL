@@ -108,6 +108,6 @@ object ListInsert extends CustomProgramFormula  {
   def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr])] = {
     Goal.unapply(f.expr)
   }
-  val Goal = perfect.lenses.ListInsertGoal
+  val Goal = ListInsertGoal
 }
 

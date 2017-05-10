@@ -15,9 +15,9 @@ trait PatternReplaceLenses { self: InoxProgramUpdater.type =>
       out.simplifiedExpr match {
         case PatternReplaceGoal(pattern, variables, after) =>
           in.exp match {
-            case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
+            case inExp@ADT(argsIn, adtBuilder) =>
               pattern match { // TODO: Pattern replace at higher level?
-                case ADT(adtType2, argsIn2) if adtType2 == adtType =>
+                case ADT(argsIn2, adtBuilder2) if isSameADT(inExp, pattern) =>
                   val argsMatched = argsIn.zip(argsIn2).map{
                     case (expr, pattern) =>
                       repair(

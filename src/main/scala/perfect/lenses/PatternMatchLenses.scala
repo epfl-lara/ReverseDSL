@@ -105,9 +105,9 @@ trait PatternMatchLenses { self: InoxProgramUpdater.type =>
                     }
                   }
               }
-            case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
+            case inExp@ADT(argsIn, adtBuilder) =>
               pattern match {
-                case ADT(adtType2, argsIn2) if adtType2 == adtType =>
+                case ADT(argsIn2, adtBuilder2) if isSameADT(inExp, pattern) =>
                   val argumentsRepaired = for{ (argIn, argIn2) <- argsIn.zip(argsIn2) } yield {
                     repair(in.subExpr(argIn), out.subExpr(
                       PatternMatchGoal(
@@ -119,7 +119,7 @@ trait PatternMatchLenses { self: InoxProgramUpdater.type =>
                   for{ res <- ContExp.regroupArguments(argumentsRepaired)
                        (newArgs, context) = res
                   } yield {
-                    ContExp(ADT(adtType, newArgs), context)
+                    ContExp(adtBuilder(newArgs), context)
                   }
 
                 case v: Variable if variables.indexWhere(_._1 == v) >= 0 =>

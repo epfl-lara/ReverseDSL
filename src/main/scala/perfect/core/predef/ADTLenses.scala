@@ -19,11 +19,11 @@ trait ADTLenses { self: ProgramUpdater with ContExps with Lenses =>
   /** Returns true if e and g are two instances of the same ADT type */
   def isSameADT(e: Exp, g: Exp): Boolean
 
-  private object ADT {
+  object ADT {
     def unapply(e: Exp) = extractADT(e)
   }
 
-  private object ADTSelector {
+  object ADTSelector {
     def unapply(e: Exp) = extractADTSelector(e)
   }
 

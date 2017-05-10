@@ -6,8 +6,10 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with lenses.ShapeLenses
     with lenses.ValueLenses
     with core.predef.InvocationLenses
-    with core.predef.UnificationLenses
+    with core.predef.ApplicationLenses
     with core.predef.ListLenses
+    with core.predef.UnificationLenses
+    with core.predef.ListLibraryLenses
     with core.predef.AssociativeLenses
     with lenses.StringConcatLenses {
 
@@ -114,7 +116,12 @@ object InoxProgramUpdater extends core.ProgramUpdater
   def postMap(f: Expr => Option[Expr])(e: Expr): Expr = exprOps.postMap(f)(e)
 
   // Members declared in perfect.core.predef.ListLenses
-  def Application(a: Exp,b: Seq[Exp]): Exp = inox.trees.Application(a, b)
+  def buildApplication(lambda: Exp, args: Seq[Exp]): Exp = inox.trees.Application(lambda, args)
+  def extractApplication(e: Exp): Option[(Exp, Seq[Exp])] = e match {
+    case Application(lambda, args) => Some((lambda, args))
+    case _ => None
+  }
+
   def extractInvocation(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(Seq[Exp], Seq[Exp] => Exp)] = e match {
     case inox.trees.FunctionInvocation(id, tpe, args) => Some((args, newArgs => inox.trees.FunctionInvocation(id, tpe, newArgs)))
     case _ => None
@@ -130,6 +137,42 @@ object InoxProgramUpdater extends core.ProgramUpdater
       Variable(FreshIdentifier(perfect.Utils.uniqueName(a.id.name, others.map(v => v.id.name).toSet)), a.tpe, Set())
     }
   }
+  /** Returns the default value of the unique argument of the lambda, */
+  def extractLambdaDefaultArgument(e: Exp): Option[Exp] = e match {
+    case Lambda(Seq(vd), body) => Some(perfect.Utils.defaultValue(vd.tpe))
+    case _ => None
+  }
+  /** Returns an "unknown" fresh variable matching the type of the lambda's first argument*/
+  def extractLambdaUnknownVar(e: Exp): Option[Var] = e match {
+    case Lambda(Seq(vd), body) => Some(Variable(FreshIdentifier("unknown", true), vd.tpe, Set()))
+    case _ => None
+  }
+
+
+  import perfect.semanticlenses.ListInsertGoal
+
+  /** Returns the head, the tail and a way to build a list from a sequence of elements. */
+  def extractCons(e: Exp): Option[(Exp, Exp, List[Exp] => Exp)] = e match {
+    case inox.trees.ADT(ADTType(perfect.Utils.cons, Seq(tpe)), Seq(head, tail)) =>
+      Some((head, tail, x => perfect.ListLiteral(x, tpe)))
+    case _ => None
+  }
+
+  /** Returns the before, inserted and after fields of a ListInsert, along with
+    * - A way to build a list from a list of elements and possibly a tail
+    * - A way to build a ListInsertgoal again*/
+  def extractListInsertGoal(e: Exp): Option[(List[Exp], List[Exp], List[Exp],
+    (List[Exp], Option[Exp]) => Exp,
+    (List[Exp], List[Exp], List[Exp]) => Exp)] = e match {
+    case ListInsertGoal(tpe, left, inserted, right) =>
+      Some((left, inserted, right,
+        (x, s) => s.map(tail => perfect.ListLiteral.concat(perfect.ListLiteral(x, tpe), tail)).getOrElse(perfect.ListLiteral(x, tpe)),
+        (left, inserted, right) => ListInsertGoal(tpe, left, inserted, right)
+      ))
+    case _ => None
+  }
+
+
 
   def mkStringVar(name: String, avoid: Var*): Var = {
     Variable(FreshIdentifier(perfect.Utils.uniqueName(name, avoid.map(_.id.name).toSet)), StringType, Set())
@@ -173,7 +216,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   // Members declared in perfect.core.predef.ADTLenses
   /** Returns the arguments of the ADT and a builder for it.*/
   def extractADT(e: Exp): Option[(Seq[Exp], Seq[Exp] => Exp)] = e match {
-    case inox.trees.ADT(tpe, args) => Some((args, x => ADT(tpe, args)))
+    case inox.trees.ADT(tpe, args) => Some((args, x => inox.trees.ADT(tpe, args)))
     case _ => None
   }
 
@@ -183,7 +226,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
       val fields = constructor.fields
       val index = as.selectorIndex
       val vrs = fields.map { fd => Variable(FreshIdentifier("x", true), fd.getType, Set()) }
-      Some((expr, x => ADTSelector(x, id), vrs, index))
+      Some((expr, x => inox.trees.ADTSelector(x, id), vrs, index))
     case _ => None
   }
   /** Returns true if e and g are two instances of the same ADT type */
@@ -195,6 +238,16 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case _ => false
   }
 
+  /** In a map, can the output be transfered to the input, e.g. when adding a new row in a mkString mapped with a prefix. */
+  def canPushInsertedOutputToInput(output: Exp, lambda: Exp)(implicit symbols: Symbols): Boolean = {
+    lambda match {
+      case Lambda(Seq(vd), body) =>
+        vd.tpe == body.getType && output == StringLiteral("")
+      case _ => false
+    }
+  }
+
+
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =
     combine(TreeWrapLens,
@@ -203,7 +256,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
       ValueLens)
 
   def functionLenses = Map[inox.Identifier, SemanticLens](
-    perfect.Utils.filter -> FilterLens
+    perfect.Utils.filter -> FilterLens,
+    perfect.Utils.map -> MapLens
     // TODO: Add all lenses from lenses.Lenses
     /*MapLens,
     ListConcatLens,

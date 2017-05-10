@@ -1,4 +1,4 @@
-package perfect.lenses
+package perfect.core.predef
 
 /**
   * Created by Mikael on 23/03/2017.

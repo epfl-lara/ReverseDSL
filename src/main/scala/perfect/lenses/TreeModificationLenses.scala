@@ -20,16 +20,16 @@ trait TreeModificationLenses {  self: InoxProgramUpdater.type =>
               repair(in, out.subExpr(modified))
             case head :: tail =>
               in.exp match {
-                case l@ADT(ADTType(adtid, tps), args) =>
+                case l@inox.trees.ADT(ADTType(adtid, tps), args) =>
                   symbols.adts(adtid) match {
                     case f: ADTConstructor =>
                       val i = f.selectorID2Index(head)
                       original match {
-                        case ADT(_, argsOriginal) =>
+                        case inox.trees.ADT(_, argsOriginal) =>
                           val subOriginal = argsOriginal(i)
                           for {pf <- repair(in.subExpr(args(i)),
                             out.subExpr(TreeModificationGoal(subOriginal.getType, tpeL, subOriginal, modified, tail)))} yield {
-                            pf.wrap(x => ADT(l.adt, args.take(i) ++ List(x) ++ args.drop(i + 1)))
+                            pf.wrap(x => inox.trees.ADT(l.adt, args.take(i) ++ List(x) ++ args.drop(i + 1)))
                           }
                       }
                     case _ => Stream.empty
