@@ -13,6 +13,8 @@ trait ValueLenses
      with PasteVariableLenses
      with StringInsertLenses { self: InoxProgramUpdater.type =>
 
+  def functionInvocationLens: SemanticLens
+
   val valueLenses = ShortcutGoal(Map(
     PatternMatchGoal.id -> PatternMatchLens,
     PatternReplaceGoal.id -> PatternReplaceLens,
@@ -24,12 +26,12 @@ trait ValueLenses
       case FunctionInvocation(id, _, _) => Some(id)
       case _ => None
     }
-  })
+  }) andThen combine(
+    functionInvocationLens,
+    FunctionInvocationUnificationLens)
 
 /*
   (  // Stand-alone programs on how to repair the program for a given instruction
-      PasteVariableLens) andThen
-    (StringInsertLens andThen
       functionInvocationLens) andThen // Matcher for function invocation in out.
     (FunctionInvocationUnificationLens andThen // Unification of arguments for function invocation.
       SetLens) andThen // Matchers for Set and SetApply constructions

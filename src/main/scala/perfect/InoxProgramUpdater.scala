@@ -6,6 +6,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with lenses.ShapeLenses
     with lenses.ValueLenses
     with core.predef.InvocationLenses
+    with core.predef.UnificationLenses
     with core.predef.ListLenses
     with core.predef.AssociativeLenses
     with lenses.StringConcatLenses {
@@ -131,6 +132,13 @@ object InoxProgramUpdater extends core.ProgramUpdater
     Variable(inox.FreshIdentifier(perfect.Utils.uniqueName(name, avoid.map(_.id.name).toSet)), StringType, Set())
   }
 
+  def isSameInvocation(e: Expr, g: Expr)(implicit cache: Cache, symbols: Symbols) = e match {
+    case FunctionInvocation(f, tpes, _) => g match {
+      case FunctionInvocation(f2, tpes2, _) => f == f2 && tpes == tpes2
+      case _ => false
+    }
+    case _ => false
+  }
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =
     combine(TreeWrapLens,
@@ -138,8 +146,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
       TreeModificationLens,
       ValueLens)
 
-  val functions: List[SemanticLens] = List(
-    FilterLens
+  def functionLenses = Map[inox.Identifier, SemanticLens](
+    perfect.Utils.filter -> FilterLens
     // TODO: Add all lenses from lenses.Lenses
     /*MapLens,
     ListConcatLens,
@@ -152,12 +160,9 @@ object InoxProgramUpdater extends core.ProgramUpdater
     MkStringLens,
     RecLens2*/
   )
-  val reversions = Map[inox.Identifier, SemanticLens](
-    perfect.Utils.filter -> FilterLens
-  )
 
-  val functionInvocationLens: SemanticLens =
-    ShortcutLens(reversions, {
+  def functionInvocationLens: SemanticLens =
+    ShortcutLens(functionLenses, {
       case FunctionInvocation(id, _, _) => Some(id)
       case _ => None
     })
