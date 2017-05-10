@@ -61,7 +61,7 @@ trait MapDataLenses { self: ProgramUpdater with ContExps with Lenses =>
                     lb
                   }
               }.toList ++ insertedPairs
-              for {solution <- inox.utils.StreamUtils.cartesianProduct(newFiniteMapKV)
+              for {solution <- Utils.StreamUtils.cartesianProduct(newFiniteMapKV)
                    (mapKeys, mapValuesCont) = solution.unzip
                    mapValues = mapValuesCont.map(_.exp)
                    mapCont = mapValuesCont.map(_.context)
@@ -79,7 +79,7 @@ trait MapDataLenses { self: ProgramUpdater with ContExps with Lenses =>
                   case (key_v, (key, value, value_v)) =>
                     repair(in.subExpr(value), out.subExpr(MapDataApply(out.exp, key))).map((key_v, _))
                 }
-                for {keys_pf_seq <- inox.utils.StreamUtils.cartesianProduct(repairs)} yield {
+                for {keys_pf_seq <- Utils.StreamUtils.cartesianProduct(repairs)} yield {
                   val (keys, pf_seq) = keys_pf_seq.unzip
                   val (list_m, context) = ContExp.combineResults(pf_seq)
                   val new_exprs = keys.zip(list_m).toMap
