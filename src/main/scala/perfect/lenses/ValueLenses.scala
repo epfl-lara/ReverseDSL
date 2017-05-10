@@ -43,13 +43,4 @@ trait ValueLenses
   }) andThen combine(
     functionInvocationLens, // Matcher for function invocation in out.
     FunctionInvocationUnificationLens) // Unification of arguments for function invocation.
-
-/*
-  (  // Stand-alone programs on how to repair the program for a given instruction
-      functionInvocationLens) andThen
-    (FunctionInvocationUnificationLens andThen
-      SetLens) andThen // Matchers for Set and SetApply constructions
-    (MapDataLens andThen // Matcher for FiniteMap and MapApply constructions
-      ADTExpr.Lens) // Matcher for ADT and ADTSelector constructions.
-      */
 }
