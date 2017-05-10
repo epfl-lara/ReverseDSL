@@ -10,6 +10,9 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with core.predef.ListLenses
     with core.predef.AssociativeLenses
     with lenses.StringConcatLenses {
+
+  import inox.FreshIdentifier
+
   type Exp = inox.trees.Expr
   type Symbols = inox.trees.Symbols
   type Var = inox.trees.Variable
@@ -83,7 +86,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
         maybeEvalWithCache(wrapper(tupleWrap(freeVariables)))(cache, symbols).toStream
       case e =>
         if(e.nonEmpty) Log(s"Warning: some equations could not be simplified: $e")
-        val input = Variable(inox.FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
+        val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
         val constraint = InoxConstraint(input === tupleWrap(freeVariables) &<>& simplified.constraints &<>&
           and(simplified.known.toSeq.map{ case (k, v) => v.getConstraint(k)}: _*))
         Log(s"Solving as $constraint")
@@ -124,12 +127,12 @@ object InoxProgramUpdater extends core.ProgramUpdater
     if(others.isEmpty) {
       a.freshen
     } else {
-      Variable(inox.FreshIdentifier(perfect.Utils.uniqueName(a.id.name, others.map(v => v.id.name).toSet)), a.tpe, Set())
+      Variable(FreshIdentifier(perfect.Utils.uniqueName(a.id.name, others.map(v => v.id.name).toSet)), a.tpe, Set())
     }
   }
 
   def mkStringVar(name: String, avoid: Var*): Var = {
-    Variable(inox.FreshIdentifier(perfect.Utils.uniqueName(name, avoid.map(_.id.name).toSet)), StringType, Set())
+    Variable(FreshIdentifier(perfect.Utils.uniqueName(name, avoid.map(_.id.name).toSet)), StringType, Set())
   }
 
   def isSameInvocation(e: Expr, g: Expr)(implicit cache: Cache, symbols: Symbols) = e match {
@@ -139,6 +142,17 @@ object InoxProgramUpdater extends core.ProgramUpdater
     }
     case _ => false
   }
+  def freshVarsForConstructor(as: ADTSelector)(implicit symbols: Symbols): (Seq[Variable], Int, Seq[Expr] => ADT) = {
+    val constructor = as.constructor.get
+    val fields = constructor.fields
+    val index = as.selectorIndex
+    val vrs = fields.map { fd => Variable(FreshIdentifier("x", true), fd.getType, Set()) }
+    (vrs, index, (x: Seq[Expr]) => ADT(ADTType(constructor.id, constructor.tps), x))
+  }
+  def mkValueVar(name: String, map_v: FiniteMap): Variable = {
+    Variable(FreshIdentifier(name, true), map_v.valueType, Set())
+  }
+
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =
     combine(TreeWrapLens,

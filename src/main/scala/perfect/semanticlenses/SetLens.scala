@@ -1,5 +1,5 @@
 package perfect
-package lenses
+package semanticlenses
 import inox._
 import inox.trees._
 import inox.trees.dsl._
@@ -9,7 +9,7 @@ import perfect.Utils.isValue
 /**
   * Created by Mikael on 05/05/2017.
   */
-object SetLens extends semanticlenses.SemanticLens {
+object SetLens extends SemanticLens {
   def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
     in.expr match {
       case l: FiniteSet =>

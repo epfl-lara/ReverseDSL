@@ -1,5 +1,5 @@
 package perfect
-package lenses
+package semanticlenses
 import inox._
 import inox.trees._
 import inox.trees.dsl._
@@ -11,7 +11,7 @@ import scala.collection.mutable.ListBuffer
 /**
   * Created by Mikael on 05/05/2017.
   */
-object MapDataLens extends semanticlenses.SemanticLens {
+object MapDataLens extends SemanticLens {
   def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
     in.expr match {
       case l: FiniteMap =>
