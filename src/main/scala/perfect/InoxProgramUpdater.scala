@@ -149,8 +149,20 @@ object InoxProgramUpdater extends core.ProgramUpdater
     val vrs = fields.map { fd => Variable(FreshIdentifier("x", true), fd.getType, Set()) }
     (vrs, index, (x: Seq[Expr]) => ADT(ADTType(constructor.id, constructor.tps), x))
   }
-  def mkValueVar(name: String, map_v: FiniteMap): Variable = {
-    Variable(FreshIdentifier(name, true), map_v.valueType, Set())
+  
+  def buildMapApply(e: Exp,g: Exp): Exp = inox.trees.MapApply(e, g)
+  def extractMap(e: Exp)(implicit symbols: Symbols): Option[(Seq[(Exp, Exp)], Exp, (Seq[(Exp, Exp)], Exp) => Exp)] = e match {
+    case FiniteMap(pairs, default, keyt, valuet) => Some((pairs, default, (pairs, default) => FiniteMap(pairs, default, keyt, valuet)))
+    case _ => None
+  }
+  def extractMapApply(e: Exp)(implicit symbols: Symbols): Option[(Exp, Exp, String => Var)] = e match {
+    case MapApply(mpBuilder, mpArg) =>
+      mpBuilder.getType match {
+        case MapType(keyt, valuet) =>
+          Some((mpBuilder, mpArg, name => Variable(FreshIdentifier(name, true), valuet, Set())))
+        case _ => None
+      }
+    case _ => None
   }
 
   // Lenses which do not need the value of the program to invert it.
