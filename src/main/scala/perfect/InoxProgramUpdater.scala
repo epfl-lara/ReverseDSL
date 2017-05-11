@@ -244,7 +244,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   // Members declared in perfect.core.predef.ADTLenses
   /** Returns the arguments of the ADT and a builder for it.*/
   def extractADT(e: Exp): Option[(Seq[Exp], Seq[Exp] => Exp)] = e match {
-    case inox.trees.ADT(tpe, args) => Some((args, x => inox.trees.ADT(tpe, args)))
+    case inox.trees.ADT(tpe, args) => Some((args, x => inox.trees.ADT(tpe, x)))
     case _ => None
   }
 
@@ -375,7 +375,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     combine(ShortcutGoal(
       Map(TreeWrapGoal.id -> TreeWrapLens,
       TreeUnwrapGoal.id -> TreeUnwrapLens,
-      TreeModificationGoal.id -> TreeModificationLens),
+      TreeModificationGoal.id -> TreeModificationLens.named("tree modification")),
       (x: Exp) => x match { case FunctionInvocation(id, _, _) => Some(id) case _ => None } ),
     ValueLens)
 

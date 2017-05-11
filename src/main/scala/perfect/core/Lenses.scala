@@ -68,7 +68,7 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     */
   case class ShortcutGoal[A](map: Map[A, SemanticLens], f: Exp => Option[A]) extends SemanticLens {
     override def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
-      f(out.exp) match {
+      f(out.simplifiedExpr) match {
         case Some(a) => map.get(a) match {
           case Some(lens) => lens.put(in, out)
           case _ => Stream.empty
@@ -121,7 +121,7 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     isPreemptive = true
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       // Literals without any free variables should be immediately replaced by the new value
-      if(isValue(in.exp)) Stream(out) else Stream.empty
+      if(isValue(in.exp) && isValue(out.exp)) Stream(out) else Stream.empty
     }
   }
 
