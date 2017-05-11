@@ -291,6 +291,11 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case _ => None
   }
 
+  def extractTreeWrapGoal(e: Exp): Option[(Exp, Exp => Exp)] = e match {
+    case TreeWrapGoal(original, wrapper) => Some((original, wrapper))
+    case _ => None
+  }
+
   // Members declared in perfect.lenses.PasteVariableLenses
   def buildPasteStringVarGoal(left: String,v: Var,v_value: String,right: String,direction: perfect.core.predef.AssociativeInsert.InsertDirection): Exp = {
     PasteVariableGoal(left, v, v_value, right, direction)

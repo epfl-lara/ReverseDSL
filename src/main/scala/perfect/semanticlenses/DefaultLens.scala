@@ -53,7 +53,7 @@ object DefaultLens extends SemanticLens {
       Stream(ProgramFormula(v, out.formula combineWith Formula(v -> StrongValue(out.expr))))
 
     case Let(vd, expr, body) =>
-      repair(ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), in.formula), out).map {
+      repair(ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), in.formula).wrappingDisabled, out).map {
         case ProgramFormula(Application(Lambda(Seq(vd), body), Seq(expr)), f) =>
           ProgramFormula(Let(vd, expr, body), f)
         case e  => throw new Exception(s"Don't know how to get a Let back from $e")

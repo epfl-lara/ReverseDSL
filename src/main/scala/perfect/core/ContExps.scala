@@ -339,6 +339,10 @@ trait ContExps { self: ProgramUpdater =>
       this.canDoWrapping = true
       this
     }
+    def wrappingDisabled: this.type = {
+      this.canDoWrapping = false
+      this
+    }
 
     def withComputedValue(e: Exp): this.type = {
       givenValue = Some(e)

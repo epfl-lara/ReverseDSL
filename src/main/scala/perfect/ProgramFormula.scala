@@ -264,6 +264,10 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
     this.canDoWrapping = true
     this
   }
+  def wrappingDisabled: this.type = {
+    this.canDoWrapping = false
+    this
+  }
 
   def withComputedValue(e: Expr): this.type = {
     givenValue = Some(e)
