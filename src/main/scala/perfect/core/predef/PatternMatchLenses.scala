@@ -25,7 +25,7 @@ trait PatternMatchLenses { self: ProgramUpdater
           in.exp match {
             case l if isValue(l) =>
               pattern match {
-                case lPattern if isValue(l) =>
+                case lPattern if isValue(lPattern) =>
                   Stream(ContExp(pattern))
                 case Var(vPattern) =>
                   val value = variables.collectFirst{
