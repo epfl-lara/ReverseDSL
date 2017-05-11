@@ -39,7 +39,7 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       if(debug) println("Entering "+msg)
       val res = self.put(in, out)
-      if(debug) println("Exiting "+msg + (if(res.nonEmpty) " with one solution " + res.head else ""))
+      if(debug) println("Exiting "+msg + (if(res.nonEmpty) s" repairing \n$in\nwith\n$out\nGot one solution:\n" + res.head else ""))
       res
     }
   }
@@ -137,10 +137,11 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     isPreemptive = true
   }
 
-  /** If nothing else worked, just returns the output. Use with care.*/
-  object FinalLens extends SemanticLens {
+  /** If nothing else worked, return nothing with a message. */
+  case object FinalLens extends SemanticLens {
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
-      Stream(out)
+      println(s"Finished to repair\n$in\n with \n$out")
+      Stream.empty
     }
   }
 

@@ -160,7 +160,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
   def freshen(a: Var, others: Var*): Var = {
     if(others.isEmpty) {
-      a.freshen
+      Variable(FreshIdentifier(a.id.name, true), a.tpe, a.flags)
     } else {
       Variable(FreshIdentifier(perfect.Utils.uniqueName(a.id.name, others.map(v => v.id.name).toSet)), a.tpe, Set())
     }
@@ -415,7 +415,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     ConstantReplaceLens.named("ConstantReplace"),
     shapeLenses.named("Shape?"),
     /*WrapperLens(*/semanticLenses.named("Semantic?") andThen defaultLens.named("default")/*, MaybeWrappedSolutions)*/
-    , FinalLens.named("/!\\ Warning could not transform")
+    , FinalLens.named(s"/!\\ Warning could not transform")
   )
 }
 
