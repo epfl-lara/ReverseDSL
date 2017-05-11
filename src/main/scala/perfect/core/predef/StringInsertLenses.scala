@@ -5,7 +5,7 @@ import perfect.core._
 /**
   * Created by Mikael on 09/05/2017.
   */
-trait StringInsertLenses { self: ProgramUpdater with ContExps with Lenses with StringLenses with StringConcatLenses =>
+trait StringInsertLenses { self: ProgramUpdater with ContExps with Lenses with StringLenses with StringConcatLenses with AssociativeLenses =>
   def extractStringInsertGoal(e: Exp): Option[(String, String, String, AssociativeInsert.InsertDirection)]
 
   def buildStringInsertGoal(left: String, inserted: String, right: String, direction: AssociativeInsert.InsertDirection):
@@ -17,38 +17,34 @@ trait StringInsertLenses { self: ProgramUpdater with ContExps with Lenses with S
       buildStringInsertGoal(left, inserted, right, direction)
   }
 
-  object StringInsertLens extends SemanticLens {
+  object StringInsertLens extends SemanticLens with AssociativeConcat[String, Char] {
+    def endsWith(a: String, b: String): Boolean = a.endsWith(b)
+    def startsWith(a: String, b: String): Boolean = a.startsWith(b)
+    def length(a: String): Int = a.length
+    def take(a: String, i: Int): String = a.substring(0, i)
+    def drop(a: String, i: Int): String = a.substring(i)
+    def empty: String = ""
+    def typeJump(a: String, b: String) = StringInsertLenses.this.typeJump(a, b)
+
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       out.simplifiedExpr match {
-        case StringConcat(outArg1, outArg2) =>
-          in.exp match {
-            case StringConcat(expr1, expr2) =>
-              ContExp.repairArguments(in.context, Seq((expr1, out.subExpr(outArg1)), (expr2, out.subExpr(outArg2)))).map{ case (args, f) =>
-                ContExp(StringConcat(args(0), args(1)), f)
-              }
-            case _ => Stream.empty
-          }
-        case _ =>
+        case StringInsertLensGoal(leftAfter, inserted, rightAfter, direction) =>
           in.exp match {
             case StringLiteral(_) =>
-              out.exp match {
-                case StringInsertLensGoal(left, inserted, right, direction) =>
-                  Stream(ContExp(StringLiteral(left + inserted + right)))
-                case _ => Stream(out)
-              }
+              Stream(ContExp(StringLiteral(leftAfter + inserted + rightAfter)))
             case StringConcat(expr1, expr2) =>
-              val expr1val = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(expr1)))
-              val expr2val = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(expr2)))
+              val expr1val = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(expr1))).getOrElse(return Stream.empty)
+              val expr2val = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(expr2))).getOrElse(return Stream.empty)
+              val leftValue_s = StringLiteral.unapply(expr1val).getOrElse(return Stream.empty)
+              val rightValue_s = StringLiteral.unapply(expr2val).getOrElse(return Stream.empty)
               Utils.ifEmpty {
-                if (expr1val.isEmpty || expr2val.isEmpty) {
-                  Stream.empty
-                } else {
-                  val expr1v = expr1val.get
-                  val expr2v = expr2val.get
-                  StringConcatLens.put(Seq(in.subExpr(expr1v), in.subExpr(expr2v)), out).flatMap { case (args, f) =>
-                    ContExp.repairArguments(in.context, Seq((expr1, args(0)), (expr2, args(1)))).map{ case (args2, f2) =>
-                      ContExp(StringConcat(args2(0), args2(1)), f combineWith f2 combineWith args(0).context combineWith args(1).context)
-                    }
+                associativeInsert(leftValue_s, rightValue_s, leftAfter, inserted, rightAfter,
+                  direction,
+                  StringLiteral.apply,
+                  (l: String, i: String, r: String) => out.subExpr(StringInsertLensGoal(l, i, r, direction))
+                ).flatMap { case (args, f) =>
+                  ContExp.repairArguments(in.context, Seq((expr1, args(0)), (expr2, args(1)))).map{ case (args2, f2) =>
+                    ContExp(StringConcat(args2(0), args2(1)), f combineWith f2 combineWith args(0).context combineWith args(1).context)
                   }
                 }
               } {
@@ -58,8 +54,7 @@ trait StringInsertLenses { self: ProgramUpdater with ContExps with Lenses with S
                 out.exp match {
                   // Handles insertion between two non-constants as a possible constant at the last resort.
                   case StringInsertLensGoal(left, inserted, right, direction) if StringLiteral.unapply(expr1).isEmpty && StringLiteral.unapply(expr2).isEmpty &&
-                    expr1val.contains(StringLiteral(left)) &&
-                    expr2val.contains(StringLiteral(right)) =>
+                    leftValue_s == left && rightValue_s == right =>
                     Stream(in.subExpr(expr1 +& StringLiteral(inserted) +& expr2).assignmentsAsOriginals())
                   case _ => Stream.empty
                 }

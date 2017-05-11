@@ -55,7 +55,7 @@ trait Lenses { self: ProgramUpdater with ContExps =>
   /** Extractor of multiple arguments function calls to reverse.*/
   trait MultipleArgExtractor {
     /** The first argument is the raw list of arguments
-      * The second return element is a function which, given an evaluator from the expr to their values with in.formula, and out, returns a stream of arguments with a new fomrula.
+      * The second return element is a function which, given an evaluator from the expr to their values with in.context, and out, returns a stream of arguments with a new fomrula.
       * The third return element is a function which recombines multiple arguments into a single expression. */
     def extract(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[
       ( Seq[Exp],
@@ -68,22 +68,29 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       extract(in.exp) match {
         case Some((args, wrapper, build)) =>
-          in.context.partialAssignments.map(_._1) match {
+          (in.context.partialAssignments.map(_._1) match {
             case Some(assign) =>
               val argsOptValue = args.map(arg => maybeEvalWithCache(assign(arg)))
               if (argsOptValue.forall(_.nonEmpty)) {
-                val argsFormulas = argsOptValue.map(x => in.subExpr(x.get))
-                val lenseResult = wrapper(argsFormulas, out)
+                val argsContexts = argsOptValue.map(x => in.subExpr(x.get))
+                val lenseResult = wrapper(argsContexts, out)
                 for {l <- lenseResult; (newArgsValues, newForm) = l
                      a <- ContExp.repairArguments(in.context, args.zip(newArgsValues))
-                     (newArguments, newArgumentsFormula) = a
+                     (newArguments, newArgumentsContext) = a
                 } yield {
-                  val formula = newForm combineWith newArgumentsFormula
-                  ContExp(build(newArguments), formula)
+                  val context = newForm combineWith newArgumentsContext
+                  ContExp(build(newArguments), context)
                 }
-              }
-              else Stream.empty
-            case None => Stream.empty
+              } else Stream.empty
+            case _ => Stream.empty
+          }) #::: {
+            extract(out.exp) match { // Unification of arguments if they have the same shape.
+              case Some((argsOut, _, _)) =>
+                ContExp.repairArguments(in.context, args.zip(argsOut.map(out.subExpr))).map { case (newArguments, context) =>
+                  ContExp(build(newArguments), context)
+                }
+              case _ => Stream.empty[ContExp]
+            }
           }
 
         case _ => Stream.empty

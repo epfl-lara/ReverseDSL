@@ -5,7 +5,7 @@ import perfect.core._
 /**
   * Created by Mikael on 09/05/2017.
   */
-trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with AssociativeLenses with StringLenses with StringInsertLenses =>
+trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with StringLenses =>
   def extractStringConcat(e: Exp): Option[(Exp, Exp)]
   def buildStringConcat(left: Exp, right: Exp): Exp
   def buildStringConcatSimplified(left: Exp, right: Exp): Exp
@@ -45,7 +45,7 @@ trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with A
 
   def mkStringVar(name: String, avoid: Var*): Var
 
-  case object StringConcatLens extends MultiArgsSemanticLens with AssociativeConcat[String, Char] {
+  case object StringConcatLens extends MultiArgsSemanticLens {
     def extract(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(
         Seq[Exp],
         (Seq[ContExp], ContExp) => Stream[(Seq[ContExp], Cont)],
@@ -63,13 +63,6 @@ trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with A
     }
 
     import Utils._
-
-    def endsWith(a: String, b: String): Boolean = a.endsWith(b)
-    def startsWith(a: String, b: String): Boolean = a.startsWith(b)
-    def length(a: String): Int = a.length
-    def take(a: String, i: Int): String = a.substring(0, i)
-    def drop(a: String, i: Int): String = a.substring(i)
-    def empty: String = ""
 
     def typeJump(a: String, b: String) = StringConcatLenses.this.typeJump(a, b)
 
@@ -126,66 +119,22 @@ trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with A
 
       // Prioritize changes that touch only one of the two expressions.
       out.exp match {
-        case StringInsertLensGoal(leftAfter, inserted, rightAfter, direction) =>
-          val StringLiteral(rightValue_s) = rightValue
-          val StringLiteral(leftValue_s) = leftValue
-
-          associativeInsert(leftValue_s, rightValue_s, leftAfter, inserted, rightAfter,
-            direction,
-            StringLiteral.apply,
-            (l: String, i: String, r: String) => out.subExpr(StringInsertLensGoal(l, i, r, direction))
-          )
-          // Subsumed by pattern matching itself
-        /*case pc@PatternMatchLensGoal.CloneTextMultiple(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
-          def cloneToLeft: List[(Seq[ContExp], Cont)] = {
-            if(right.endsWith(rv)) {
-              val newLeft = left
-              val newRight = right.substring(0, right.length - rv.length)
-              val leftClone = out.subExpr(PatternMatchLensGoal.CloneTextMultiple(newLeft, List((cloned, variable, newRight))))
-              val rightClone = ContExp(rightValue)
-              List((Seq(leftClone, rightClone), Cont())) // /: Log.prefix("cloneToLeft: ")
-            } else Nil
-          }
-          def cloneToRight: List[(Seq[ContExp], Cont)] = {
-            if(left.startsWith(lv)) {
-              val newLeft = left.substring(lv.length)
-              val newRight = right
-              val leftPaste = ContExp(leftValue)
-              val rightPaste = out.subExpr(PatternMatchGoal.CloneTextMultiple(newLeft, List((cloned, variable, newRight))))
-              List((Seq(leftPaste, rightPaste), Cont())) // /: Log.prefix("cloneToRight: ")
-            } else Nil
-          }
-          // If the clone overlaps the two arguments
-          def cloneBoth: List[(Seq[ContExp], Cont)] = {
-            if(!left.startsWith(lv)&& !right.endsWith(rv) &&
-              lv.startsWith(left) && rv.endsWith(right)) {
-              val leftCloned = cloned.substring(0, lv.length - left.length)
-              val rightCloned = cloned.substring(lv.length - left.length)
-              val leftVar = mkStringVar(leftCloned, variable)
-              val leftClone = out.subExpr(PatternMatchLensGoal.CloneTextMultiple(left, List((leftCloned, leftVar, ""))))
-              val rightVar = mkStringVar(rightCloned, variable, leftVar)
-              val rightClone = out.subExpr(PatternMatchLensGoal.CloneTextMultiple("", List((rightCloned, rightVar, right))))
-              List((Seq(leftClone, rightClone), Cont(variable -> InsertVariable(leftVar +& rightVar))))
-            } else Nil
-          }
-          (cloneToLeft ++ cloneToRight ++ cloneBoth).toStream*/
-
         case StringLiteral(s) =>
           ifEmpty((rightCase(s) .toList++ leftCase(s).toList).sortBy(_._2).map(_._1).toStream) { defaultCase }
-        case StringConcat(StringLiteral(left), right) =>
+        case StringConcat(StringLiteral(left), right) => // Special cases, I don't know if we need them.
           if(lv.startsWith(left)) {
             val newLeftValue = lv.substring(left.length)
             put(Seq(ContExp(StringLiteral(newLeftValue)), rightProgram), out.subExpr(right))
           } else {
-            ???
+            Stream.empty
           }
-        case StringConcat(left, StringLiteral(right)) => // TODO !!
+        case StringConcat(left, StringLiteral(right)) => // Special cases, I don't know if we need them.
           //leftValue = "Hello big " && rightValue == "beautiful world" && right = " world"
           if(rv.endsWith(right)) {
             val newRightValue = rv.substring(0, rv.length - right.length)
             put(Seq(leftProgram, ContExp(StringLiteral(newRightValue))), out.subExpr(left))
           } else {
-            ???
+            Stream.empty
           }
         case Var(v) if out.context.constraints == ExpTrue =>
           out.context.findStrongConstraintValue(v) match {
