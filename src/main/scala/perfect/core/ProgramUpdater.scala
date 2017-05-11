@@ -55,10 +55,23 @@ trait ProgramUpdater { self: ContExps with Lenses =>
   /** Obtain all possible assignments from the formula Cont for the given free variables */
   def determinizeAll(cont: Cont)(freeVariables: Seq[Var] = cont.varsToAssign.toSeq)(implicit symbols: Symbols, cache: Cache): Stream[Map[Var, Exp]]
 
-  /** Evaluates a given expression */
-  def maybeEvalWithCache(expr: Exp)(implicit cache: Cache, symbols: Symbols): Option[Exp]
+  /** Evaluates a given closed expression */
+  def eval(expr: Exp)(implicit symbols: Symbols): Either[Exp, String]
 
-    //////////// Concrete members
+  //////////// Concrete members
+  /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
+  def maybeEvalWithCache(expr: Exp)(implicit cache: Cache, symbols: Symbols): Option[Exp] = {
+    if(cache.contains(expr)) {
+      Some(cache(expr))
+    } else {
+      eval(expr) match {
+        case s@Left(v) => cache(expr) = v
+          Some(v)
+        case s@Right(_) => None
+      }
+    }
+  }
+
   implicit class AugmentedExp(e1: Exp) {
     def ===(e2: Exp) = Equal(e1, e2)
   }
@@ -117,7 +130,17 @@ trait ProgramUpdater { self: ContExps with Lenses =>
 
   lazy val theLens = lens
 
+  var debug: Boolean = false
+
   def repair(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
-    theLens.put(in, out)
+    if(!Log.activate) {
+      theLens.put(in, out)
+    } else {
+      val stackLevel = Thread.currentThread().getStackTrace.length
+      Log(s"\n@repair$stackLevel(\n  $in\n, $out)")
+
+      theLens.put(in, out) #:::
+        {Log(s"Finished repair$stackLevel"); Stream.empty[ContExp]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $in\n, $out):\n~>")
+    }
   }
 }

@@ -9,7 +9,6 @@ import perfect.Utils.children
 import org.scalatest._
 import matchers._
 import Matchers.{=== => _, _}
-import ReverseProgram.FunctionEntry
 import Utils._
 import WebTrees._
 import inox._

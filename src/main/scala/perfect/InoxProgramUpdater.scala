@@ -45,23 +45,18 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   implicit def symbols = perfect.Utils.defaultSymbols.withFunctions(lenses.Lenses.funDefs)
 
-  /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
-  def maybeEvalWithCache(expr: inox.trees.Expr)(implicit cache: Cache, symbols: Symbols): Option[inox.trees.Expr] = {
-    if(cache.contains(expr)) {
-      Some(cache(expr))
-    } else {
-      import inox.evaluators._
-      val p = inox.InoxProgram(context, symbols)
-      val evaluator = LambdaPreservingEvaluator(p)
-      evaluator.eval(expr) match {
-        case EvaluationResults.Successful(e) =>
-          cache(expr) = e
-          Some(e)
-        case m => Log(s"Could not evaluate: $expr, got $m")
-          None
-      }
+  def eval(expr: inox.trees.Expr)(implicit symbols: Symbols): Either[inox.trees.Expr, String] = {
+    import inox.evaluators._
+    val p = inox.InoxProgram(context, symbols)
+    val evaluator = LambdaPreservingEvaluator(p)
+    evaluator.eval(expr) match {
+      case EvaluationResults.Successful(e) => Left(e)
+      case EvaluationResults.EvaluatorError(msg) => Right(msg)
+      case EvaluationResults.RuntimeError(msg) => Right(msg)
+      case m => Right("An error occurred. Sorry not to be able to give more information than " + m)
     }
   }
+
 
   /** Returns an evaluator which preserves lambda shapes */
   def LambdaPreservingEvaluator(p: inox.InoxProgram) = {
@@ -321,7 +316,10 @@ object InoxProgramUpdater extends core.ProgramUpdater
   def buildStringConcatSimplified(left: Exp,right: Exp): Exp = {
     new StringConcatExtended.AugmentedSubExpr(left).+<>&(right)
   }
-  def extractStringConcat(e: Exp): Option[(Exp, Exp)] = StringConcat.unapply(e)
+  def extractStringConcat(e: Exp): Option[(Exp, Exp)] = e match {
+    case inox.trees.StringConcat(a, b) => Some((a, b))
+    case _ => None
+  }
 
   // Members declared in perfect.lenses.StringInsertLenses
   def buildStringInsertGoal(left: String,inserted: String,right: String,direction: perfect.core.predef.AssociativeInsert.InsertDirection): Exp = {
@@ -334,48 +332,57 @@ object InoxProgramUpdater extends core.ProgramUpdater
   // Members declared in perfect.core.predef.StringLenses
   def buildStringLiteral(e: String): Exp = inox.trees.StringLiteral(e)
   def extractStringliteral(e: Exp): Option[String] = e match {
-    case StringLiteral(s) => Some(s)
+    case inox.trees.StringLiteral(s) => Some(s)
     case _ => None
   }
 
 
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =
-    combine(TreeWrapLens,
-      TreeUnwrapLens,
-      TreeModificationLens,
-      ValueLens)
-
-  def functionLenses = Map[inox.Identifier, SemanticLens](
-    perfect.Utils.filter -> FilterLens,
-    perfect.Utils.map -> MapLens
-    // TODO: Add all lenses from lenses.Lenses
-    /*MapLens,
-    ListConcatLens,
-    FlattenLens,
-    FlatMapLens,
-    StringConcatLens,
-    SplitEvenLens,
-    MergeLens,
-    SortWithLens,
-    MkStringLens,
-    RecLens2*/
-  )
+    combine(ShortcutGoal(
+      Map(TreeWrapGoal.id -> TreeWrapLens,
+      TreeUnwrapGoal.id -> TreeUnwrapLens,
+      TreeModificationGoal.id -> TreeModificationLens),
+      (x: Exp) => x match { case FunctionInvocation(id, _, _) => Some(id) case _ => None } ),
+    ValueLens)
 
   def functionInvocationLens: SemanticLens =
-    ShortcutLens(functionLenses, {
+    ShortcutLens(Map[inox.Identifier, SemanticLens](
+      perfect.Utils.filter -> FilterLens,
+      perfect.Utils.map -> MapLens,
+      perfect.Utils.dummyStringConcat -> StringConcatLens.named("stringConcat")
+      // TODO: Add all lenses from lenses.Lenses
+      /*MapLens,
+      ListConcatLens,
+      FlattenLens,
+      FlatMapLens,
+      SplitEvenLens,
+      MergeLens,
+      SortWithLens,
+      MkStringLens,
+      RecLens2*/
+    ), {
       case FunctionInvocation(id, _, _) => Some(id)
-      case _ => None
-    })
+      case StringConcat(_, _) =>
+        println("strConcat ")
+        Some(perfect.Utils.dummyStringConcat)
+      case e =>
+        println("No match for function invocation " + e)
+        None
+    }).named("Dispatch function invocation")
   import perfect.lenses._
 
 // Lenses which need the value of the program to invert it.
   val semanticLenses: SemanticLens = valueLenses // andThen
 
+  debug = true
 
-
-  val lens = NoChangeLens andThen
-    shapeLenses andThen /*WrapperLens(*/semanticLenses/* andThen DefaultLens, MaybeWrappedSolutions)*/
+  val lens = combine(
+    NoChangeLens.named("No Change?"),
+    ConstantReplaceLens.named("ConstantReplace"),
+    shapeLenses.named("Shape?"),
+    /*WrapperLens(*/semanticLenses.named("Semantic?")/* andThen DefaultLens, MaybeWrappedSolutions)*/
+  )
 
 }
 

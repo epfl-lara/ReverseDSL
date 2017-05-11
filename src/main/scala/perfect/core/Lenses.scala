@@ -10,7 +10,10 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     var isPreemptive: Boolean = false
     def andThen(other: SemanticLens) = CombinedLens(self, other)
     def interleave(other: SemanticLens) = InterleavedLens(self, other)
+    def named(name: String) = LogLens(this, name)
   }
+
+  ////// Lens combinators
 
   /** Combines two lenses, stopping after the first if it is preemptive */
   case class CombinedLens(self: SemanticLens, other: SemanticLens) extends SemanticLens {
@@ -31,12 +34,34 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     }
   }
 
+  /** Prints a message when executing and after executing the lense. */
+  case class LogLens(self: SemanticLens, msg: String) extends SemanticLens {
+    def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
+      if(debug) println("Entering "+msg)
+      val res = self.put(in, out)
+      if(debug) println("Exiting "+msg + (if(res.nonEmpty) " with one solution " + res.head else ""))
+      res
+    }
+  }
+
+  ////// Lens defaults
+
   /** Returns the in with assignments unchanged if the out expression is the same. */
   case object NoChangeLens extends SemanticLens {
     isPreemptive = true
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       if(in.exp == out.exp) return {
         Stream(in.assignmentsAsOriginals()) // /:: Log.prefix("@return original without constraints:")
+      } else Stream.empty
+    }
+  }
+
+  /** Replaces the input by the output if there are no free variables in either side */
+  case object ConstantReplaceLens extends SemanticLens {
+    isPreemptive = true
+    def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
+      if(isValue(in.exp) && isValue(out.exp)) {
+        Stream(out)
       } else Stream.empty
     }
   }
@@ -109,7 +134,8 @@ trait Lenses { self: ProgramUpdater with ContExps =>
       f(in.exp) match {
         case Some(a) => map.get(a) match {
           case Some(lens) => lens.put(in, out)
-          case _ => Stream.empty
+          case _ =>
+            Stream.empty
         }
         case _ => Stream.empty
       }

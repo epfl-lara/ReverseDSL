@@ -9,7 +9,6 @@ import perfect.InoxConvertible._List
 import org.scalatest._
 import matchers._
 import Matchers.{=== => _, _}
-import ReverseProgram.FunctionEntry
 import Utils._
 import WebTrees._
 import inox._
@@ -280,7 +279,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
     val pfun = "Hello " +& "world"
     checkProg(expected1, pfun)
-    val pfun2 = pfun repairFrom expected2 shouldProduce expected2
+    val pfun2 = Log activated { pfun repairFrom expected2 shouldProduce expected2 }
     val pfun3 = checkProg(expected3, repairProgram(pfun, expected3, 3))
     val pfun4 = checkProg(expected4, repairProgram(pfun, expected4, 3))
 

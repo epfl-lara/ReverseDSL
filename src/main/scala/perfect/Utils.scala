@@ -112,6 +112,8 @@ object Utils {
   val splitEven = FreshIdentifier("splitEven")
   val mkString = FreshIdentifier("mkString")
 
+  val dummyStringConcat = FreshIdentifier("strconcat")
+
   /** Dummy function implementation, body overriden in lambdaPreservingEvaluator*/
   val stringCompare = FreshIdentifier("stringCompare")
 

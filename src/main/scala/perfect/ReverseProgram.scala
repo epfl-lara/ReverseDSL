@@ -15,9 +15,6 @@ import scala.collection.mutable.{HashMap, ListBuffer}
   * Created by Mikael on 03/03/2017.
   */
 object ReverseProgram {
-  type FunctionEntry = Identifier
-  type ModificationSteps = Unit
-  type OutExpr = Expr
   type Cache = HashMap[Expr, Expr]
 
   import Utils._
