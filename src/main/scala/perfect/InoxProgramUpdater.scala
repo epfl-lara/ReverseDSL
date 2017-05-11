@@ -149,7 +149,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
 
 
-  import perfect.semanticlenses.{ListInsertGoal, TreeModificationGoal, PasteVariableGoal, PatternReplaceGoal, PatternMatchGoal, StringInsertGoal}
+  import perfect.semanticlenses.{ListInsertGoal, TreeModificationGoal, PasteVariableGoal, PatternReplaceGoal, PatternMatchGoal, StringInsertGoal, TreeUnwrapGoal, TreeWrapGoal}
 
   /** Returns the head, the tail and a way to build a list from a sequence of elements. */
   def extractCons(e: Exp): Option[(Exp, Exp, List[Exp] => Exp)] = e match {
@@ -250,7 +250,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   /** Returns the original tree, the modified subtree, and instead of a path,
     * an index indicating where the next change should happen with a way to rebuild the goal with the new original subtree */
   def extractTreeModificationGoal(goal: Exp)(implicit symbols: Symbols):
-      Option[(Exp, Exp, Option[(Int, Exp => Exp)])] = goal match {
+      Option[(Exp, Exp, Option[(Int, Exp)])] = goal match {
     case TreeModificationGoal(tpeGlobal, tpeLocal, original, modified, l) =>
       Some((original, modified, l match {
         case head::tail =>
@@ -259,7 +259,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
               symbols.adts(adtid) match {
                 case f: ADTConstructor =>
                   val i = f.selectorID2Index(head)
-                  Some((i, newOriginal => TreeModificationGoal(newOriginal.getType, tpeLocal, newOriginal, modified, tail)))
+                  val newOriginal = args(i)
+                  Some((i, TreeModificationGoal(newOriginal.getType, tpeLocal, newOriginal, modified, tail)))
                 case _ => return None
               }
             case _ => return None
@@ -268,7 +269,28 @@ object InoxProgramUpdater extends core.ProgramUpdater
       }))
     case _ => None
   }
-  
+
+  def extractTreeUnwrapGoal(e: Exp)(implicit symbols: Symbols): Option[(Exp, Option[(Int, Exp)])] = e match {
+    case TreeUnwrapGoal(tpe, original, path) =>
+      path match {
+        case Nil =>
+          Some((original, None))
+        case head :: tail =>
+          original match {
+            case l@inox.trees.ADT(ADTType(adtid, tps), args) =>
+              symbols.adts(adtid) match {
+                case f: ADTConstructor =>
+                  val i = f.selectorID2Index(head)
+                  val newOriginal = args(i)
+                  Some((original, Some((i, TreeUnwrapGoal(newOriginal.getType, newOriginal, tail)))))
+                case _ => None
+              }
+            case _ => None
+          }
+      }
+    case _ => None
+  }
+
   // Members declared in perfect.lenses.PasteVariableLenses
   def buildPasteStringVarGoal(left: String,v: Var,v_value: String,right: String,direction: perfect.core.predef.AssociativeInsert.InsertDirection): Exp = {
     PasteVariableGoal(left, v, v_value, right, direction)

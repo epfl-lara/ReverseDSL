@@ -76,6 +76,6 @@ object TreeUnwrap extends CustomProgramFormula  {
   def unapply(pf: ProgramFormula): Option[(Type, Expr, List[Identifier])] = {
     Goal.unapply(pf.expr)
   }
-  val Goal = lenses.TreeUnwrapGoal
+  val Goal = TreeUnwrapGoal
 }
 

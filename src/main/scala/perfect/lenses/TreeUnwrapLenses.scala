@@ -1,30 +1,31 @@
 package perfect.lenses
-import inox.{FreshIdentifier, Identifier}
-import perfect.InoxProgramUpdater
-import perfect.semanticlenses.TreeWrap
-import inox.trees.{Application, Lambda, Let}
+
+import perfect.core._
+import perfect.core.predef._
 
 /**
   * Created by Mikael on 09/05/2017.
   */
-trait TreeUnwrapLenses { self: InoxProgramUpdater.type =>
-  import inox.trees.{ADT, ADTType, ADTConstructor}
+trait TreeUnwrapLenses { self: ProgramUpdater with ContExps with Lenses with ADTLenses =>
+
+  /** Returns the original tree, and if needed to find a deeper subtree, return the index of the argument,
+    * and the new goal based on the sub-tree of the original */
+  def extractTreeUnwrapGoal(e: Exp)(implicit symbols: Symbols): Option[(Exp, Option[(Int, Exp)])]
+
+  object TreeUnwrapLensGoal {
+    def unapply(e: Exp)(implicit symbols: Symbols) = extractTreeUnwrapGoal(e)
+  }
 
   object TreeUnwrapLens extends SemanticLens {
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       out.simplifiedExpr match {
-        case TreeUnwrapGoal(tpe, original, l) =>
-          l match {
-            case Nil => Stream(in.assignmentsAsOriginals())
-            case head :: tail =>
+        case TreeUnwrapLensGoal(original, subgoal) =>
+          subgoal match {
+            case None => Stream(in.assignmentsAsOriginals())
+            case Some((index, treeUnwrapGoal)) =>
               in.exp match {
-                case l@inox.trees.ADT(ADTType(adtid, tps), args) =>
-                  symbols.adts(adtid) match {
-                    case f: ADTConstructor =>
-                      val i = f.selectorID2Index(head)
-                      return repair(in.subExpr(args(i)), out.subExpr(TreeUnwrapGoal(tpe, args(i), tail)))
-                    case _ => Stream.empty
-                  }
+                case l@ADT(args, adtBuilder) =>
+                  repair(in.subExpr(args(index)), out.subExpr(treeUnwrapGoal))
                 case _ => Stream.empty
               }
           }
@@ -35,57 +36,3 @@ trait TreeUnwrapLenses { self: InoxProgramUpdater.type =>
   }
 }
 
-object TreeUnwrapGoal extends FunDefGoal {
-  import inox._
-  import inox.trees._
-  import inox.trees.dsl._
-
-  private val Unwrap = FreshIdentifier("unwrap")
-
-  def apply(tpe: Type, original: Expr, argsInSequence: List[Identifier]): Expr = {
-    E(Unwrap)(tpe)(original, Select(tpe, argsInSequence))
-  }
-  def unapply(e: Expr): Option[(Type, Expr, List[Identifier])] = {
-    e match {
-      case FunctionInvocation(Unwrap, Seq(tpe), Seq(original, Lambda(Seq(unwrapvd), adtselectors))) =>
-        def unbuild(e: Expr): (Type, Expr, List[Identifier]) = e match {
-          case ADTSelector(e, i) =>
-            val (t, res, l) = unbuild(e)
-            (t, res, l :+ i)
-          case res => (tpe, original, Nil)
-        }
-        Some(unbuild(adtselectors))
-      case _ => None
-    }
-  }
-
-
-  /** Builds and Unbuilds a lambda to select parts of the expression */
-  object Select {
-    def apply(tpe: Type, argsInSequence: List[Identifier]): Expr = {
-      \("original"::tpe)(original =>
-        ((original: Expr) /: argsInSequence){ case (e, i) => ADTSelector(e, i)}
-      )
-    }
-    def unapply(e: Expr): Option[(Type, List[Identifier])] = {
-      e match {
-        case Lambda(Seq(ValDef(_, tpe, _)), body) =>
-          def unbuild(e: Expr): Option[(Type, List[Identifier])] = e match {
-            case ADTSelector(e, i) => unbuild(e) map { case (t, l) => (t, l :+ i) }
-            case v: Variable => Some((tpe, Nil))
-            case _ => None
-          }
-          unbuild(body)
-        case _ => None
-      }
-    }
-  }
-
-  def funDef = mkFunDef(Unwrap)("A"){ case Seq(tA) =>
-    (Seq("original"::tA, "unwrapper"::FunctionType(Seq(tA), tA)),
-      tA, {
-      case Seq(original, unwrapper) =>
-        Application(unwrapper, Seq(original))
-    })
-  }
-}
