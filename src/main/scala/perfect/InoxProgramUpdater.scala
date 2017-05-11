@@ -11,7 +11,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with core.predef.UnificationLenses
     with core.predef.ListLibraryLenses
     with core.predef.AssociativeLenses
-    with lenses.StringConcatLenses {
+    with core.predef.StringConcatLenses {
 
   import inox.FreshIdentifier
 

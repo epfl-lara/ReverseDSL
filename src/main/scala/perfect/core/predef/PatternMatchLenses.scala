@@ -1,7 +1,6 @@
-package perfect.lenses
+package perfect.core.predef
 
 import perfect.core._
-import perfect.core.predef._
 
 /**
   * Created by Mikael on 09/05/2017.

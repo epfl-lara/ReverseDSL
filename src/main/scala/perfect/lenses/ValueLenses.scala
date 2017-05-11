@@ -3,7 +3,7 @@ package perfect.lenses
 import inox.FreshIdentifier
 import perfect.InoxProgramUpdater
 import inox.trees._
-import perfect.core.predef.{ADTLenses, ListInsertLenses, MapDataLenses, SetLenses, StringLenses}
+import perfect.core.predef._
 import perfect.semanticlenses.{ListInsertGoal, PasteVariableGoal, StringInsertGoal, PatternMatchGoal, PatternReplaceGoal}
 
 /**
