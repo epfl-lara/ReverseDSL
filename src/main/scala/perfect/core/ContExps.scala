@@ -357,9 +357,18 @@ trait ContExps { self: ProgramUpdater =>
       context.assignments.flatMap(assign => maybeEvalWithCache(assign(e)))
     }
 
+    /** Given all assignments (including original ones) returns the best simplification of the variable exp */
     lazy val simplifiedExpr: Exp = {
       if(isVar(exp)) {
         context.findConstraintValue(exp.asInstanceOf[Var]).getOrElse(exp)
+      } else exp
+    }
+
+    /** Given only strong assignments, returns the best simplification of the variable exp
+      * Since this is used for lambda extraction, we avoid having to replace existing lambdas if they did not change. */
+    lazy val forcedExpr: Exp = {
+      if(isVar(exp)) {
+        context.findStrongConstraintValue(exp.asInstanceOf[Var]).getOrElse(exp)
       } else exp
     }
 

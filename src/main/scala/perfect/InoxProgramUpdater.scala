@@ -7,11 +7,13 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with lenses.ValueLenses
     with core.predef.InvocationLenses
     with core.predef.ApplicationLenses
+    with core.predef.LambdaLenses
     with core.predef.ListLenses
     with core.predef.UnificationLenses
     with core.predef.ListLibraryLenses
     with core.predef.AssociativeLenses
-    with core.predef.StringConcatLenses {
+    with core.predef.StringConcatLenses
+    with core.predef.DefaultLenses {
 
   import inox.FreshIdentifier
 
@@ -104,23 +106,54 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
 
   // Members declared in perfect.core.ProgramUpdater
-  def Assign(v: Variable, e: Expr, body: Expr): Expr = Let(v.toVal, e, body)
+  def Assign(v: Variable, e: Expr, body: Expr): Expr = inox.trees.Let(v.toVal, e, body)
   def exists(f: Expr => Boolean)(e: Expr): Boolean = exprOps.exists(f)(e)
   def isValue(e: Expr): Boolean = perfect.Utils.isValue(e)
   def isVar(e: Expr): Boolean = e.isInstanceOf[Variable]
   def postMap(f: Expr => Option[Expr])(e: Expr): Expr = exprOps.postMap(f)(e)
+  def preMap(f: Exp => Option[Exp],recursive: Boolean)(e: Exp): Exp = exprOps.preMap(f, recursive)(e)
 
-  // Members declared in perfect.core.predef.ListLenses
+  // Members declared in perfect.core.predef.ApplicationLenses
   def buildApplication(lambda: Exp, args: Seq[Exp]): Exp = inox.trees.Application(lambda, args)
   def extractApplication(e: Exp): Option[(Exp, Seq[Exp])] = e match {
     case Application(lambda, args) => Some((lambda, args))
     case _ => None
   }
 
+  // Members declared in perfect.core.predef.AsInstanceOfLenses
+  def extractAsInstanceOf(e: Exp): Option[(Exp, Exp => Exp)] = e match {
+    case inox.trees.AsInstanceOf(e, tpe) => Some((e, x => inox.trees.AsInstanceOf(x, tpe)))
+    case _ => None
+  }
+
+  // Members declared in perfect.core.predef.IfLenses
+  def buildIf(cond: Exp,thn: Exp,elz: Exp): Exp = inox.trees.IfExpr(cond, thn, elz)
+  def extractIf(e: Exp): Option[(Exp, Exp, Exp)] = e match {
+    case inox.trees.IfExpr(cond, thn, elz) => Some((cond, thn, elz))
+    case _ => None
+  }
+
+  // Members declared in perfect.core.predef.LambdaLenses
+  def buildLambda(v: Seq[Var],body: Exp): Exp = inox.trees.Lambda(v.map(_.toVal), body)
+  def extractLambda(e: Exp): Option[(Seq[Var], Exp, Exp => Exp)] = e match {
+    case inox.trees.Lambda(vds, body) => Some((vds.map(_.toVariable), body, x => inox.trees.Lambda(vds, body)))
+    case _ => None
+  }
+
+  // Members declared in perfect.core.predef.LetLenses
+  def buildLet(v: Var,assigned: Exp,body: Exp): Exp = inox.trees.Let(v.toVal, assigned, body)
+  def extractLet(e: Exp): Option[(Var, Exp, Exp)] = e match {
+    case inox.trees.Let(v, thn, elz) => Some((v.toVariable, thn, elz))
+    case _ => None
+  }
+
+  // Members declared in perfect.core.FunctionInvocationLenses
   def extractInvocation(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(Seq[Exp], Seq[Exp] => Exp)] = e match {
     case inox.trees.FunctionInvocation(id, tpe, args) => Some((args, newArgs => inox.trees.FunctionInvocation(id, tpe, newArgs)))
     case _ => None
   }
+
+  // Members declared in perfect.core.predef.ListLenses
   def extractList(e: Exp): Option[(List[Exp], List[Exp] => Exp)] = e match {
     case perfect.ListLiteral(elements, builder) => Some((elements, builder))
     case _ => None
@@ -134,12 +167,12 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
   /** Returns the default value of the unique argument of the lambda, */
   def extractLambdaDefaultArgument(e: Exp): Option[Exp] = e match {
-    case Lambda(Seq(vd), body) => Some(perfect.Utils.defaultValue(vd.tpe))
+    case inox.trees.Lambda(Seq(vd), body) => Some(perfect.Utils.defaultValue(vd.tpe))
     case _ => None
   }
   /** Returns an "unknown" fresh variable matching the type of the lambda's first argument*/
   def extractLambdaUnknownVar(e: Exp): Option[Var] = e match {
-    case Lambda(Seq(vd), body) => Some(Variable(FreshIdentifier("unknown", true), vd.tpe, Set()))
+    case inox.trees.Lambda(Seq(vd), body) => Some(Variable(FreshIdentifier("unknown", true), vd.tpe, Set()))
     case _ => None
   }
 
@@ -236,7 +269,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   /** In a map, can the output be transfered to the input, e.g. when adding a new row in a mkString mapped with a prefix. */
   def canPushInsertedOutputToInput(output: Exp, lambda: Exp)(implicit symbols: Symbols): Boolean = {
     lambda match {
-      case Lambda(Seq(vd), body) =>
+      case inox.trees.Lambda(Seq(vd), body) =>
         vd.tpe == body.getType && output == StringLiteral("")
       case _ => false
     }
@@ -381,9 +414,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
     NoChangeLens.named("No Change?"),
     ConstantReplaceLens.named("ConstantReplace"),
     shapeLenses.named("Shape?"),
-    /*WrapperLens(*/semanticLenses.named("Semantic?")/* andThen DefaultLens, MaybeWrappedSolutions)*/
+    /*WrapperLens(*/semanticLenses.named("Semantic?") andThen defaultLens/*, MaybeWrappedSolutions)*/
   )
-
 }
 
 

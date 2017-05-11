@@ -35,6 +35,9 @@ trait ProgramUpdater { self: ContExps with Lenses =>
   /** Transforms an expression bottom-up */
   def postMap(f: Exp => Option[Exp])(e: Exp): Exp
 
+  /** Transforms an expression top-down */
+  def preMap(f: Exp => Option[Exp], recursive: Boolean = false)(e: Exp): Exp
+
   /** Returns true if a sub-tree of e satisfies the predicate f.*/
   def exists(f: Exp => Boolean)(e: Exp): Boolean
 
@@ -59,6 +62,14 @@ trait ProgramUpdater { self: ContExps with Lenses =>
   def eval(expr: Exp)(implicit symbols: Symbols): Either[Exp, String]
 
   //////////// Concrete members
+  def replaceFromVars(substs: Map[Var, Exp], b: Exp) = {
+    postMap {
+      case Var(v) => substs.get(v)
+      case _ => None
+    }(b)
+  }
+
+
   /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
   def maybeEvalWithCache(expr: Exp)(implicit cache: Cache, symbols: Symbols): Option[Exp] = {
     if(cache.contains(expr)) {
