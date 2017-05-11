@@ -10,7 +10,7 @@ import perfect.ImplicitTuples.{_1, _2, tuple2}
 import ProgramFormula._
 import StringConcatExtended._
 import perfect.core.predef
-import perfect.core.predef.{FilterLike, MapReverseLike}
+import perfect.core.predef.{FilterLike, FlatMapReverseLike, MapReverseLike}
 
 object Lenses {
   import perfect.semanticlenses._

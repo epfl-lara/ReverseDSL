@@ -68,8 +68,10 @@ trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with S
 
     def put(originalArgsValues: Seq[ContExp], out: ContExp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
       val newOutput = out.exp
-      val leftProgram@ContExp(leftValue@StringLiteral(lv), leftF) = originalArgsValues.head
-      val rightProgram@ContExp(rightValue@StringLiteral(rv), rightF) = originalArgsValues.tail.head
+      val leftProgram@ContExp(leftValue, leftF) = originalArgsValues.head
+      val rightProgram@ContExp(rightValue, rightF) = originalArgsValues.tail.head
+      val lv = StringLiteral.unapply(leftValue).getOrElse(return Stream.empty)
+      val rv = StringLiteral.unapply(rightValue).getOrElse(return Stream.empty)
 
       def leftCase(s: String):  Stream[((Seq[ContExp], Cont), Int)] = {
         //Log.prefix("Testing left:") :=

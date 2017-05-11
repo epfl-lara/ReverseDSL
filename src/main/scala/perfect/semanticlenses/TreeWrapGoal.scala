@@ -1,6 +1,5 @@
 package perfect.semanticlenses
 
-import perfect.lenses.FunDefGoal
 import inox._
 import inox.trees._
 import inox.trees.dsl._

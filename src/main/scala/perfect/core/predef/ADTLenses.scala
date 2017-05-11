@@ -20,11 +20,11 @@ trait ADTLenses { self: ProgramUpdater with ContExps with Lenses =>
   def isSameADT(e: Exp, g: Exp): Boolean
 
   object ADT {
-    def unapply(e: Exp) = extractADT(e)
+    def unapply(e: Exp): Option[(Seq[Exp], (Seq[Exp]) => Exp)] = extractADT(e)
   }
 
   object ADTSelector {
-    def unapply(e: Exp) = extractADTSelector(e)
+    def unapply(e: Exp): Option[(Exp, (Exp) => Exp, Seq[Var], Int)] = extractADTSelector(e)
   }
 
   object ADTLens extends SemanticLens {
@@ -32,13 +32,13 @@ trait ADTLenses { self: ProgramUpdater with ContExps with Lenses =>
       in.exp match {
         case inExp@ADT(argsIn, builder) =>
           out.simplifiedExpr match {
-            case outExpr@ADT(argsOut, outBuilder) if isSameADT(inExp, outExpr) && in.getFunctionValue != Some(outExpr) => // Same type ! Maybe the arguments will change or move.
-              val argsInValue = in.getFunctionValue match {
+            case outExpr@ADT(argsOut, outBuilder) if isSameADT(inExp, outExpr) && !in.getFunctionValue.contains(outExpr) => // Same type ! Maybe the arguments will change or move.
+              val argsInOptValue = in.getFunctionValue match {
                 case Some(ADT(argsInValue, _)) => argsInValue.map(x => Some(x))
                 case _ => argsIn.map(_ => None)
               }
 
-              val seqOfStreamSolutions = (argsIn.zip(argsInValue)).zip(argsOut).map { case ((aFun, aFunVal), newOutArg) =>
+              val seqOfStreamSolutions = argsIn.zip(argsInOptValue).zip(argsOut).map { case ((aFun, aFunVal), newOutArg) =>
                 repair(ContExp(aFun, in.context).withComputedValue(aFunVal), out.subExpr(newOutArg))
               }
               val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
@@ -56,7 +56,7 @@ trait ADTLenses { self: ProgramUpdater with ContExps with Lenses =>
           }
 
         case as@ADTSelector(adt, selectorBuilder, vrs, index) =>
-         in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(adt))) match {
+         in.maybeEval(adt) match {
             case Some(ADT(args, builder)) =>
               val constraints = vrs.zipWithIndex.map {
                 case (vd, i) => vd -> (if (i == index) StrongValue(out.exp) else OriginalValue(args(i)))

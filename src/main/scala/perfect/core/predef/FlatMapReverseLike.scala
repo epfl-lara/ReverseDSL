@@ -1,4 +1,4 @@
-package perfect.lenses
+package perfect.core.predef
 
 /**
   * Created by Mikael on 29/03/2017.
@@ -44,8 +44,8 @@ trait FlatMapReverseLike[A, B, F] {
     if(afterChanged.isEmpty) { // Elements have simplfy been deleted.
       Stream(beforeA ++ afterA)
     } else {
-      val beforeChanged: List[A] = l.drop(before.length).take(l.length - before.length - after.length)
-      val beforeChangedOut: List[List[B]] = lOut.drop(before.length).take(l.length - before.length - after.length)
+      val beforeChanged: List[A] = l.slice(before.length, l.length - after.length)
+      val beforeChangedOut: List[List[B]] = lOut.slice(before.length, l.length - after.length)
 
       perfect.Log("List before not changed:"+beforeA)
       perfect.Log("List after not changed:"+afterA)
@@ -71,7 +71,7 @@ trait FlatMapReverseLike[A, B, F] {
         }
       case ha::tail =>
         val expectedout = lOut.head
-        if(expectedout.length == 0) {
+        if(expectedout.isEmpty) {
           flatMapRevAux(tail, lOut.tail, out).map(Left(ha)::_)
         } else if(out == expectedout) {
           flatMapRevAux(tail, lOut.tail, Nil).map(Left(ha)::_)
@@ -82,7 +82,7 @@ trait FlatMapReverseLike[A, B, F] {
           } else t
         } else if(out.drop(expectedout.length) == lOut.tail.flatten) { // The elements for this particular item have changed.
           for{ a <- fRev(Some(l.head), out.take(expectedout.length)) } yield {
-            a::(l.tail.map(x => Left[A, F](x)))
+            a:: l.tail.map(x => Left[A, F](x))
           }
         } else {
           val k = out.indexOfSlice(lOut.flatten)

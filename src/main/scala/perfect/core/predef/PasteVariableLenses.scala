@@ -56,8 +56,8 @@ trait PasteVariableLenses { self: ProgramUpdater with ContExps with Lenses with 
                 case _ => Stream.empty
               }
             case StringConcat(inLeft, inRight) =>
-              val leftValue = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(inLeft))).getOrElse(return Stream.empty)
-              val rightValue = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(inRight))).getOrElse(return Stream.empty)
+              val leftValue = in.maybeEval(inLeft).getOrElse(return Stream.empty)
+              val rightValue = in.maybeEval(inRight).getOrElse(return Stream.empty)
               val lv = StringLiteral.unapply(leftValue).getOrElse(return Stream.empty)
               val rv = StringLiteral.unapply(rightValue).getOrElse(return Stream.empty)
 

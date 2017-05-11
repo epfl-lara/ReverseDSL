@@ -12,7 +12,7 @@ import InoxConvertible._
 import inox.evaluators.EvaluationResults
 import legacy.Implicits._
 import org.apache.commons.lang3.StringEscapeUtils
-import perfect.core.predef.{FilterLike, MapReverseLike}
+import perfect.core.predef.{FilterLike, FlatMapReverseLike, MapReverseLike}
 
 import scala.annotation.tailrec
 
@@ -698,7 +698,7 @@ case class FilterReverse[A: InoxConvertible](f: A => Boolean) extends (List[A] %
 }
 
 case class FlatMap[A: InoxConvertible, B: InoxConvertible](fr: A ~~> List[B]) extends (List[A] %~> List[B])
-    with perfect.lenses.FlatMapReverseLike[A, B, Nothing] {
+    with FlatMapReverseLike[A, B, Nothing] {
   val f = fr.get _
   val fRev = (opt: Option[A], x: List[B]) => fr.put(x, opt).toStream.map(Left[A, Nothing](_))
   def get(in: Input) = flatMap(in)

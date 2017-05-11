@@ -33,8 +33,8 @@ trait StringInsertLenses { self: ProgramUpdater with ContExps with Lenses with S
             case StringLiteral(_) =>
               Stream(ContExp(StringLiteral(leftAfter + inserted + rightAfter)))
             case StringConcat(expr1, expr2) =>
-              val expr1val = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(expr1))).getOrElse(return Stream.empty)
-              val expr2val = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(expr2))).getOrElse(return Stream.empty)
+              val expr1val = in.maybeEval(expr1).getOrElse(return Stream.empty)
+              val expr2val = in.maybeEval(expr2).getOrElse(return Stream.empty)
               val leftValue_s = StringLiteral.unapply(expr1val).getOrElse(return Stream.empty)
               val rightValue_s = StringLiteral.unapply(expr2val).getOrElse(return Stream.empty)
               Utils.ifEmpty {

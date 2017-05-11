@@ -94,8 +94,8 @@ trait MapDataLenses { self: ProgramUpdater with ContExps with Lenses =>
 
           }
         case MapDataApply(map, key, mkValueVar) => // Variant of ADT selection.
-          val map_v = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(map))).getOrElse(return Stream.empty) //originalAdtValue
-          val key_v = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(key))).getOrElse(return Stream.empty)
+          val map_v = in.maybeEval(map).getOrElse(return Stream.empty) //originalAdtValue
+          val key_v = in.maybeEval(key).getOrElse(return Stream.empty)
           map_v match {
             case MapData(map_vpairs, defaultValue, builder) =>
               val vds = map_vpairs.map{ case (k, v) => (k, mkValueVar("x"))}

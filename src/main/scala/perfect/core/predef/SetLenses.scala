@@ -27,7 +27,7 @@ trait SetLenses { self: ProgramUpdater with ContExps with Lenses =>
       in.exp match {
         case l@FiniteSet(elements, builder) =>
           lazy val evaledElements = elements.map{ e =>
-            (in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(e))).getOrElse(return Stream.empty), e)
+            (in.maybeEval(e).getOrElse(return Stream.empty), e)
           }
           def insertElementsIfNeeded(fsElements: Seq[Exp], fsBuilder: Seq[Exp] => Exp) = {
             val expectedElements = fsElements.toSet
@@ -48,8 +48,8 @@ trait SetLenses { self: ProgramUpdater with ContExps with Lenses =>
               Stream(out)
           }
         case FiniteSetAdd(sExpr, elem) =>
-          val sExpr_v = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(sExpr))).getOrElse(return Stream.empty)
-          val elem_v = in.context.assignments.flatMap(assign => maybeEvalWithCache(assign(elem))).getOrElse(return Stream.empty)
+          val sExpr_v = in.maybeEval(sExpr).getOrElse(return Stream.empty)
+          val elem_v = in.maybeEval(elem).getOrElse(return Stream.empty)
           val (vs, builder) = sExpr_v match {
             case FiniteSet(vs, builder) => (vs, builder)
             case _ => return Stream.empty

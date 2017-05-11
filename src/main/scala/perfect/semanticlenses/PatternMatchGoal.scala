@@ -4,7 +4,6 @@ import inox._
 import inox.trees._
 import inox.trees.dsl._
 import perfect.StringConcatExtended._
-import perfect.lenses.FunDefGoal
 
 /**
   * Created by Mikael on 10/05/2017.

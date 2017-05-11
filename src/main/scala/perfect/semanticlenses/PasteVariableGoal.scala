@@ -1,8 +1,6 @@
 package perfect.semanticlenses
 
 import perfect.core.predef.AssociativeInsert
-
-import perfect.lenses.FunDefGoal
 import inox._
 import inox.trees._
 import inox.trees.dsl._

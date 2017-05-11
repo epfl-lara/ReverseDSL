@@ -7,7 +7,6 @@ import inox.trees.dsl._
 import perfect.ProgramFormula.{CustomProgramFormula, MergeProgramFormula}
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
-import perfect.lenses.FunDefGoal
 
 /**
   * Created by Mikael on 04/05/2017.

@@ -353,6 +353,10 @@ trait ContExps { self: ProgramUpdater =>
       this
     }
 
+    def maybeEval(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[Exp] = {
+      context.assignments.flatMap(assign => maybeEvalWithCache(assign(e)))
+    }
+
     lazy val simplifiedExpr: Exp = {
       if(isVar(exp)) {
         context.findConstraintValue(exp.asInstanceOf[Var]).getOrElse(exp)

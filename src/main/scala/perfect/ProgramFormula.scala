@@ -29,7 +29,7 @@ object ProgramFormula {
       def unapply(e: Expr)(implicit symbols: Symbols): Option[Expr]
     }
 
-    def Goal: lenses.FunDefGoal
+    def Goal: FunDefGoal
 
     def funDef = Goal.funDef
   }
