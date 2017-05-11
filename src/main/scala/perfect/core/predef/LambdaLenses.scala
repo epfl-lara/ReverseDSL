@@ -56,6 +56,7 @@ trait LambdaLenses { self: ProgramUpdater with ContExps with Lenses =>
           }
 
           unify #::: Stream(out)
+        case _ => Stream.empty
       }
     }
   }

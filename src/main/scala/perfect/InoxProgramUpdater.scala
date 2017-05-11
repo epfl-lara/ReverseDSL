@@ -116,7 +116,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   // Members declared in perfect.core.predef.ApplicationLenses
   def buildApplication(lambda: Exp, args: Seq[Exp]): Exp = inox.trees.Application(lambda, args)
   def extractApplication(e: Exp): Option[(Exp, Seq[Exp])] = e match {
-    case Application(lambda, args) => Some((lambda, args))
+    case inox.trees.Application(lambda, args) => Some((lambda, args))
     case _ => None
   }
 
@@ -414,7 +414,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     NoChangeLens.named("No Change?"),
     ConstantReplaceLens.named("ConstantReplace"),
     shapeLenses.named("Shape?"),
-    /*WrapperLens(*/semanticLenses.named("Semantic?") andThen defaultLens/*, MaybeWrappedSolutions)*/
+    /*WrapperLens(*/semanticLenses.named("Semantic?") andThen defaultLens.named("default")/*, MaybeWrappedSolutions)*/
   )
 }
 

@@ -21,6 +21,7 @@ trait LetLenses { self: ProgramUpdater with ContExps with Lenses with Applicatio
             List(ContExp(Let(vd, expr, body), f))
           case e  => Nil //throw new Exception(s"Don't know how to get a Let back from $e")
         }
+      case _ => Stream.empty
     }
   }
 }
