@@ -8,6 +8,7 @@ import perfect.ProgramFormula.CustomProgramFormula
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
 import perfect.lenses.FunDefGoal
+import perfect.core.predef.AssociativeInsert
 
 
 /**
@@ -53,7 +54,7 @@ object PasteVariable extends Enumeration with CustomProgramFormula  {
                   } else Stream.empty) /:: Log.insertLeft
                   def insertRight = (if(right == s) {
                     if(left != "") {
-                      Stream(ProgramFormula(StringLiteral(left) +& v2 + v))
+                      Stream(ProgramFormula(StringLiteral(left) +& v2 +& v))
                     } else {
                       Stream(ProgramFormula(v +& v2))
                     }
@@ -79,14 +80,14 @@ object PasteVariable extends Enumeration with CustomProgramFormula  {
     isPreemptive = true
   }
 
-  def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: Goal.PasteDirection): ProgramFormula = {
+  def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: AssociativeInsert.InsertDirection): ProgramFormula = {
     ProgramFormula(Goal(left, insertedVar, originalVarValue, right, direction))
   }
 
-  def unapply(f: ProgramFormula): Option[(String, Variable, String, String, Goal.PasteDirection)] = {
+  def unapply(f: ProgramFormula): Option[(String, Variable, String, String, AssociativeInsert.InsertDirection)] = {
     Goal.unapply(f.expr)
   }
 
-  val Goal = perfect.lenses.PasteVariableGoal
+  val Goal = PasteVariableGoal
 }
 

@@ -1110,9 +1110,9 @@ object Lenses {
               val leftPaste = PasteVariable(newLeft, v, v_value, newRight, direction)
               val rightPaste = ProgramFormula(rightValue)
               val weight = direction match {
-                case PasteVariable.Goal.PasteToLeft => 0
-                case PasteVariable.Goal.PasteToRight => 1
-                case PasteVariable.Goal.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
+                case AssociativeInsert.InsertToLeft => 0
+                case AssociativeInsert.InsertToRight => 1
+                case AssociativeInsert.InsertAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
               }
               List(((Seq(leftPaste, rightPaste), Formula()), weight)) /: Log.prefix("pasteToLeft: ")
             } else Nil
@@ -1124,9 +1124,9 @@ object Lenses {
               val leftPaste = ProgramFormula(leftValue)
               val rightPaste = PasteVariable(newLeft, v, v_value, newRight, direction)
               val weight = direction match {
-                case PasteVariable.Goal.PasteToLeft => 1
-                case PasteVariable.Goal.PasteToRight => 0
-                case PasteVariable.Goal.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
+                case AssociativeInsert.InsertToLeft => 1
+                case AssociativeInsert.InsertToRight => 0
+                case AssociativeInsert.InsertAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
               }
               List(((Seq(leftPaste, rightPaste), Formula()), weight)) /: Log.prefix("pasteToRight: ")
             } else Nil

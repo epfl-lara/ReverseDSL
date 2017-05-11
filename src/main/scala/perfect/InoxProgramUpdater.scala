@@ -149,7 +149,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
 
 
-  import perfect.semanticlenses.{ListInsertGoal, TreeModificationGoal}
+  import perfect.semanticlenses.{ListInsertGoal, TreeModificationGoal, PasteVariableGoal, PatternReplaceGoal, PatternMatchGoal, StringInsertGoal}
 
   /** Returns the head, the tail and a way to build a list from a sequence of elements. */
   def extractCons(e: Exp): Option[(Exp, Exp, List[Exp] => Exp)] = e match {
@@ -266,6 +266,48 @@ object InoxProgramUpdater extends core.ProgramUpdater
           }
         case _ => None
       }))
+    case _ => None
+  }
+  
+  // Members declared in perfect.lenses.PasteVariableLenses
+  def buildPasteStringVarGoal(left: String,v: Var,v_value: String,right: String,direction: perfect.core.predef.AssociativeInsert.InsertDirection): Exp = {
+    PasteVariableGoal(left, v, v_value, right, direction)
+  }
+  def extractPasteStringVarGoal(e: Exp): Option[(String, Var, String, String, perfect.core.predef.AssociativeInsert.InsertDirection)] = {
+    PasteVariableGoal.unapply(e)
+  }
+
+  // Members declared in perfect.lenses.PatternMatchLenses
+  def buildPatternMatchGoal(pattern: Exp,vars: List[(Var, Exp)],forClone: Boolean): Exp =
+    PatternMatchGoal(pattern, vars, forClone)
+  def extractPatternMatchGoal(e: Exp): Option[(Exp, List[(Var, Exp)], Boolean)] =
+    PatternMatchGoal.unapply(e)
+
+  // Members declared in perfect.lenses.PatternReplaceLenses
+  def buildPatternReplaceGoal(pattern: Exp,variables: List[(Var, Exp)],after: Exp): Exp =
+    PatternReplaceGoal(pattern, variables, after)
+  def extractPatternReplaceGoal(e: Exp): Option[(Exp, List[(Var, Exp)], Exp)] =
+    PatternReplaceGoal.unapply(e)
+
+  // Members declared in perfect.lenses.StringConcatLenses
+  def buildStringConcat(left: Exp,right: Exp): Exp = inox.trees.StringConcat(left, right)
+  def buildStringConcatSimplified(left: Exp,right: Exp): Exp = {
+    new StringConcatExtended.AugmentedSubExpr(left).+<>&(right)
+  }
+  def extractStringConcat(e: Exp): Option[(Exp, Exp)] = StringConcat.unapply(e)
+
+  // Members declared in perfect.lenses.StringInsertLenses
+  def buildStringInsertGoal(left: String,inserted: String,right: String,direction: perfect.core.predef.AssociativeInsert.InsertDirection): Exp = {
+    StringInsertGoal(left, inserted, right, direction)
+  }
+  def extractStringInsertGoal(e: Exp): Option[(String, String, String, perfect.core.predef.AssociativeInsert.InsertDirection)] = {
+    StringInsertGoal.unapply(e)
+  }
+
+  // Members declared in perfect.core.predef.StringLenses
+  def buildStringLiteral(e: String): Exp = inox.trees.StringLiteral(e)
+  def extractStringliteral(e: Exp): Option[String] = e match {
+    case StringLiteral(s) => Some(s)
     case _ => None
   }
 

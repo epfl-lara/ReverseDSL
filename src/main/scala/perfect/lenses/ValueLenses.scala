@@ -3,8 +3,8 @@ package perfect.lenses
 import inox.FreshIdentifier
 import perfect.InoxProgramUpdater
 import inox.trees._
-import perfect.core.predef.{ADTLenses, ListInsertLenses, MapDataLenses, SetLenses}
-import perfect.semanticlenses.ListInsertGoal
+import perfect.core.predef.{ADTLenses, ListInsertLenses, MapDataLenses, SetLenses, StringLenses}
+import perfect.semanticlenses.{ListInsertGoal, PasteVariableGoal, StringInsertGoal, PatternMatchGoal, PatternReplaceGoal}
 
 /**
   * Created by Mikael on 09/05/2017.
@@ -14,6 +14,7 @@ trait ValueLenses
      with PatternReplaceLenses
      with ListInsertLenses
      with PasteVariableLenses
+     with StringLenses
      with StringInsertLenses
      with SetLenses
      with MapDataLenses

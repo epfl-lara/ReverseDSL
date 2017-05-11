@@ -1,37 +1,45 @@
 package perfect.lenses
-import inox.{FreshIdentifier, Identifier, trees, _}
-import perfect.InoxProgramUpdater
-import perfect.semanticlenses.TreeWrap
-import inox.trees._
-import inox.trees.dsl._
-import perfect.StringConcatExtended._
+import perfect.core._
+import perfect.semanticlenses.PatternReplaceGoal
+import predef._
 
 /**
   * Created by Mikael on 09/05/2017.
   */
-trait PatternReplaceLenses { self: InoxProgramUpdater.type =>
+trait PatternReplaceLenses { self: ProgramUpdater with ContExps with Lenses with ADTLenses with PatternMatchLenses =>
+
+  def extractPatternReplaceGoal(e: Exp): Option[(Exp, List[(Var, Exp)], Exp)]
+  def buildPatternReplaceGoal(pattern: Exp, variables: List[(Var, Exp)], after: Exp): Exp
+
+  object PatternReplaceLensGoal {
+    def unapply(e: Exp) = extractPatternReplaceGoal(e)
+    def apply(pattern: Exp, variables: List[(Var, Exp)], after: Exp) =
+      buildPatternReplaceGoal(pattern, variables, after)
+  }
+
+
   object PatternReplaceLens extends SemanticLens {
-    def put(in: ContExp, out: ContExp)(implicit symbols: trees.Symbols, cache: Cache): Stream[ContExp] = {
+    def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       out.simplifiedExpr match {
-        case PatternReplaceGoal(pattern, variables, after) =>
+        case PatternReplaceLensGoal(pattern, variables, after) =>
           in.exp match {
             case inExp@ADT(argsIn, adtBuilder) =>
               pattern match { // TODO: Pattern replace at higher level?
                 case ADT(argsIn2, adtBuilder2) if isSameADT(inExp, pattern) =>
                   val argsMatched = argsIn.zip(argsIn2).map{
-                    case (expr, pattern) =>
+                    case (subIn, subPattern) =>
                       repair(
-                        in.subExpr(expr),
+                        in.subExpr(subIn),
                         out.subExpr(
-                          PatternReplaceGoal(
-                            pattern, variables, ExpFalse
+                          PatternMatchLensGoal(
+                            subPattern, variables, false
                           )))
                   }
                   for{ argumentsCombined <-ContExp.regroupArguments(argsMatched)
                        (_, context) = argumentsCombined
                   } yield ContExp(after, context)
 
-                case v: Variable =>
+                case Var(v) =>
                   Stream.empty
 
                 case _ =>
@@ -47,37 +55,3 @@ trait PatternReplaceLenses { self: InoxProgramUpdater.type =>
   }
 }
 
-object PatternReplaceGoal extends FunDefGoal {
-  import perfect.ImplicitTuples._
-
-  private val PMId = FreshIdentifier("replace")
-
-  def Build(names: (ValDef, Expr)*)(f: Seq[Variable] => (Expr, Expr))(implicit symbols: Symbols): Expr = {
-    val variables = names.toList.map(n => n._1.toVariable)
-    val (before, after) = f(variables)
-    apply(before, variables.zip(names.map(_._2)), after)
-  }
-
-  def apply(before: Expr, variables: List[(Variable, Expr)], after: Expr)(implicit symbols: Symbols) : Expr = {
-    E(PMId)(after.getType)(Application(
-      Lambda(variables.map(_._1.toVal), _Tuple2(before.getType, after.getType)(before, after).getField(_2))
-      , variables.map(_._2)))
-  }
-
-  def unapply(e: Expr)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)], Expr)] = {
-    e match {
-      case FunctionInvocation(PMId, Seq(_), Seq(
-      Application(Lambda(valdefs, ADTSelector(ADT(_, Seq(before, after)), `_2`)), varValues)
-      )) =>
-        Some((before, valdefs.toList.map(_.toVariable).zip(varValues), after))
-      case _ => None
-    }
-  }
-
-  def funDef = mkFunDef(PMId)("A"){ case Seq(tA) =>
-    (Seq("id"::tA), tA,
-      { case Seq(id) =>
-        id // Dummy
-      })
-  }
-}

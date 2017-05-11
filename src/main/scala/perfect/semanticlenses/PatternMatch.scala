@@ -177,5 +177,5 @@ object PatternMatch extends CustomProgramFormula with MergeProgramFormula {
     Goal.unapply(e.expr)
   }
 
-  val Goal = perfect.lenses.PatternMatchGoal
+  val Goal = perfect.semanticlenses.PatternMatchGoal
 }

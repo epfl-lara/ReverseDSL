@@ -111,6 +111,6 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
   def unapply(f: ProgramFormula): Option[(String, String, String, InsertDirection)] = {
     Goal.unapply(f.expr)
   }
-  val Goal = perfect.lenses.StringInsertGoal
+  val Goal = StringInsertGoal
 }
 

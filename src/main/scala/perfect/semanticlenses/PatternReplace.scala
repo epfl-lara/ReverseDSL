@@ -7,7 +7,7 @@ import inox.trees.dsl._
 import perfect.ProgramFormula.CustomProgramFormula
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
-import perfect.lenses.{FunDefGoal, PatternReplaceGoal}
+import perfect.lenses.{FunDefGoal}
 
 /**
   * Created by Mikael on 04/05/2017.
@@ -71,5 +71,5 @@ object PatternReplace extends CustomProgramFormula {
   def unapply(e: ProgramFormula)(implicit symbols: Symbols): Option[(Expr, List[(Variable, Expr)], Expr)] = {
     Goal.unapply(e.expr)
   }
-  val Goal = perfect.lenses.PatternReplaceGoal
+  val Goal = perfect.semanticlenses.PatternReplaceGoal
 }

@@ -568,7 +568,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     val pfun: Let = let("v"::String, " move it")(v => "I like to" +& v +& "!")
     val v = pfun.vd.toVariable
 
-    pfun repairFrom PasteVariable("I like to move it", v, " move it", "!", PasteVariable.Goal.PasteToLeft) match {
+    pfun repairFrom PasteVariable("I like to move it", v, " move it", "!", AssociativeInsert.InsertToLeft) match {
       case Let(vd, StringLiteral(s), StringLiteral(a) +& ((v: Variable) +& (v2: Variable)) +& StringLiteral(b)) =>
         v shouldEqual v2
         v.id shouldEqual vd.id
@@ -577,7 +577,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         b shouldEqual "!"
     }
 
-    pfun repairFrom PasteVariable("I like to move it", v, " move it", "!", PasteVariable.Goal.PasteToRight) match {
+    pfun repairFrom PasteVariable("I like to move it", v, " move it", "!", AssociativeInsert.InsertToRight) match {
       case Let(vd, StringLiteral(s), StringLiteral(a) +& (v: Variable) +& ((v2: Variable) +& StringLiteral(b))) =>
         v shouldEqual v2
         v.id shouldEqual vd.id
@@ -594,7 +594,7 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
         "I"+& like +& " to" +& move_it +& "!"))
     val like = pfun.vd.toVariable
 
-    val pfun2 = pfun repairFrom PasteVariable("I like to move", like, " like", " it!", PasteVariable.Goal.PasteAutomatic) match {
+    val pfun2 = pfun repairFrom PasteVariable("I like to move", like, " like", " it!", AssociativeInsert.InsertAutomatic) match {
       case l@Let(like, StringLiteral(like_s),
       Let(move_it, StringLiteral(" move") +& (like2: Variable) +& StringLiteral(" it"),
       StringLiteral("I") +& (like3: Variable) +& StringLiteral(" to") +& (move_it2: Variable) +& StringLiteral("!"))) =>

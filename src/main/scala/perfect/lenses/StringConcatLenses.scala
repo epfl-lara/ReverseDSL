@@ -1,21 +1,54 @@
 package perfect.lenses
 
-import perfect.InoxProgramUpdater
-import perfect.StringConcatExtended
-import inox._
-import inox.trees._
-import inox.trees.dsl._
+import perfect.core._
+import predef._
 
 /**
   * Created by Mikael on 09/05/2017.
   */
-trait StringConcatLenses { self: InoxProgramUpdater.type =>
+trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with AssociativeLenses with StringLenses with StringInsertLenses =>
+  def extractStringConcat(e: Exp): Option[(Exp, Exp)]
+  def buildStringConcat(left: Exp, right: Exp): Exp
+  def buildStringConcatSimplified(left: Exp, right: Exp): Exp
+
+  object StringConcat {
+    def unapply(e: Exp) = extractStringConcat(e)
+    def apply(left: Exp, right: Exp) = buildStringConcat(left, right)
+
+    object Exhaustive {
+      def unapply(e: Exp): Some[List[Exp]] = e match {
+        case StringConcat(Exhaustive(a), Exhaustive(b)) => Some(a ++ b)
+        case e => Some(List(e))
+      }
+    }
+
+    object Multiple {
+      def unapply(e: Exp): Option[List[Exp]] = e match {
+        case Exhaustive(l) if l.length >= 2 => Some(l)
+        case _ => None
+      }
+
+      def apply(s: Seq[Exp]): Exp = s match {
+        case Nil => StringLiteral("")
+        case head +: Nil => head
+        case head +: tail => StringConcat(head, StringConcat.Multiple(tail))
+      }
+    }
+  }
+
+  implicit class AugmentedSubExpr[T <: Exp](e: T) {
+    @inline def +&(other: Exp) = StringConcat(e, other)
+
+    /** Simplifies the expression by removing empty string literals*/
+    @inline def +<>&(other: Exp) = buildStringConcatSimplified(e, other)
+  }
+  val +& = StringConcat
 
   def mkStringVar(name: String, avoid: Var*): Var
 
   case object StringConcatLens extends MultiArgsSemanticLens with AssociativeConcat[String, Char] {
     def extract(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(
-      Seq[Exp],
+        Seq[Exp],
         (Seq[ContExp], ContExp) => Stream[(Seq[ContExp], Cont)],
         Seq[Exp] => Exp)] = {
       e match {
@@ -30,10 +63,7 @@ trait StringConcatLenses { self: InoxProgramUpdater.type =>
       }
     }
 
-
-    import StringConcatExtended._
     import Utils._
-    val identifier = FreshIdentifier("tmpstringconcat")
 
     def endsWith(a: String, b: String): Boolean = a.endsWith(b)
     def startsWith(a: String, b: String): Boolean = a.startsWith(b)
@@ -42,18 +72,7 @@ trait StringConcatLenses { self: InoxProgramUpdater.type =>
     def drop(a: String, i: Int): String = a.substring(i)
     def empty: String = ""
 
-    @inline def charType(a: Char): Int =
-      if(a.isUpper) 1 else if(a.isLower) 2 else if(a.isSpaceChar) 5 else if(a == '\n' || a == '\r') 10 else 4 // 4 for punctuation.
-
-    @inline def differentCharType(a: Char, b: Char): Int = {
-      Math.abs(charType(a) - charType(b))
-    }
-
-    @inline def typeJump(a: String, b: String): Int = {
-      (if(a.nonEmpty && b.nonEmpty)
-        differentCharType(a(a.length - 1), b(0))
-      else 0) // We mostly insert into empty strings if available.
-    }
+    def typeJump(a: String, b: String) = StringConcatLenses.this.typeJump(a, b)
 
     def put(originalArgsValues: Seq[ContExp], out: ContExp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
       val newOutput = out.exp
@@ -62,26 +81,26 @@ trait StringConcatLenses { self: InoxProgramUpdater.type =>
 
       def leftCase(s: String):  Stream[((Seq[ContExp], Cont), Int)] = {
         //Log.prefix("Testing left:") :=
-          (if (s.startsWith(lv)) {
+          if (s.startsWith(lv)) {
             val newRight = s.drop(lv.length)
             val weight = -typeJump(lv, newRight)
             Stream(
               ((Seq(ContExp(leftValue), ContExp(StringLiteral(newRight))), Cont()),
                 weight)
             )
-          } else Stream.empty) // /:: Log.prefix("left worked:")
+          } else Stream.empty // /:: Log.prefix("left worked:")
       }
 
       def rightCase(s: String): Stream[((Seq[ContExp], Cont), Int)] = {
         //Log.prefix("Testing right:") :=
-          (if (s.endsWith(rv)) {
+          if (s.endsWith(rv)) {
             val newLeft = s.take(s.length - rv.length)
             val StringLiteral(left_v) = leftValue
             //Log(s"Computing typeJump(${s.take(s.length - rv.length)}, ${rv})")
             val weight = -typeJump(s.take(s.length - rv.length), rv)
             Stream(((Seq(ContExp(StringLiteral(newLeft)), ContExp(rightValue)), Cont()),
               weight))
-          } else Stream.empty) // /:: Log.prefix("right worked:")
+          } else Stream.empty // /:: Log.prefix("right worked:")
       }
 
       def defaultCase: Stream[(Seq[ContExp], Cont)] = {
@@ -108,21 +127,22 @@ trait StringConcatLenses { self: InoxProgramUpdater.type =>
 
       // Prioritize changes that touch only one of the two expressions.
       out.exp match {
-        case StringInsertGoal(leftAfter, inserted, rightAfter, direction) =>
+        case StringInsertLensGoal(leftAfter, inserted, rightAfter, direction) =>
           val StringLiteral(rightValue_s) = rightValue
           val StringLiteral(leftValue_s) = leftValue
 
           associativeInsert(leftValue_s, rightValue_s, leftAfter, inserted, rightAfter,
             direction,
-            StringLiteral,
-            (l: String, i: String, r: String) => out.subExpr(StringInsertGoal(l, i, r, direction))
+            StringLiteral.apply,
+            (l: String, i: String, r: String) => out.subExpr(StringInsertLensGoal(l, i, r, direction))
           )
-        case pc@PatternMatchGoal.CloneTextMultiple(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
+          // Subsumed by pattern matching itself
+        /*case pc@PatternMatchLensGoal.CloneTextMultiple(left, List((cloned, variable, right))) => // TODO support for direct clone of multiple variables.
           def cloneToLeft: List[(Seq[ContExp], Cont)] = {
             if(right.endsWith(rv)) {
               val newLeft = left
               val newRight = right.substring(0, right.length - rv.length)
-              val leftClone = out.subExpr(PatternMatchGoal.CloneTextMultiple(newLeft, List((cloned, variable, newRight))))
+              val leftClone = out.subExpr(PatternMatchLensGoal.CloneTextMultiple(newLeft, List((cloned, variable, newRight))))
               val rightClone = ContExp(rightValue)
               List((Seq(leftClone, rightClone), Cont())) // /: Log.prefix("cloneToLeft: ")
             } else Nil
@@ -143,46 +163,14 @@ trait StringConcatLenses { self: InoxProgramUpdater.type =>
               val leftCloned = cloned.substring(0, lv.length - left.length)
               val rightCloned = cloned.substring(lv.length - left.length)
               val leftVar = mkStringVar(leftCloned, variable)
-              val leftClone = out.subExpr(PatternMatchGoal.CloneTextMultiple(left, List((leftCloned, leftVar, ""))))
+              val leftClone = out.subExpr(PatternMatchLensGoal.CloneTextMultiple(left, List((leftCloned, leftVar, ""))))
               val rightVar = mkStringVar(rightCloned, variable, leftVar)
-              val rightClone = out.subExpr(PatternMatchGoal.CloneTextMultiple("", List((rightCloned, rightVar, right))))
+              val rightClone = out.subExpr(PatternMatchLensGoal.CloneTextMultiple("", List((rightCloned, rightVar, right))))
               List((Seq(leftClone, rightClone), Cont(variable -> InsertVariable(leftVar +& rightVar))))
             } else Nil
           }
-          (cloneToLeft ++ cloneToRight ++ cloneBoth).toStream
+          (cloneToLeft ++ cloneToRight ++ cloneBoth).toStream*/
 
-        case pv@PasteVariableGoal(left, v, v_value, right, direction) =>
-          def pasteToLeft: List[((Seq[ContExp], Cont), Int)] = {
-            /*Log(s"Right:'$right'")
-            Log(s"Right:'$right'")*/
-            if(right.endsWith(rv)) { // We did not touch the right part.
-              val newLeft = left
-              val newRight = right.substring(0, right.length - rv.length)
-              val leftPaste = out.subExpr(PasteVariableGoal(newLeft, v, v_value, newRight, direction))
-              val rightPaste = ContExp(rightValue)
-              val weight = direction match {
-                case PasteVariableGoal.PasteToLeft => 0
-                case PasteVariableGoal.PasteToRight => 1
-                case PasteVariableGoal.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
-              }
-              List(((Seq(leftPaste, rightPaste), Cont()), weight)) // /: Log.prefix("pasteToLeft: ")
-            } else Nil
-          }
-          def pasteToRight: List[((Seq[ContExp], Cont), Int)]  = {
-            if(left.startsWith(lv)) {
-              val newLeft = left.substring(lv.length)
-              val newRight = right
-              val leftPaste = ContExp(leftValue)
-              val rightPaste = out.subExpr(PasteVariableGoal(newLeft, v, v_value, newRight, direction))
-              val weight = direction match {
-                case PasteVariableGoal.PasteToLeft => 1
-                case PasteVariableGoal.PasteToRight => 0
-                case PasteVariableGoal.PasteAutomatic => typeJump(newLeft, v_value) + typeJump(v_value, newRight)
-              }
-              List(((Seq(leftPaste, rightPaste), Cont()), weight)) // /: Log.prefix("pasteToRight: ")
-            } else Nil
-          }
-          (pasteToLeft ++ pasteToRight).sortBy(_._2).map(_._1).toStream
         case StringLiteral(s) =>
           ifEmpty((rightCase(s) .toList++ leftCase(s).toList).sortBy(_._2).map(_._1).toStream) { defaultCase }
         case StringConcat(StringLiteral(left), right) =>
@@ -200,7 +188,7 @@ trait StringConcatLenses { self: InoxProgramUpdater.type =>
           } else {
             ???
           }
-        case Var(v) if out.context.constraints == BooleanLiteral(true) =>
+        case Var(v) if out.context.constraints == ExpTrue =>
           out.context.findStrongConstraintValue(v) match {
             case Some(e) =>
               put(Seq(leftProgram, rightProgram), ContExp(e, out.context))
@@ -210,15 +198,6 @@ trait StringConcatLenses { self: InoxProgramUpdater.type =>
         case _ =>
           defaultCase
       }
-    }
-
-    // Concat definition in inox
-    val funDef = mkFunDef(identifier)(){ case _ =>
-      (Seq("a" :: StringType, "b" :: StringType),
-        StringType,
-        { case Seq(left, right) =>
-          StringConcat(left, right)
-        })
     }
   }
 }
