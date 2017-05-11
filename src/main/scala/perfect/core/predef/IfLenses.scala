@@ -28,6 +28,7 @@ trait IfLenses { self: ProgramUpdater with ContExps with Lenses =>
                 pf.wrap(x => IfExpr(cond, thenn, x))
             case _ => Stream.empty // throw new Exception(s"Not a boolean: $cond_v")
           }
+        case _ => Stream.empty
       }
     }
   }

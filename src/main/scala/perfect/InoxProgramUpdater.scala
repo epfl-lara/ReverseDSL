@@ -415,6 +415,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     ConstantReplaceLens.named("ConstantReplace"),
     shapeLenses.named("Shape?"),
     /*WrapperLens(*/semanticLenses.named("Semantic?") andThen defaultLens.named("default")/*, MaybeWrappedSolutions)*/
+    , FinalLens.named("/!\\ Warning could not transform")
   )
 }
 

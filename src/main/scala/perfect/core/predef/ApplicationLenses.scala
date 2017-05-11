@@ -14,6 +14,7 @@ trait ApplicationLenses { self: ProgramUpdater with ContExps with Lenses with La
   }
 
   object ApplicationLens extends SemanticLens {
+    isPreemptive = true
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = in.exp match {
       case Application(lambdaExpr, arguments) => // TODO: Put this into a lense.
         val originalValueMaybe: Option[Exp] = in.subExpr(lambdaExpr).simplifiedExpr match {
@@ -175,6 +176,7 @@ trait ApplicationLenses { self: ProgramUpdater with ContExps with Lenses with La
             }
           case _ => Stream.empty // throw new Exception(s"Don't know how to handle this case : $originalValueMaybe of type ${originalValueMaybe.get.getClass.getName}")
         }
+      case _ => Stream.empty
     }
   }
 }
