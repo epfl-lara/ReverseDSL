@@ -2,13 +2,13 @@ package perfect.core
 package predef
 
 /** Paste a string variable into a text */
-trait PasteVariableLensesLike { self: ProgramUpdater with ContExps with Lenses with StringLenses with StringConcatLenses =>
+trait PasteVariableLensesLike { self: ProgramUpdater with ContExps with Lenses with StringLenses with StringConcatLensesLike =>
   trait PasteVariableLensGoalExtractor {
     def unapply(e: Exp): Option[(String, Var, String, String, AssociativeInsert.InsertDirection)]
     def apply(left: String, v: Var, v_value: String, right: String, direction: AssociativeInsert.InsertDirection): Exp
   }
 
-  class PasteVariableLens(PasteVariableLensGoal: PasteVariableLensGoalExtractor) extends SemanticLens {
+  class PasteVariableLens(StringConcat: StringConcatExtractor, PasteVariableLensGoal: PasteVariableLensGoalExtractor) extends StringConcatHelpers(StringConcat) with SemanticLens {
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       out.simplifiedExpr match {
         case PasteVariableLensGoal(left, v2, v2_value, right, direction) =>
@@ -19,14 +19,14 @@ trait PasteVariableLensesLike { self: ProgramUpdater with ContExps with Lenses w
             case Var(v) =>
               in.getFunctionValue match {
                 case Some(StringLiteral(s)) =>
-                  def insertLeft = if(left == s) {
+                  def insertLeft() = if(left == s) {
                     if(right != "") {
                       Stream(ContExp(v +& v2 +& StringLiteral(right)))
                     } else {
                       Stream(ContExp(v +& v2))
                     }
                   } else Stream.empty // /:: Log.insertLeft
-                  def insertRight = if(right == s) {
+                  def insertRight() = if(right == s) {
                     if(left != "") {
                       Stream(ContExp(StringLiteral(left) +& v2 +& v))
                     } else {
@@ -85,7 +85,7 @@ trait PasteVariableLensesLike { self: ProgramUpdater with ContExps with Lenses w
                   for{ argumentsRepairedContext <- ContExp.repairArguments(in.context, Seq(inLeft, inRight).zip(newArgumentsValues))
                        (argumentsRepaired, context2) = argumentsRepairedContext
                   } yield {
-                    ContExp(StringConcat(argumentsRepaired(0), argumentsRepaired(1)), context2) combineWith context
+                    ContExp(StringConcat(argumentsRepaired.head, argumentsRepaired(1)), context2) combineWith context
                   }
               }
             case _ => Stream.empty

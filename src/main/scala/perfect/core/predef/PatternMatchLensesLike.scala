@@ -6,13 +6,15 @@ package predef
   * Created by Mikael on 15/05/2017.
   */
 trait PatternMatchLensesLike { self: ProgramUpdater
-  with ContExps with Lenses with StringLenses with StringConcatLenses with ADTLenses =>
+  with ContExps with Lenses with StringLensesLike with StringConcatLensesLike with ADTLensesLike =>
   trait PatternMatchLensGoalExtractor {
     def unapply(e: Exp): Option[(Exp, List[(Var, Exp)], Boolean)]
     def apply(pattern: Exp, vars: List[(Var, Exp)], forClone: Boolean): Exp
   }
 
-  class PatternMatchLensLike(PatternMatchLensGoal: PatternMatchLensGoalExtractor) extends SemanticLens {
+  class PatternMatchLensLike(StringLiteral: StringLiteralExtractor, StringConcat: StringConcatExtractor,
+                             ADT: ADTExtractor,
+                             PatternMatchLensGoal: PatternMatchLensGoalExtractor) extends StringConcatHelpers(StringConcat) with SemanticLens {
     override def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       out.simplifiedExpr match {
         case PatternMatchLensGoal(pattern, variables, forClone) =>
@@ -104,7 +106,7 @@ trait PatternMatchLensesLike { self: ProgramUpdater
               }
             case inExp@ADT(argsIn, adtBuilder) =>
               pattern match {
-                case ADT(argsIn2, adtBuilder2) if isSameADT(inExp, pattern) =>
+                case ADT(argsIn2, adtBuilder2) if ADT.isSame(inExp, pattern) =>
                   val argumentsRepaired = for{ (argIn, argIn2) <- argsIn.zip(argsIn2) } yield {
                     repair(in.subExpr(argIn), out.subExpr(
                       PatternMatchLensGoal(argIn2, variables, forClone)

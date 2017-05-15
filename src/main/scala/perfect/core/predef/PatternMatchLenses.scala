@@ -20,6 +20,6 @@ trait PatternMatchLenses extends PatternMatchLensesLike {
     def apply(pattern: Exp, vars: List[(Var, Exp)], forClone: Boolean): Exp = buildPatternMatchGoal(pattern, vars, forClone)
   }
 
-  object PatternMatchLens extends PatternMatchLensLike(PatternMatchLensGoal)
+  object PatternMatchLens extends PatternMatchLensLike(StringLiteral, StringConcat, ADT, PatternMatchLensGoal)
 }
 

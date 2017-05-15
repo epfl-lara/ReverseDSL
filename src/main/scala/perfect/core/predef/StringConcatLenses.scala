@@ -5,19 +5,39 @@ import perfect.core._
 /**
   * Created by Mikael on 09/05/2017.
   */
-trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with StringLenses =>
+
+trait StringConcatLenses extends StringConcatLensesLike {
+  self: ProgramUpdater with ContExps with Lenses with StringLenses =>
   def extractStringConcat(e: Exp): Option[(Exp, Exp)]
   def buildStringConcat(left: Exp, right: Exp): Exp
   def buildStringConcatSimplified(left: Exp, right: Exp): Exp
+  def mkStringVar(name: String, avoid: Var*): Var
 
-  object StringConcat {
-    def unapply(e: Exp) = extractStringConcat(e)
-    def apply(left: Exp, right: Exp) = buildStringConcat(left, right)
+  object StringConcat extends StringConcatExtractor {
+    def unapply(e: Exp): Option[(Exp, Exp)] = extractStringConcat(e)
+    def apply(left: Exp, right: Exp): Exp = buildStringConcat(left, right)
+    def apply(): Exp = StringLiteral("")
+    def simplified(left: Exp, right: Exp): Exp = buildStringConcatSimplified(left, right)
+  }
+
+  object MkStringVar extends MkStringVar {
+    def apply(name: String, avoid: Var*): Var = mkStringVar(name, avoid: _*)
+  }
+
+  object StringConcatLens extends StringConcatLensLike(StringLiteral, StringConcat, MkStringVar)
+}
+
+trait StringConcatLensesLike { self: ProgramUpdater with ContExps with Lenses with StringLensesLike =>
+  trait StringConcatExtractor { Self =>
+    def unapply(e: Exp): Option[(Exp, Exp)]
+    def apply(left: Exp, right: Exp): Exp
+    def apply(): Exp
+    def simplified(left: Exp, right: Exp): Exp
 
     object Exhaustive {
       def unapply(e: Exp): Some[List[Exp]] = e match {
-        case StringConcat(Exhaustive(a), Exhaustive(b)) => Some(a ++ b)
-        case e => Some(List(e))
+        case Self(Exhaustive(a), Exhaustive(b)) => Some(a ++ b)
+        case anything => Some(List(anything))
       }
     }
 
@@ -28,24 +48,28 @@ trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with S
       }
 
       def apply(s: Seq[Exp]): Exp = s match {
-        case Nil => StringLiteral("")
+        case Nil => Self()
         case head +: Nil => head
-        case head +: tail => StringConcat(head, StringConcat.Multiple(tail))
+        case head +: tail => Self(head, Self.Multiple(tail))
       }
     }
   }
 
-  implicit class AugmentedSubExpr[T <: Exp](e: T) {
-    @inline def +&(other: Exp) = StringConcat(e, other)
-
-    /** Simplifies the expression by removing empty string literals*/
-    @inline def +<>&(other: Exp) = buildStringConcatSimplified(e, other)
+  trait MkStringVar {
+    def apply(name: String, avoid: Var*): Var
   }
-  val +& = StringConcat
 
-  def mkStringVar(name: String, avoid: Var*): Var
+  abstract class StringConcatHelpers(StringConcat: StringConcatExtractor) {
+    implicit class AugmentedSubExpr[T <: Exp](e: T) {
+      @inline def +&(other: Exp): Exp = StringConcat(e, other)
 
-  case object StringConcatLens extends MultiArgsSemanticLens {
+      /** Simplifies the expression by removing empty string literals*/
+      @inline def +<>&(other: Exp): Exp = StringConcat.simplified(e, other)
+    }
+    val +& = StringConcat
+  }
+
+  class StringConcatLensLike(StringLiteral: StringLiteralExtractor, StringConcat: StringConcatExtractor, mkStringVar: MkStringVar) extends StringConcatHelpers(StringConcat) with MultiArgsSemanticLens {
     def extract(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(
         Seq[Exp],
         (Seq[ContExp], ContExp) => Stream[(Seq[ContExp], Cont)],
@@ -56,7 +80,7 @@ trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with S
             (originalArgsValues: Seq[ContExp], out: ContExp) => {
               put(originalArgsValues, out)
             },
-            (es: Seq[Exp]) => StringConcat(es(0), es(1))
+            (es: Seq[Exp]) => StringConcat(es.head, es(1))
           ))
         case _ => None
       }
@@ -64,7 +88,7 @@ trait StringConcatLenses { self: ProgramUpdater with ContExps with Lenses with S
 
     import Utils._
 
-    def typeJump(a: String, b: String) = StringConcatLenses.this.typeJump(a, b)
+    def typeJump(a: String, b: String): Int = self.typeJump(a, b)
 
     def put(originalArgsValues: Seq[ContExp], out: ContExp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
       val newOutput = out.exp
