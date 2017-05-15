@@ -10,9 +10,13 @@ trait InvocationLenses extends InvocationLensesLike {
   def extractInvocation(e: Exp)(implicit cache: Cache, symbols: Symbols):
   Option[(Seq[Exp], Seq[Exp] => Exp)]
 
+  def isSameInvocation(e1: Exp, e2: Exp)(implicit cache: Cache, symbols: Symbols): Boolean
+
   object InvocationExtractor extends InvocationExtractor {
     def unapply(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(Seq[Exp], (Seq[Exp]) => Exp)] =
       extractInvocation(e)
+
+    def isSame(e: Exp, f: Exp)(implicit cache: Cache, symbols: Symbols): Boolean = isSameInvocation(e, f)
   }
 
   abstract class InvocationLens extends InvocationLensLike(InvocationExtractor)

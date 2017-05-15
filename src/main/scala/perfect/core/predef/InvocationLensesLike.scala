@@ -8,6 +8,8 @@ trait InvocationLensesLike { self: ProgramUpdater with ContExps with Lenses =>
   trait InvocationExtractor {
     def unapply(e: Exp)(implicit cache: Cache, symbols: Symbols):
     Option[(Seq[Exp], Seq[Exp] => Exp)]
+
+    def isSame(e: Exp, f: Exp)(implicit cache: Cache, symbols: Symbols): Boolean
   }
 
   /** An invocation lens defines a put method which can reason on the original values. */
