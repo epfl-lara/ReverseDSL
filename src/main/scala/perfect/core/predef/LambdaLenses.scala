@@ -6,17 +6,26 @@ import perfect.core.{ContExps, Lenses, ProgramUpdater}
   * Created by Mikael on 05/05/2017.
   */
 
-trait LambdaLenses { self: ProgramUpdater with ContExps with Lenses =>
-  //Returns the variables used, the inner body, a way to produce fresh variables, and a way to rebuild the original lambda given a new body
+trait LambdaLenses extends LambdaLensesLike { self: ProgramUpdater with ContExps with Lenses =>
   def extractLambda(e: Exp): Option[(Seq[Var], Exp, Exp => Exp)]
   def buildLambda(v: Seq[Var], body: Exp): Exp
 
-  object Lambda {
+  object Lambda extends LambdaExtractor {
     def unapply(e: Exp): Option[(Seq[Var], Exp, Exp => Exp)] = extractLambda(e)
     def apply(v: Seq[Var], body: Exp): Exp = buildLambda(v, body)
   }
 
-  object LambdaLens extends SemanticLens {
+  object LambdaLens extends LambdaLensLike(Lambda)
+}
+
+trait LambdaLensesLike { self: ProgramUpdater with ContExps with Lenses =>
+  //Returns the variables used, the inner body, a way to produce fresh variables, and a way to rebuild the original lambda given a new body
+  trait LambdaExtractor {
+    def unapply(e: Exp): Option[(Seq[Var], Exp, Exp => Exp)]
+    def apply(v: Seq[Var], body: Exp): Exp
+  }
+
+  class LambdaLensLike(Lambda: LambdaExtractor) extends SemanticLens {
     isPreemptive = true
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       in.exp match {

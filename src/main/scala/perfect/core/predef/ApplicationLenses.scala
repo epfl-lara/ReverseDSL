@@ -4,16 +4,26 @@ package predef
 /**
   * Created by Mikael on 10/05/2017.
   */
-trait ApplicationLenses { self: ProgramUpdater with ContExps with Lenses with LambdaLenses =>
+
+/** Default helper to create applicaiton extractions. for more advance*/
+trait ApplicationLenses extends ApplicationLensesLike with LambdaLenses { self: ProgramUpdater with ContExps with Lenses with LambdaLenses =>
   def buildApplication(lambda: Exp, args: Seq[Exp]): Exp
   def extractApplication(e: Exp): Option[(Exp, Seq[Exp])]
 
-  object Application {
+  object Application extends ApplicationExtractor {
     def apply(lambda: Exp, args: Seq[Exp]): Exp = buildApplication(lambda, args)
     def unapply(e: Exp): Option[(Exp, Seq[Exp])] = extractApplication(e)
   }
+  object ApplicationLens extends ApplicationLensLike(Application, Lambda)
+}
 
-  object ApplicationLens extends SemanticLens {
+trait ApplicationLensesLike { self: ProgramUpdater with ContExps with LambdaLensesLike with Lenses =>
+  trait ApplicationExtractor {
+    def apply(lambda: Exp, args: Seq[Exp]): Exp
+    def unapply(e: Exp): Option[(Exp, Seq[Exp])]
+  }
+
+  class ApplicationLensLike(Application: ApplicationExtractor, Lambda: LambdaExtractor) extends SemanticLens {
     isPreemptive = true
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = in.exp match {
       case Application(lambdaExpr, arguments) => // TODO: Put this into a lense.

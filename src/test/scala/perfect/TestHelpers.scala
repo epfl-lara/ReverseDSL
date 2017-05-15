@@ -65,7 +65,7 @@ trait TestHelpers extends InoxConvertible.conversions { self: FunSuite =>
   implicit def ContExpToPF(in: InoxProgramUpdater.ContExp): ProgramFormula = ProgramFormula(in.exp, in.context)
 
 
-  val reverser = //InoxProgramUpdater
+  val reverser = InoxProgramUpdater
     ReverseProgram
 
   /** Returns all the solution, with the first lookInManyFirstSolutions being sorted */
