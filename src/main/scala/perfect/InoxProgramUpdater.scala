@@ -1,5 +1,7 @@
 package perfect
 
+import core.predef.AssociativeInsert
+
 object InoxProgramUpdater extends core.ProgramUpdater
     with core.ContExps
     with core.Lenses
@@ -11,6 +13,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with core.predef.ListLenses
     with core.predef.UnificationLenses
     with core.predef.ListLibraryLenses
+    with core.predef.ListStringLibraryLenses
     with core.predef.AssociativeLenses
     with core.predef.StringConcatLenses
     with core.predef.DefaultLenses
@@ -197,6 +200,10 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case _ => None
   }
 
+  def buildListInsertGoal(before: List[Exp], inserted: List[Exp], after: List[Exp], direction: AssociativeInsert.InsertDirection)(implicit symbols: Symbols): Exp = {
+    val t = (before ++ inserted ++ after).headOption.map(_.getType)
+    ListInsertGoal(t.getOrElse(throw new Exception("Empty list insert goals not supported")), before, inserted, after/*, direction*/)
+  }
 
 
   def mkStringVar(name: String, avoid: Var*): Var = {
@@ -383,6 +390,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     ShortcutLens(Map[inox.Identifier, SemanticLens](
       perfect.Utils.filter -> FilterLens,
       perfect.Utils.map -> MapLens,
+      perfect.Utils.mkString -> MkStringLens,
       perfect.Utils.rec2 -> RecursiveLens2,
       perfect.Utils.dummyStringConcat -> StringConcatLens.named("stringConcat")
       // TODO: Add all lenses from lenses.Lenses

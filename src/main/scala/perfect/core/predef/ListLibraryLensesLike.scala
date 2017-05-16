@@ -4,15 +4,18 @@ package predef
 /**
   * Created by Mikael on 15/05/2017.
   */
-trait ListLibraryLensesLike { self: ProgramUpdater
-  with ContExps with Lenses with ListLensesLike with ListInsertLensesLike with InvocationLensesLike with ApplicationLensesLike =>
+trait ListLibraryLensesLike {
+  self: ProgramUpdater
+    with ContExps with Lenses with ListLensesLike with ListInsertLensesLike with InvocationLensesLike with ApplicationLensesLike =>
 
   trait ListLibraryOptions {
-    /** In a map, can the output be transfered to the input, e.g. when adding a new row.*/
+    /** In a map, can the output be transfered to the input, e.g. when adding a new row. */
     def canPushInsertedOutputToInput(output: Exp, lambda: Exp)(implicit symbols: Symbols): Boolean
+
     /** Returns an expression, the default value matching the first lambda argument's type */
     def extractLambdaDefaultArgument(e: Exp): Option[Exp]
-    /** Returns an "unknown" fresh variable matching the type of the lambda's first argument*/
+
+    /** Returns an "unknown" fresh variable matching the type of the lambda's first argument */
     def extractLambdaUnknownVar(e: Exp): Option[Var]
   }
 
@@ -21,7 +24,7 @@ trait ListLibraryLensesLike { self: ProgramUpdater
                        Invocation: InvocationExtractor,
                        ListLiteral: ListLiteralExtractor,
                        ListLibraryOptions: ListLibraryOptions)
-      extends InvocationLensLike(Invocation) with FilterLike[Exp]  { // TODO: Incorporate filterRev as part of the sources.
+    extends InvocationLensLike(Invocation) with FilterLike[Exp] { // TODO: Incorporate filterRev as part of the sources.
     def put(originalArgsValues: Seq[ContExp], newOutputProgram: ContExp, builder: Seq[Exp] => Exp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
       val ContExp(lambda, lambdaF) = originalArgsValues.tail.head
       val newOutput = newOutputProgram.exp
@@ -30,13 +33,13 @@ trait ListLibraryLensesLike { self: ProgramUpdater
       val filterLambda = (expr: Exp) => lambdaF.assignments.flatMap(assign => maybeEvalWithCache(assign(Application(lambda, Seq(expr))))) contains ExpTrue
       newOutput match {
         case ListLiteral(newOutputList, _) =>
-          filterRev(originalInput, filterLambda, newOutputList).map{ (e: List[Exp]) =>
+          filterRev(originalInput, filterLambda, newOutputList).map { (e: List[Exp]) =>
             (Seq(ContExp(listBuilder(e), listF.assignmentsAsOriginals), ContExp(lambda)), Cont())
           }
         case Var(v) => // Convert to a formula and return a new variable
           newOutputProgram.getFunctionValue match {
             case Some(ListLiteral(newOutputList, _)) =>
-              filterRev(originalInput, filterLambda, newOutputList).map{ (e: List[Exp]) =>
+              filterRev(originalInput, filterLambda, newOutputList).map { (e: List[Exp]) =>
                 (Seq(ContExp(listBuilder(e), listF.assignmentsAsOriginals), ContExp(lambda)), Cont())
               }
             case _ =>
@@ -54,7 +57,7 @@ trait ListLibraryLensesLike { self: ProgramUpdater
   // The first context is Cont is for the lambda, the second is for the arguments
   def expand(i: List[Stream[Either[(Exp, Cont), ((Exp, Exp), Cont)]]], lambda: Exp)(implicit symbols: Symbols):
   Stream[(List[Exp], Exp, Cont, Cont)] = {
-    for{ e <- Utils.StreamUtils.cartesianProduct(i)
+    for {e <- Utils.StreamUtils.cartesianProduct(i)
          (argumentsChanged, argFormulas, newLambdas) = createArgumentsChanged(e, lambda)
          (lExpr, lFormula) <- newLambdas
     } yield {
@@ -65,10 +68,10 @@ trait ListLibraryLensesLike { self: ProgramUpdater
   private def recombineArgumentsLambdas(lambda: Exp, listBuilder: List[Exp] => Exp)
                                        (e: List[Either[(Exp, Cont), ((Exp, Exp), Cont)]])(implicit symbols: Symbols)
   : Stream[(Seq[ContExp], Cont)] = {
-//    Log(s"recombineArgumentLambdas($e)")
+    //    Log(s"recombineArgumentLambdas($e)")
     val (argumentsChanged, argFormulas, newLambdas) = createArgumentsChanged(e, lambda)
-    for{l <- newLambdas
-        (lExpr, lFormula) = l
+    for {l <- newLambdas
+         (lExpr, lFormula) = l
     } yield {
       (Seq(ContExp(listBuilder(argumentsChanged), argFormulas), ContExp(lExpr, lFormula combineWith argFormulas)), Cont())
     }
@@ -79,7 +82,7 @@ trait ListLibraryLensesLike { self: ProgramUpdater
       case Left((e, _)) => e
       case Right(((e, _), _)) => e
     },
-      Cont(e.collect{ case Left((_,  f)) => f case Right((_, f)) => f }),
+      Cont(e.collect { case Left((_, f)) => f case Right((_, f)) => f }),
       createNewLamdas(lambda, e)
     )
   }
@@ -98,7 +101,9 @@ trait ListLibraryLensesLike { self: ProgramUpdater
                     ListLiteral: ListLiteralExtractor,
                     ListInsertLensGoal: ListInsertLensGoalExtractor,
                     ListLibraryOptions: ListLibraryOptions) extends InvocationLensLike(Invocation) {
+
     import ListLibraryOptions._
+
     def put(originalArgsValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
       //Log(s"map.apply($newOutput)")
       val ContExp(lambda, lambdaF) = originalArgsValues.tail.head
@@ -143,9 +148,9 @@ trait ListLibraryLensesLike { self: ProgramUpdater
           // Beware, there might be changes in before or after. But at least, we know how the insertion occurred.
           val (newBeforeAfter: List[Stream[Either[(Exp, Cont), ((Exp, Exp), Cont)]]]) =
             (before.zip(originalInput.take(before.length)) ++
-              after.zip(originalInput.drop(originalInput.length - after.length))).map{
+              after.zip(originalInput.drop(originalInput.length - after.length))).map {
               case (expr, original) =>
-                if(isValue(expr)) {
+                if (isValue(expr)) {
                   Stream(Left[(Exp, Cont), ((Exp, Exp), Cont)]((original, Cont())))
                 } else {
                   repair(ContExp(Application(lambda, Seq(original))), out.subExpr(expr)).map {
@@ -163,7 +168,7 @@ trait ListLibraryLensesLike { self: ProgramUpdater
                   }
                 }
             }
-          assert(inserted.forall{ x => isValue(x)}, s"not all inserted elements were values $inserted")
+          assert(inserted.forall { x => isValue(x) }, s"not all inserted elements were values $inserted")
 
           // Inserted does not change the lambda normally
           val newInserted: List[Stream[Either[(Exp, Cont), ((Exp, Exp), Cont)]]] = {
@@ -175,20 +180,20 @@ trait ListLibraryLensesLike { self: ProgramUpdater
               (Seq(unknown), Cont(unknown -> OriginalValue(valueByDefault)))
             }
             inserted.map { i =>
-              (if(canPushInsertedOutputToInput(i, lambda)) { // An empty string ltteral was added. First we suppose that it was inserted in the original elements
+              (if (canPushInsertedOutputToInput(i, lambda)) { // An empty string ltteral was added. First we suppose that it was inserted in the original elements
                 Stream(Left((i, Cont())))
               } else Stream.empty) #:::
                 repair(ContExp(Application(lambda, Seq(expr)), newFormula), ContExp(i)).flatMap {
-                case pf@ContExp(Application(lExpr, Seq(expr2)), formula2) =>
-                  List(Left(expr2, formula2): Either[(Exp, Cont), ((Exp, Exp), Cont)])
-              }
+                  case pf@ContExp(Application(lExpr, Seq(expr2)), formula2) =>
+                    List(Left(expr2, formula2): Either[(Exp, Cont), ((Exp, Exp), Cont)])
+                }
             }
           }
 
-          for{ newBeforeAfterInsertedUniqueFormula <- expand(newBeforeAfter ++ newInserted, lambda)
+          for {newBeforeAfterInsertedUniqueFormula <- expand(newBeforeAfter ++ newInserted, lambda)
                (newBeforeAfterUnique, newLambda, formulaLambda, formulaArg) = newBeforeAfterInsertedUniqueFormula
                (newBefore, newAfterInserted) = newBeforeAfterUnique.splitAt(before.length)
-               (newAfter, newInsertedRaw) = newAfterInserted.splitAt(after.length) } yield {
+               (newAfter, newInsertedRaw) = newAfterInserted.splitAt(after.length)} yield {
             // A list insert results in a list insert in the argument.
             val firstArg = ContExp(listInsertLensGoalBuilder(
               newBefore,
@@ -208,7 +213,9 @@ trait ListLibraryLensesLike { self: ProgramUpdater
               extractLambdaUnknownVar(lambda) match {
                 case Some(unknownVar) =>
                   val (Seq(in), newFormula) =
-                    prevIn.map(x => (Seq(x._1), x._2)).getOrElse {(Seq(unknownVar), Cont(unknownVar -> OriginalValue(valueByDefault)))}
+                    prevIn.map(x => (Seq(x._1), x._2)).getOrElse {
+                      (Seq(unknownVar), Cont(unknownVar -> OriginalValue(valueByDefault)))
+                    }
                   //Log(s"in:$in\nnewformula:$newFormula")
                   //Log.prefix(s"fRev($prevIn, $out)=") :=
                   repair(ContExp(Application(lambda, Seq(in)), newFormula combineWith lambdaF).wrappingLowPriority(), out.subExpr(elemOut)).flatMap {
@@ -236,5 +243,5 @@ trait ListLibraryLensesLike { self: ProgramUpdater
       }
     }
   }
-
 }
+

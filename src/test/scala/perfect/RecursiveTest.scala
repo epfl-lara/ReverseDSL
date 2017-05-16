@@ -73,4 +73,6 @@ class RecursiveTest extends FunSuite with TestHelpers {
         l shouldEqual _List[String]("brother", "boss")
     }
   }
+
+  //TODO: Test filter recursive.
 }

@@ -9,6 +9,7 @@ import inox.trees.dsl._
   */
 object FunctionDefinitions {
   import Utils._
+  import StringConcatExtended._
 
   // filter definition in inox
   val filterFunDef = mkFunDef(filter)("A"){ case Seq(tp) =>
@@ -48,6 +49,28 @@ object FunctionDefinitions {
       })
   }
 
+  val mkStringFunDef = mkFunDef(Utils.mkString)(){ case Seq() =>
+    (Seq("ls" :: T(list)(StringType), "infix"::StringType),
+      StringType,
+      { case Seq(ls, infix) =>
+        if_(ls.isInstOf(T(cons)(StringType))) {
+          let("c"::T(cons)(StringType), ls.asInstOf(T(cons)(StringType)))(c =>
+            let("head"::StringType, c.getField(head))( head =>
+              let("tail"::T(list)(StringType), c.getField(tail))( tail =>
+                if_(tail.isInstOf(T(cons)(StringType))) {
+                  head +& infix +& FunctionInvocation(Utils.mkString, Seq(), Seq(tail, infix))
+                } else_ {
+                  head
+                }
+              )
+            )
+          )
+        } else_ {
+          StringLiteral("")
+        }
+      })
+  }
+
   // Rec definition in inox.
   val recFunDef = mkFunDef( rec)("A1", "A2", "B"){ case Seq(tA1, tA2, tB) =>
     (Seq("F" :: FunctionType(Seq(FunctionType(Seq(tA1, tA2), tB), tA1, tA2), tB), "x1" :: tA1, "x2" :: tA2),
@@ -60,6 +83,7 @@ object FunctionDefinitions {
   val funDefs = List[FunDef](
     filterFunDef,
     mapFunDef,
+    mkStringFunDef,
     recFunDef
   )
 }

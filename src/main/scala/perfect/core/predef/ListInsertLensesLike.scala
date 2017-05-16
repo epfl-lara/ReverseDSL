@@ -9,6 +9,9 @@ trait ListInsertLensesLike { self: ProgramUpdater with ContExps with Lenses with
     def unapply(e: Exp): Option[(List[Exp], List[Exp], List[Exp],
       (List[Exp], Option[Exp]) => Exp,
       (List[Exp], List[Exp], List[Exp]) => Exp)]
+    def apply(before: List[Exp], inserted: List[Exp], after: List[Exp], direction: AssociativeInsert.InsertDirection)(implicit symbols: Symbols): Exp
+    def apply(before: List[Exp], inserted: List[Exp], after: List[Exp])(implicit symbols: Symbols): Exp =
+      apply(before, inserted, after, AssociativeInsert.InsertAutomatic)
   }
 
   class ListInsertLensLike(ListInsertLensGoal: ListInsertLensGoalExtractor, Cons: ListConsExtractor, ListLiteral: ListLiteralExtractor) extends SemanticLens {
@@ -18,8 +21,8 @@ trait ListInsertLensesLike { self: ProgramUpdater with ContExps with Lenses with
           in.exp match {
             case Cons(head, tail, literalListBuilder) =>
               //Log("ListInsert")
-              if(before.length == 0) { //Log("beforeLength == 0")  // Insertion happens before this element
-                if(after.length == 0) { //Log("afterLength == 0")// We might delete the elements afterwards.
+              if(before.isEmpty) { //Log("beforeLength == 0")  // Insertion happens before this element
+                if(after.isEmpty) { //Log("afterLength == 0")// We might delete the elements afterwards.
                   Stream(out.subExpr(listBuilder(inserted, None)))
                 } else { // after.length > 0
                   //Log("afterLength > 0")
