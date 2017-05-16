@@ -15,7 +15,7 @@ trait TreeWrapLenses { self: ProgramUpdater with ContExps with Lenses with ADTLe
   object TreeWrapLens extends SemanticLens {
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       out.simplifiedExpr match {
-        case TreeWrapLensGoal(original, wrapper) if in.canDoWrapping =>
+        case TreeWrapLensGoal(original, wrapper) if in.canDoStringWrapping =>
           Stream(ContExp(wrapper(in.exp), out.context))
         case _ => Stream.empty
       }

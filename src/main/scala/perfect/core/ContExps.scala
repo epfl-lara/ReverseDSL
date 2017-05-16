@@ -332,15 +332,15 @@ trait ContExps { self: ProgramUpdater =>
     lazy val freeVars: Set[Var] = freeVariables(exp)
     lazy val unchanged: Set[Var] = freeVars -- context.varsToAssign
 
-    override def toString = exp.toString + s" [$context]" + (if(canDoWrapping) " (wrapping enabled)" else "") + (if(isWrappingLowPriority) " (avoid wrap)" else "")
-    var canDoWrapping = false
+    override def toString = exp.toString + s" [$context]" + (if(canDoStringWrapping) " (string wrapping enabled)" else "") + (if(isWrappingLowPriority) " (avoid wrap)" else "")
+    var canDoStringWrapping = false
 
     def wrappingEnabled: this.type = {
-      this.canDoWrapping = true
+      this.canDoStringWrapping = true
       this
     }
     def wrappingDisabled: this.type = {
-      this.canDoWrapping = false
+      this.canDoStringWrapping = false
       this
     }
 

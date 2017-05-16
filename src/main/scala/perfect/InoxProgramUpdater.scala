@@ -397,12 +397,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
       RecLens2*/
     ), {
       case FunctionInvocation(id, _, _) => Some(id)
-      case StringConcat(_, _) =>
-        println("strConcat ")
-        Some(perfect.Utils.dummyStringConcat)
-      case e =>
-        println("No match for function invocation " + e)
-        None
+      case StringConcat(_, _) => Some(perfect.Utils.dummyStringConcat)
+      case e => None
     }).named("Dispatch function invocation")
   import perfect.lenses._
 
@@ -415,7 +411,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     NoChangeLens.named("No Change?"),
     ConstantReplaceLens.named("ConstantReplace"),
     shapeLenses.named("Shape?"),
-    WrapperLens(semanticLenses.named("Semantic?") andThen defaultLens.named("default"), WrappedADTLens andThen WrappedStringLens)
+    WrapperLens(semanticLenses.named("Semantic?") andThen defaultLens.named("default"), WrappedADTLens.named("wrapped ADT") andThen WrappedStringLens)
     , FinalLens.named(s"/!\\ Warning could not transform")
   )
 }

@@ -37,18 +37,18 @@ trait ADTLensesLike { self: ProgramUpdater with ContExps with Lenses =>
               val seqOfStreamSolutions = argsIn.zip(argsInOptValue).zip(argsOut).map { case ((aFun, aFunVal), newOutArg) =>
                 repair(ContExp(aFun, in.context).withComputedValue(aFunVal), out.subExpr(newOutArg))
               }
-              val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
+              val streamOfSeqSolutions = ContExp.regroupArguments(seqOfStreamSolutions)
               for {seq <- streamOfSeqSolutions
-                   (newArgs, assignments) = ContExp.combineResults(seq)
+                   (newArgs, assignments) = seq
               } yield {
                 ContExp(builder(newArgs), assignments)
               }
-            case Var(_) | ADT(_, _) =>
+            case Var(_) | ADT(_, _) if freeVariables(inExp).isEmpty =>
               Stream(out)
 
             case a =>
               //Log(s"[Warning] Don't know how to handle this case : $a is supposed to be put in place of a ${tp}")
-              Stream(out)
+              Stream.empty
           }
 
         case as@ADTSelector(adt, selectorBuilder, vrs, index) =>

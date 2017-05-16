@@ -18,7 +18,7 @@ trait WrappedLensesLike {
           case Let(_, _, _) => Stream.empty[ContExp] // No need to wrap a let expression, we can always do this later. Indeed,
           //f{val x = A; B} = {val x = A; f(B)}
           case Application(Lambda(_, _, _), _) => Stream.empty[ContExp] // Same argument
-          case _ if in.canDoWrapping  && freeVariables(in.exp).nonEmpty =>
+          case _ if in.canDoStringWrapping  && freeVariables(in.exp).nonEmpty =>
             maybeWrapString(in, out) // #::: maybeUnwrapString(program, newOut, functionValue)
           case _ => Stream.empty
         }
@@ -83,7 +83,7 @@ trait WrappedLensesLike {
           case Let(_, _, _) => Stream.empty[ContExp] // No need to wrap a let expression, we can always do this later. Indeed,
           //f{val x = A; B} = {val x = A; f(B)}
           case Application(Lambda(_, _, _), _) => Stream.empty[ContExp] // Same argument
-          case _ if in.canDoWrapping  && freeVariables(in.exp).nonEmpty =>
+          case _ if freeVariables(in.exp).nonEmpty =>
             out.exp match {
               case l@ListInsertLensGoal(_, _, _, _, _) => Stream.empty
               case _ =>
