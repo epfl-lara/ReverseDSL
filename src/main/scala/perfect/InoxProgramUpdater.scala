@@ -100,11 +100,6 @@ object InoxProgramUpdater extends core.ProgramUpdater
         throw new Exception(s"Other unexpected solution: $e")
     }
   }
-  // Members declared in perfect.core.ContExps
-  def commands: List[ContExpCommand] = {
-    // TODO: Add commands
-    List()
-  }
 
   // Members declared in perfect.core.ProgramUpdater
   def Assign(v: Variable, e: Expr, body: Expr): Expr = inox.trees.Let(v.toVal, e, body)
@@ -205,6 +200,9 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   def mkStringVar(name: String, avoid: Var*): Var = {
     Variable(FreshIdentifier(perfect.Utils.uniqueName(name, avoid.map(_.id.name).toSet)), StringType, Set())
+  }
+  def mkStringVar(original: Var, avoid: Var*): Var = {
+    mkStringVar(original.id.name, avoid: _*)
   }
 
   def isSameInvocation(e: Expr, g: Expr)(implicit cache: Cache, symbols: Symbols) = e match {

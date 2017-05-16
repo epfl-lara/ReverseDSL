@@ -12,10 +12,11 @@ trait ContExps { self: ProgramUpdater =>
 
   trait ContExpCommand {
     def Eval: EvalContExpCommand
-    def merge(a1: Exp, a2: Exp): Option[(Exp, Seq[(Var, KnownValue)])]
+    def merge(a1: Exp, a2: Exp)(implicit symbols: Symbols): Option[(Exp, Seq[(Var, KnownValue)])]
   }
 
-  def commands: List[ContExpCommand]
+  def buildContExpCommands: ListBuffer[ContExpCommand] = ListBuffer[ContExpCommand]()
+  lazy val commands: List[ContExpCommand] = buildContExpCommands.toList
 
   sealed trait KnownValue {
     def getValue: Option[Exp]
@@ -68,7 +69,7 @@ trait ContExps { self: ProgramUpdater =>
       (Cont() /: formulas)(_ combineWith _)
     }
 
-    def inlineSimpleConts(e: Cont): Cont = {
+    def inlineSimpleConts(e: Cont)(implicit symbols: Symbols): Cont = {
       def evalExprIfNeeded(e: Exp): Option[Exp] =
         commands.view.map{
           cpf => cpf.Eval.unapply(e)
@@ -172,14 +173,14 @@ trait ContExps { self: ProgramUpdater =>
                       case AllValues => (known, nc)
                       case _ => throw new Exception(s"Tried to updated an universally quantified variable with non-universally quantified variable : $this.combineWith($other)")
                     }
-                  case InsertVariable(e) =>
+                  case InsertVariable(e2) =>
                     s match {
-                      case InsertVariable(e) if e == e => (known, nc)
-                      case InsertVariable(e) if !isValue(e) && isValue(e) => (known, nc)
-                      case InsertVariable(e) if isValue(e) && !isValue(e) => (known + (v -> s2), nc)
+                      case InsertVariable(e) if e2 == e => (known, nc)
+                      case InsertVariable(e) if !isValue(e) && isValue(e2) => (known, nc)
+                      case InsertVariable(e) if isValue(e) && !isValue(e2) => (known + (v -> s2), nc)
                       case _ => throw new Error(s"Attempt at inserting a variable $v already known: $this.combineWith($other)")
                     }
-                  case OriginalValue(e) => (known, nc) // No update needed.
+                  case OriginalValue(e2) => (known, nc) // No update needed.
                   case StrongValue(Var(EquivalentsVariables(knownSameVarsAse2))) if knownSameVarsAse2(v) => (known, nc)
                   case StrongValue(e2@BestEval(e2_eval)) =>
                     @inline def default(e: Exp) = (known, nc &<>& (e === e2))

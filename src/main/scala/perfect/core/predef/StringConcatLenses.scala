@@ -12,6 +12,7 @@ trait StringConcatLenses extends StringConcatLensesLike {
   def buildStringConcat(left: Exp, right: Exp): Exp
   def buildStringConcatSimplified(left: Exp, right: Exp): Exp
   def mkStringVar(name: String, avoid: Var*): Var
+  def mkStringVar(original: Var, avoid: Var*): Var
 
   object StringConcat extends StringConcatExtractor {
     def unapply(e: Exp): Option[(Exp, Exp)] = extractStringConcat(e)
