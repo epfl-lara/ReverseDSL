@@ -37,7 +37,7 @@ trait WrappedLensesLike {
       if (inValue == out.exp) {
         return Stream(in.assignmentsAsOriginals())
       }
-      val StringLiteral(t) = inValue
+      val t = StringLiteral.unapply(inValue).getOrElse(return Stream.empty)
 
       def wrapToRight(s: String) = {
         val StringConcat.Exhaustive(atoms) = inexp
@@ -155,7 +155,7 @@ trait WrappedLensesLike {
             case t if t == inValue => Some(function)
             case _ => None
           }(outValue)
-          Stream(ContExp(newFunction))
+          Stream(ContExp(newFunction) combineWith in.context.assignmentsAsOriginals)
         } else Stream.empty
       } else {
         Stream.empty

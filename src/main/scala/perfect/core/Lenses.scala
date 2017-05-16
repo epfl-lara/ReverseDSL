@@ -42,6 +42,7 @@ trait Lenses { self: ProgramUpdater with ContExps =>
       if(debug) println("Exiting "+msg + (if(res.nonEmpty) s" repairing \n$in\nwith\n$out\nGot one solution:\n" + res.head else ""))
       res
     }
+    isPreemptive = self.isPreemptive
   }
 
 
@@ -98,7 +99,7 @@ trait Lenses { self: ProgramUpdater with ContExps =>
 
   /** Saves the stack trace by combining lenses on a balanced tree. */
   def combine(lenses: SemanticLens*): SemanticLens = {
-    if(lenses.length == 0) {
+    if(lenses.isEmpty) {
       ValueLens // should not happen
     } else if(lenses.length == 1) lenses(0) else {
       val (left, right) = lenses.splitAt(lenses.length / 2)
