@@ -119,7 +119,7 @@ class LambdaCalculusTest extends FunSuite with TestHelpers {
     ChurchToInt.tupled(Add.tupled(One.tupled(), One.tupled())) shouldProduce IntLiteral(2)
   }
   test("Lambda calculus repair 0 -> 2") {
-    ChurchToInt(Zero()) repairFrom ChurchToInt(Two()) shouldProduce IntLiteral(2)
+    ChurchToInt(Zero() repairFrom Two()) shouldProduce IntLiteral(2)
     Zero.tupled() repairFrom Two.tupled() match {
       case Two.tupled() => // Ok
     }
