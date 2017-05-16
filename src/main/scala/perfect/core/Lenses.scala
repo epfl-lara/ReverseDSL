@@ -121,7 +121,7 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     isPreemptive = true
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       // Literals without any free variables should be immediately replaced by the new value
-      if(isValue(in.exp) && isValue(out.exp)) Stream(out) else Stream.empty
+      if(isValue(in.exp) && isValue(out.simplifiedExpr)) Stream(out) else Stream.empty
     }
   }
 
