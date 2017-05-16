@@ -4,6 +4,7 @@ package predef
 
 /**
   * Created by Mikael on 10/05/2017.
+  * Algebraic data type lenses.
   */
 trait ADTLenses extends ADTLensesLike {
   self: ProgramUpdater with ContExps with Lenses =>
