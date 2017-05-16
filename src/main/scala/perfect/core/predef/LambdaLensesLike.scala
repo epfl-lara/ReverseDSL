@@ -16,9 +16,10 @@ trait LambdaLensesLike { self: ProgramUpdater with ContExps with Lenses =>
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       in.exp match {
         case fun@Lambda(vds, body, lambdaBuilder) =>
+          val fvfun = freeVariables(fun)
           /** Replaces the vds by universally quantified variables */
           def unify: Stream[ContExp] = {
-            if(freeVariables(fun).nonEmpty) {
+            if(fvfun.nonEmpty) {
               out.forcedExpr match {
                 case Lambda(vds2, body2, builder2) =>
                   val freshVariables1 = vds.map((x: Var) => freshen(x))
@@ -50,7 +51,13 @@ trait LambdaLensesLike { self: ProgramUpdater with ContExps with Lenses =>
             }
           }
 
-          unify #::: Stream(out)
+          def justOut: Stream[ContExp] = {
+            if(fvfun.nonEmpty) { // We still need to assign an original value to these variables.
+              Stream(out combineWith in.context.assignmentsAsOriginals)
+            } else Stream(out)
+          }
+
+          unify #::: justOut
         case _ => Stream.empty
       }
     }
