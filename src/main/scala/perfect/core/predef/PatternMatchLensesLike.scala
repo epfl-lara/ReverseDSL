@@ -12,9 +12,9 @@ trait PatternMatchLensesLike { self: ProgramUpdater
     def apply(pattern: Exp, vars: List[(Var, Exp)], forClone: Boolean): Exp
   }
 
-  class PatternMatchLensLike(StringLiteral: StringLiteralExtractor, StringConcat: StringConcatExtractor,
+  class PatternMatchLensLike(StringLiteral: StringLiteralExtractor, val StringConcat: StringConcatExtractor,
                              ADT: ADTExtractor,
-                             PatternMatchLensGoal: PatternMatchLensGoalExtractor) extends StringConcatHelpers(StringConcat) with SemanticLens {
+                             PatternMatchLensGoal: PatternMatchLensGoalExtractor) extends SemanticLens with StringConcatHelpers {
     override def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       out.simplifiedExpr match {
         case PatternMatchLensGoal(pattern, variables, forClone) =>

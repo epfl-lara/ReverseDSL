@@ -36,7 +36,8 @@ trait StringConcatLensesLike { self: ProgramUpdater with ContExps with Lenses wi
     def apply(name: String, avoid: Var*): Var
   }
 
-  abstract class StringConcatHelpers(StringConcat: StringConcatExtractor) {
+  trait StringConcatHelpers {
+    def StringConcat: StringConcatExtractor
     implicit class AugmentedSubExpr[T <: Exp](e: T) {
       @inline def +&(other: Exp): Exp = StringConcat(e, other)
 
@@ -46,7 +47,7 @@ trait StringConcatLensesLike { self: ProgramUpdater with ContExps with Lenses wi
     val +& = StringConcat
   }
 
-  class StringConcatLensLike(StringLiteral: StringLiteralExtractor, StringConcat: StringConcatExtractor, mkStringVar: MkStringVar) extends StringConcatHelpers(StringConcat) with MultiArgsSemanticLens {
+  class StringConcatLensLike(StringLiteral: StringLiteralExtractor, val StringConcat: StringConcatExtractor, mkStringVar: MkStringVar) extends MultiArgsSemanticLens with StringConcatHelpers {
     def extract(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(
         Seq[Exp],
         (Seq[ContExp], ContExp) => Stream[(Seq[ContExp], Cont)],
@@ -121,7 +122,7 @@ trait StringConcatLensesLike { self: ProgramUpdater with ContExps with Lenses wi
       // Prioritize changes that touch only one of the two expressions.
       out.exp match {
         case StringLiteral(s) =>
-          ifEmpty((rightCase(s) .toList++ leftCase(s).toList).sortBy(_._2).map(_._1).toStream) { defaultCase }
+          Utils.ifEmpty((rightCase(s) .toList++ leftCase(s).toList).sortBy(_._2).map(_._1).toStream) { defaultCase }
         case StringConcat(StringLiteral(left), right) => // Special cases, I don't know if we need them.
           if(lv.startsWith(left)) {
             val newLeftValue = lv.substring(left.length)

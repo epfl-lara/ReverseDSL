@@ -13,7 +13,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with core.predef.ListLibraryLenses
     with core.predef.AssociativeLenses
     with core.predef.StringConcatLenses
-    with core.predef.DefaultLenses {
+    with core.predef.DefaultLenses
+    with core.predef.WrappedLenses {
 
   import inox.FreshIdentifier
 
@@ -414,7 +415,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     NoChangeLens.named("No Change?"),
     ConstantReplaceLens.named("ConstantReplace"),
     shapeLenses.named("Shape?"),
-    /*WrapperLens(*/semanticLenses.named("Semantic?") andThen defaultLens.named("default")/*, MaybeWrappedSolutions)*/
+    WrapperLens(semanticLenses.named("Semantic?") andThen defaultLens.named("default"), WrappedADTLens andThen WrappedStringLens)
     , FinalLens.named(s"/!\\ Warning could not transform")
   )
 }

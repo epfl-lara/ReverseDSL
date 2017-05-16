@@ -1,4 +1,5 @@
-package perfect.core.predef
+package perfect.core
+package predef
 
 /**
   * Created by Mikael on 15/05/2017.
@@ -6,12 +7,12 @@ package perfect.core.predef
 trait StringInsertLensesLike { self: ProgramUpdater with ContExps with Lenses with StringLensesLike with StringConcatLensesLike with AssociativeLenses =>
 
   trait StringInsertLensGoalExtractor {
-    def unapply(e: Exp): Option[(String, String, String, InsertDirection)]
+    def unapply(e: Exp): Option[(String, String, String, AssociativeInsert.InsertDirection)]
     def apply(left: String, inserted: String, right: String, direction: AssociativeInsert.InsertDirection): Exp
   }
 
-  class StringInsertLensLike(StringLiteral: StringLiteralExtractor, StringConcat: StringConcatExtractor, StringInsertLensGoal: StringInsertLensGoalExtractor)
-      extends StringConcatHelpers(StringConcat) with SemanticLens with AssociativeConcat[String, Char] {
+  class StringInsertLensLike(StringLiteral: StringLiteralExtractor, val StringConcat: StringConcatExtractor, StringInsertLensGoal: StringInsertLensGoalExtractor)
+      extends SemanticLens with AssociativeConcat[String, Char] with StringConcatHelpers {
     def endsWith(a: String, b: String): Boolean = a.endsWith(b)
     def startsWith(a: String, b: String): Boolean = a.startsWith(b)
     def length(a: String): Int = a.length

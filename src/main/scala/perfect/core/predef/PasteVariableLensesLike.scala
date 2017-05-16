@@ -8,7 +8,7 @@ trait PasteVariableLensesLike { self: ProgramUpdater with ContExps with Lenses w
     def apply(left: String, v: Var, v_value: String, right: String, direction: AssociativeInsert.InsertDirection): Exp
   }
 
-  class PasteVariableLens(StringConcat: StringConcatExtractor, PasteVariableLensGoal: PasteVariableLensGoalExtractor) extends StringConcatHelpers(StringConcat) with SemanticLens {
+  class PasteVariableLens(val StringConcat: StringConcatExtractor, PasteVariableLensGoal: PasteVariableLensGoalExtractor) extends SemanticLens with StringConcatHelpers {
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       out.simplifiedExpr match {
         case PasteVariableLensGoal(left, v2, v2_value, right, direction) =>
