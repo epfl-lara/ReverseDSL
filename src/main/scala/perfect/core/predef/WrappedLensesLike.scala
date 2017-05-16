@@ -112,7 +112,7 @@ trait WrappedLensesLike {
         case _ => false
       } _
       // Checks if the old value is inside the new value, in which case we add a wrapper.
-      if (containsFunctionValue(outValue)) {
+      if (containsFunctionValue(outValue) && ADT.isSame(outValue, outValue) ) {
         val canWrap = outValue match {
           case ADT(args, argsBuilder) =>
             function match {
