@@ -7,11 +7,11 @@ import perfect.core.{ContExps, Lenses, ProgramUpdater}
   */
 
 trait LambdaLenses extends LambdaLensesLike { self: ProgramUpdater with ContExps with Lenses =>
-  def extractLambda(e: Exp): Option[(Seq[Var], Exp, Exp => Exp)]
+  def extractLambda(e: Exp): Option[(Seq[Var], Exp)]
   def buildLambda(v: Seq[Var], body: Exp): Exp
 
   object LambdaExtractor extends LambdaExtractor {
-    def unapply(e: Exp): Option[(Seq[Var], Exp, Exp => Exp)] = extractLambda(e)
+    def unapply(e: Exp): Option[(Seq[Var], Exp)] = extractLambda(e)
     def apply(v: Seq[Var], body: Exp): Exp = buildLambda(v, body)
   }
 

@@ -48,8 +48,18 @@ object FunctionDefinitions {
       })
   }
 
+  // Rec definition in inox.
+  val recFunDef = mkFunDef( rec)("A1", "A2", "B"){ case Seq(tA1, tA2, tB) =>
+    (Seq("F" :: FunctionType(Seq(FunctionType(Seq(tA1, tA2), tB), tA1, tA2), tB), "x1" :: tA1, "x2" :: tA2),
+      tB,
+      { case Seq(f, x1, x2) =>
+        f(\("a1"::tA1, "a2"::tA2)((a1, a2) => E(rec)(tA1, tA2, tB)(f, a1, a2)), x1, x2)
+      })
+  }
+
   val funDefs = List[FunDef](
     filterFunDef,
-    mapFunDef
+    mapFunDef,
+    recFunDef
   )
 }

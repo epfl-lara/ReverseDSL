@@ -7,7 +7,7 @@ package predef
 trait LambdaLensesLike { self: ProgramUpdater with ContExps with Lenses =>
   //Returns the variables used, the inner body, a way to produce fresh variables, and a way to rebuild the original lambda given a new body
   trait LambdaExtractor {
-    def unapply(e: Exp): Option[(Seq[Var], Exp, Exp => Exp)]
+    def unapply(e: Exp): Option[(Seq[Var], Exp)]
     def apply(v: Seq[Var], body: Exp): Exp
   }
 
@@ -15,13 +15,13 @@ trait LambdaLensesLike { self: ProgramUpdater with ContExps with Lenses =>
     isPreemptive = true
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       in.exp match {
-        case fun@Lambda(vds, body, lambdaBuilder) =>
+        case fun@Lambda(vds, body) =>
           val fvfun = freeVariables(fun)
           /** Replaces the vds by universally quantified variables */
           def unify: Stream[ContExp] = {
             if(fvfun.nonEmpty) {
               out.forcedExpr match {
-                case Lambda(vds2, body2, builder2) =>
+                case Lambda(vds2, body2) =>
                   val freshVariables1 = vds.map((x: Var) => freshen(x))
                   val map1 = vds.zip(freshVariables1).toMap
                   val map2 = vds2.zip(freshVariables1).toMap
@@ -41,7 +41,7 @@ trait LambdaLensesLike { self: ProgramUpdater with ContExps with Lenses =>
                         case Var(v) => mapR.get(v)
                         case _ => None
                       }(newBody)
-                      lambdaBuilder(abstractedBody)
+                      Lambda(vds, abstractedBody)
                     }
                   }
                 case _ => Stream.empty

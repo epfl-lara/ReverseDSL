@@ -13,7 +13,7 @@ trait ApplicationLensesLike { self: ProgramUpdater with ContExps with LambdaLens
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = in.exp match {
       case Application(lambdaExpr, arguments) => // TODO: Put this into a lense.
         val originalValueMaybe: Option[Exp] = in.subExpr(lambdaExpr).simplifiedExpr match {
-          case l@Lambda(_, _, _) => Some(l)
+          case l@Lambda(_, _) => Some(l)
           //case _ => throw new Exception("Don't know how to deal with an application over non-lambda: "+lambdaExpr)
           case l => in.context.partialAssignments.flatMap(assign => maybeEvalWithCache(assign._1(l)))
         } // /: Log.Original_Value
@@ -27,7 +27,7 @@ trait ApplicationLensesLike { self: ProgramUpdater with ContExps with LambdaLens
         }
 
         originalValueMaybe match {
-          case Some(originalValue@Lambda(argNames, body, lambdaBuilder)) =>
+          case Some(originalValue@Lambda(argNames, body)) =>
             val (freshArgsNames, oldToFresh, freshToOld) = freshenArgsList(argNames)
             @inline def renew(e: Exp) = replaceFromVars(oldToFresh, e)
             @inline def back(e: Exp) = replaceFromVars(freshToOld, e)
@@ -113,7 +113,7 @@ trait ApplicationLensesLike { self: ProgramUpdater with ContExps with LambdaLens
                         preMap{
                           case Application(Var(v), args2) if originalVariables contains v =>
                             in.context.partialAssignments.flatMap(assign => maybeEvalWithCache(assign._1(v))) match {
-                              case Some(Lambda(nArg, nBody, nBuilder)) =>
+                              case Some(Lambda(nArg, nBody)) =>
                                 Some(replaceFromVars(nArg.zip(args2).toMap, nBody))
                               case _ => None
                             }

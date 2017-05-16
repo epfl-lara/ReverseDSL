@@ -1316,7 +1316,7 @@ object Lenses {
 
   case object RecLens2 extends Lens {
     import Utils._
-    val identifier = Utils.rec
+    val identifier = Utils.rec2
 
     val funDef: FunDef = mkFunDef(identifier)("A1", "A2", "B"){ case Seq(tA1, tA2, tB) =>
       (Seq("F" :: FunctionType(Seq(FunctionType(Seq(tA1, tA2), tB), tA1, tA2), tB), "x1" :: tA1, "x2" :: tA2),

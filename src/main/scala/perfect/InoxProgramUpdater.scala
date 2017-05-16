@@ -14,6 +14,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with core.predef.AssociativeLenses
     with core.predef.StringConcatLenses
     with core.predef.DefaultLenses
+    with core.predef.RecursiveLenses
     with core.predef.WrappedLenses {
 
   import inox.FreshIdentifier
@@ -131,8 +132,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   // Members declared in perfect.core.predef.LambdaLenses
   def buildLambda(v: Seq[Var],body: Exp): Exp = inox.trees.Lambda(v.map(_.toVal), body)
-  def extractLambda(e: Exp): Option[(Seq[Var], Exp, Exp => Exp)] = e match {
-    case inox.trees.Lambda(vds, body) => Some((vds.map(_.toVariable), body, x => inox.trees.Lambda(vds, body)))
+  def extractLambda(e: Exp): Option[(Seq[Var], Exp)] = e match {
+    case inox.trees.Lambda(vds, body) => Some((vds.map(_.toVariable), body))
     case _ => None
   }
 
@@ -382,6 +383,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     ShortcutLens(Map[inox.Identifier, SemanticLens](
       perfect.Utils.filter -> FilterLens,
       perfect.Utils.map -> MapLens,
+      perfect.Utils.rec2 -> RecursiveLens2,
       perfect.Utils.dummyStringConcat -> StringConcatLens.named("stringConcat")
       // TODO: Add all lenses from lenses.Lenses
       /*MapLens,
