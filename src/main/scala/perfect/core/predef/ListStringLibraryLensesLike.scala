@@ -138,9 +138,9 @@ trait ListStringLibraryLensesLike { self: ProgramUpdater
                           rightUntouched.tail.toOriginalListExpr)
                         (Seq(ContExp(newExpr, pf.context), ContExp(infixExpr)), Cont())
                       } else { // New elements have been furthermore inserted.
-                        val newPf = ContExp(listLiteralBuilder(
-                          leftUntouched.toOriginalListExpr ++
-                          lInserted.init.map{ (s: String) => StringLiteral(s)} ++
+                        val newPf = ContExp(ListInsertLensGoal(
+                          leftUntouched.toOriginalListExpr,
+                          lInserted.init.map{ (s: String) => StringLiteral(s)},
                           (pf.exp :: rightUntouched.tail.toOriginalListExpr)), pf.context)
                         (Seq(newPf, ContExp(infixExpr)), Cont())
                       }
