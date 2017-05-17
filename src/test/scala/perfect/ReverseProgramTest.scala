@@ -466,14 +466,14 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
     def unapply(e: Expr) = e match {
       case FunctionInvocation(Utils.map, Seq(_, _),
-      Seq(l, Lambda(Seq(vd), body))) => Some((l, vd.toVariable, body))
+    Seq(l, Lambda(Seq(vd), body))) => Some((l, vd.toVariable, body))
       case _ => None
     }
   }
   test("Reverse map") {
     val ap = valdef[String]("a")
-    Map(List("A","B","D","E"), av => "- " +& av) repairFrom
-      ListInsert(StringType, List("- A", "- B"), List("- C"), List("- D", "- E")) shouldProduce
+    Map(List("A", "B", "D", "E"), av => "- " +& av) repairFrom
+      ListInsert(List("- A", "- B"), List("- C"), List("- D", "- E")) shouldProduce
       _List[String]("- A", "- B", "- C", "- D", "- E")
 
     val pfStr4 = StringInsert("- ", "B", "", AssociativeInsert.InsertAutomatic)
@@ -503,26 +503,25 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
     val pfStr3b = StringInsert("- ", "o", "B", AssociativeInsert.InsertAutomatic)
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-      ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3b.expr), StringType), List("- C", "- D")), pfStr3b.formula) shouldProduce
-      _List[String]("- A", "- oB", "- C", "- D")
+    ProgramFormula(ListLiteral.concat(List("- A"), ListLiteral(List(pfStr3b.expr), StringType), List("- C", "- D")), pfStr3b.formula) shouldProduce
+    _List[String]("- A", "- oB", "- C", "- D")
 
 
     val pfStr = StringInsert("- ", "E", "", AssociativeInsert.InsertAutomatic)
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-      (ListInsert(StringType, List("- A", "- B"), List(), List(pfStr.expr)) combineWith pfStr.formula) shouldProduce
+    (ListInsert(List("- A", "- B"), List(), List(pfStr.expr)) combineWith pfStr.formula) shouldProduce
     _List[String]("- A", "- B", "- E")
 
     Map(List("A","B","D","E"), av => "- " +& av) repairFrom
-    ListInsert(StringType, List("- A", "- B"), List(""), List("- D", "- E")) shouldProduce
+    ListInsert(List("- A", "- B"), List(""), List("- D", "- E")) shouldProduce
     _List[String]("- A", "- B", "- ", "- D", "- E")
 
+    Map(List("A","B","C","D"), av => "- " +& av) repairFrom
+      ListInsert(List("- A", "- B", "- C", "- D"), List(""), List()) shouldProduce
+      _List[String]("- A", "- B", "- C", "- D", "- ")
 
     Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-    ListInsert(StringType, List("- A", "- B", "- C", "- D"), List(""), List()) shouldProduce
-    _List[String]("- A", "- B", "- C", "- D", "- ")
-
-    Map(List("A","B","C","D"), av => "- " +& av) repairFrom
-    ListInsert(StringType, List(), List(""), List("- A", "- B", "- C", "- D")) shouldProduce
+    ListInsert(List(), List(""), List("- A", "- B", "- C", "- D")) shouldProduce
     _List[String]("- ", "- A", "- B", "- C", "- D")
 
     pfun repairFrom _List[String]("The pizza Margharita", "Pizza Salami","Pizza Royal") shouldProduce

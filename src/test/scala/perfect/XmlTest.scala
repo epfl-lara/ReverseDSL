@@ -257,7 +257,7 @@ class XmlTest extends FunSuite with TestHelpers {
     implicit val symbols = Utils.defaultSymbols
     val newOutInsertionData: ProgramFormula =
       TreeModification(inoxTypeOf[Node],inoxTypeOf[List[Node]],initialOutWithoutSorting,
-        ListInsert.Goal(inoxTypeOf[Node],
+        ListInsertGoal(inoxTypeOf[Node],
           List(<index>
             <name>Masato Takeichi</name>
             <name>Zhenjiang Hu</name>
@@ -328,7 +328,7 @@ class XmlTest extends FunSuite with TestHelpers {
       inoxTypeOf[Node],
       inoxTypeOf[List[Node]],
       initialOutWithoutSorting,
-      ListInsert.Goal(inoxTypeOf[Node],
+      ListInsertGoal(inoxTypeOf[Node],
         List(
           <name> Masato Takeichi </name>: Node,
           <name> Zhenjiang Hu </name>: Node),
@@ -436,7 +436,7 @@ class XmlTest extends FunSuite with TestHelpers {
     implicit val symbols = Utils.defaultSymbols
     val newOutInsertionData: ProgramFormula =
       TreeModification(inoxTypeOf[Node],inoxTypeOf[List[Node]],initialOutWithoutSorting,
-        ListInsert.Goal(inoxTypeOf[Node],
+        ListInsertGoal(inoxTypeOf[Node],
           List(<index>
             <name>Zhenjiang Hu</name>
             <name>Shin-Cheng Mu</name>
@@ -504,7 +504,7 @@ class XmlTest extends FunSuite with TestHelpers {
       inoxTypeOf[Node],
       inoxTypeOf[List[Node]],
       initialOutWithoutSorting,
-      ListInsert.Goal(inoxTypeOf[Node],
+      ListInsertGoal(inoxTypeOf[Node],
         List(
           <name> Zhenjiang Hu </name>: Node),
         List(<name> Mikael Mayer </name>: Node),

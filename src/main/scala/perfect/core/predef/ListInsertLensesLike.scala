@@ -19,26 +19,34 @@ trait ListInsertLensesLike { self: ProgramUpdater with ContExps with Lenses with
       out.simplifiedExpr match {
         case ListInsertLensGoal(before, inserted, after, listBuilder, listInsertGoalBuilder) =>
           in.exp match {
+            case ListLiteral(Nil, literalListBuilder) =>
+              Stream(ContExp(literalListBuilder(before ++ inserted ++ after), out.context))
             case Cons(head, tail, literalListBuilder) =>
-              //Log("ListInsert")
+              //perfect.Log("ListInsert")
               if(before.isEmpty) { //Log("beforeLength == 0")  // Insertion happens before this element
                 if(after.isEmpty) { //Log("afterLength == 0")// We might delete the elements afterwards.
                   Stream(out.subExpr(listBuilder(inserted, None)))
                 } else { // after.length > 0
-                  //Log("afterLength > 0")
+                  //perfect.Log("afterLength > 0")
                   in.getFunctionValue match {
                     case Some(ListLiteral(functionValueList, _)) =>
                       val newTail = literalListBuilder(functionValueList.tail)
 
                       if(after.length == functionValueList.length) { // No deletion.
-                        //Log("afterLength == functionValueList.length")
-                        for{ pf <- repair(in.subExpr(head).withComputedValue(functionValueList.head), out.subExpr(after.head))
-                             pf2 <- repair(in.subExpr(tail).withComputedValue(newTail),
-                               out.subExpr(listInsertGoalBuilder(Nil, Nil, after.tail))) } yield {
+                        //perfect.Log("afterLength == functionValueList.length")
+                        val repairedHead = repair(in.subExpr(head).withComputedValue(functionValueList.head), out.subExpr(after.head))
+                        val repairedTail = if(after.tail.nonEmpty) {
+                          repair(in.subExpr(tail).withComputedValue(newTail), out.subExpr(listBuilder(after.tail, None)))
+                        } else {
+                          Stream(ContExp(listBuilder(Nil, None)))
+                        }
+
+                        for{ pf <- repairedHead
+                             pf2 <- repairedTail} yield {
                           ContExp(listBuilder(inserted :+ pf.exp, Some(pf2.exp)), pf.context combineWith pf2.context combineWith out.context)
                         }
                       } else {
-                        //Log("afterLength < functionValueList.length")
+                        //perfect.Log("afterLength < functionValueList.length")
                         assert(after.length < functionValueList.length) // some deletion happened.
                         val updatedOutProgram = out.subExpr(listInsertGoalBuilder(Nil, Nil, after)) // Recursive problem if
                         for{ pf <- repair(in.subExpr(tail).withComputedValue(newTail), updatedOutProgram)} yield {

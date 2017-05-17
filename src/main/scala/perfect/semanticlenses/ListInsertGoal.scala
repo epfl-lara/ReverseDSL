@@ -19,6 +19,11 @@ object ListInsertGoal extends FunDefGoal {
     )
   }
 
+  def apply(leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr])(implicit symbols: Symbols): Expr = {
+    val tpe = (leftUnmodified ++ inserted ++ rightUnmodified).headOption.map(_.getType).getOrElse(throw new Exception("unable to find type"))
+    apply(tpe, leftUnmodified, inserted, rightUnmodified)
+  }
+
   def unapply(e: Expr): Option[(Type, List[Expr], List[Expr], List[Expr])] = {
     e match {
       case FunctionInvocation(InsertList, Seq(tpe0), Seq(
