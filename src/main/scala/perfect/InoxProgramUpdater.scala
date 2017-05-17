@@ -411,7 +411,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
       perfect.Utils.mkString -> MkStringLens,
       perfect.Utils.rec2 -> RecursiveLens2,
       perfect.Utils.dummyStringConcat -> StringConcatLens,
-      perfect.Utils.listconcat -> ListConcatLens
+      perfect.Utils.listconcat -> ListConcatLens,
+      perfect.Utils.flatmap -> FlatMapLens
       // TODO: Add all lenses from lenses.Lenses
       /*
       FlattenLens,

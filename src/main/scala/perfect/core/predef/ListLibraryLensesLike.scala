@@ -243,5 +243,55 @@ trait ListLibraryLensesLike {
       }
     }
   }
+
+
+  /** Lense-like map, with the possibility of changing the mapping lambda. */
+  class FlatMapLensLike(Application: ApplicationExtractor,
+                        Invocation: InvocationExtractor,
+                        ListLiteral: ListLiteralExtractor,
+                        ListInsertLensGoal: ListInsertLensGoalExtractor,
+                        ListLibraryOptions: ListLibraryOptions) extends InvocationLensLike(Invocation) {
+    import ListLibraryOptions._
+    def put(originalArgsValues: Seq[ContExp], newOutput: ContExp, builder: Seq[Exp] => Exp)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ContExp], Cont)] = {
+      val originalInputProg@ContExp(originalInputExp, originalInputF) = originalArgsValues.head
+      val (originalInput, listBuilder) = ListLiteral.unapply(originalInputExp).getOrElse(return Stream.empty)
+      val ContExp(lambda, lambdaF) = originalArgsValues.tail.head
+
+      val (outValue, outBuilder) = ListLiteral.unapply(newOutput.exp).getOrElse(return Stream.empty)
+      val valueByDefault = originalInput.headOption.getOrElse(extractLambdaDefaultArgument(lambda).getOrElse(return Stream.empty))
+
+      val fmapr = new FlatMapReverseLike[(Exp, Cont), Exp, ((Exp, Exp), Cont)] {
+        def f: ((Exp, Cont)) => List[Exp] = { (exprF: (Exp, Cont)) =>
+          val ListLiteral(l, _) = maybeEvalWithCache(lambdaF.assignments.get(Application(lambda, Seq(exprF._1)))).getOrElse(throw new Exception(s"Could not evaluate $exprF"))
+          l
+        }
+
+        def fRev: (Option[(Exp, Cont)], List[Exp]) => Stream[Either[(Exp, Cont), ((Exp, Exp), Cont)]] = { (prevIn, out) =>
+          extractLambdaUnknownVar(lambda) match {
+            case None => Stream.empty
+            case Some(unknownVar) =>
+              val (Seq(in), newCont) =
+                prevIn.map(x => (Seq(x._1), x._2)).getOrElse {
+                  (Seq(unknownVar), Cont(unknownVar -> OriginalValue(valueByDefault)))
+                }
+              //Log(s"flatmap in:$in\nnewformula:$newCont")
+              //Log.res :=
+              repair(ContExp(Application(lambda, Seq(in)), newCont), newOutput.subExpr(outBuilder(out))).flatMap {
+                case ContExp(Application(lambda2, Seq(in2)), formula)
+                  if lambda2 == lambda => //The argument's values have changed
+                  Stream(Left((in2, formula)))
+                case ContExp(Application(lambda2, Seq(in2)), formula) =>
+                  // In the case when in2 is now a variable, we add the constraint that it should equal the original variable.
+                  Stream(Right(((in2, lambda2), formula)))
+                case e@ContExp(app, f) =>
+                  throw new Exception(s"Don't know how to invert both the lambda and the value: $e")
+              }
+          }
+        }
+      }
+      fmapr.flatMapRev(originalInput.map(x => (x, originalInputF)), outValue).flatMap(recombineArgumentsLambdas(lambda, listBuilder))
+    }
+  }
+
 }
 

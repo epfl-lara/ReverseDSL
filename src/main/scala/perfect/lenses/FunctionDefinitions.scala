@@ -97,11 +97,29 @@ object FunctionDefinitions {
       })
   }
 
+  // Flatmap definition in inox
+  val flatMapFunDef = mkFunDef(Utils.flatmap)("A", "B"){ case Seq(tA, tB) =>
+    (Seq("ls" :: T(list)(tA), "f" :: FunctionType(Seq(tA), T(list)(tB))),
+      T(list)(tB),
+      { case Seq(ls, f) =>
+        if_(ls.isInstOf(T(cons)(tA))) {
+          let("c"::T(cons)(tA), ls.asInstOf(T(cons)(tA)))(c =>
+            let("headMapped"::T(list)(tB), f(c.getField(head)))( headMapped =>
+              E(listconcat)(tB)(headMapped, E(Utils.flatmap)(tA, tB)(c.getField(tail), f))
+            )
+          )
+        } else_ {
+          ADT(T(nil)(tB), Seq())
+        }
+      })
+  }
+
   val funDefs = List[FunDef](
     filterFunDef,
     mapFunDef,
     mkStringFunDef,
     recFunDef,
-    listConcatFunDef
+    listConcatFunDef,
+    flatMapFunDef
   )
 }

@@ -27,6 +27,8 @@ trait ListLibraryLenses extends ListLibraryLensesLike { self: ProgramUpdater
   object FilterLens extends FilterLensLike(ApplicationExtractor, InvocationExtractor, ListLiteral, ListLibraryOptions)
 
   object MapLens extends MapLensLike(ApplicationExtractor, InvocationExtractor, ListLiteral, ListInsertLensGoal, ListLibraryOptions)
+
+  object FlatMapLens extends FlatMapLensLike(ApplicationExtractor, InvocationExtractor, ListLiteral, ListInsertLensGoal, ListLibraryOptions)
 }
 
 
