@@ -4,7 +4,7 @@ package predef
 /**
   * Created by Mikael on 09/05/2017.
   */
-trait ListInsertLenses extends ListInsertLensesLike { self: ProgramUpdater with ContExps with Lenses with ADTLenses with ListLenses =>
+trait ListInsertLenses extends ListInsertLensesLike { self: ProgramUpdater with ContExps with Lenses with ListLenses with ListConcatLenses =>
   /** Returns the head, the tail and a way to build a list from a sequence of elements. */
   def extractListInsertGoal(e: Exp): Option[(List[Exp], List[Exp], List[Exp],
     (List[Exp], Option[Exp]) => Exp,
@@ -19,7 +19,7 @@ trait ListInsertLenses extends ListInsertLensesLike { self: ProgramUpdater with 
 
   }
 
-  object ListInsertLens extends ListInsertLensLike(ListInsertLensGoal, Cons, ListLiteral)
+  object ListInsertLens extends ListInsertLensLike(ListInsertLensGoal, Cons, ListLiteral, ListConcat)
 }
 
 

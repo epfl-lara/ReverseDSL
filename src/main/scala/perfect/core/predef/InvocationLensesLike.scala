@@ -6,15 +6,15 @@ package predef
   */
 trait InvocationLensesLike { self: ProgramUpdater with ContExps with Lenses =>
   trait InvocationExtractor {
-    def unapply(e: Exp)(implicit cache: Cache, symbols: Symbols):
+    def unapply(e: Exp)(implicit symbols: Symbols, cache: Cache):
     Option[(Seq[Exp], Seq[Exp] => Exp)]
 
-    def isSame(e: Exp, f: Exp)(implicit cache: Cache, symbols: Symbols): Boolean
+    def isSame(e: Exp, f: Exp)(implicit symbols: Symbols, cache: Cache): Boolean
   }
 
   /** An invocation lens defines a put method which can reason on the original values. */
   abstract class InvocationLensLike(Invocation: InvocationExtractor) extends MultiArgsSemanticLens  {
-    def extract(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[( Seq[Exp],
+    def extract(e: Exp)(implicit symbols: Symbols, cache: Cache): Option[( Seq[Exp],
       (Seq[ContExp], ContExp) => Stream[(Seq[ContExp], Cont)],
       Seq[Exp] => Exp
       )] =
@@ -30,6 +30,6 @@ trait InvocationLensesLike { self: ProgramUpdater with ContExps with Lenses =>
         case _ => None
       }
 
-    def put(originalArgValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)]
+    def put(originalArgValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ContExp], Cont)]
   }
 }

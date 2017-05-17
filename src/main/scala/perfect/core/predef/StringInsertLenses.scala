@@ -31,8 +31,6 @@ trait StringInsertLenses extends ContExps with StringInsertLensesLike{
         case _ => None
       }
     }
-
-    def merge(e1: Exp, e2: Exp)(implicit symbols: Symbols): Option[(Exp, Seq[(Var, KnownValue)])] = None
   }
 
   object StringInsertLens extends StringInsertLensLike(StringLiteral, StringConcat, StringInsertLensGoal)

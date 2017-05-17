@@ -10,9 +10,9 @@ import perfect.ReverseProgram.Cache
 trait FunctionInvocationExtractor extends MultipleArgExtractor {
   def identifier: inox.Identifier
 
-  def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], out: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ProgramFormula], Formula)]
+  def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ProgramFormula], Formula)]
 
-  def extract(e: Expr)(implicit cache: Cache, symbols: Symbols): Option[
+  def extract(e: Expr)(implicit symbols: Symbols, cache: Cache): Option[
     ( Seq[Expr],
       (Seq[ProgramFormula], ProgramFormula) => Stream[(Seq[ProgramFormula], Formula)],
       Seq[Expr] => Expr

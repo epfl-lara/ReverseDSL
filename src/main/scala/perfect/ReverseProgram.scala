@@ -53,7 +53,7 @@ object ReverseProgram {
   }
 
   /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
-  def maybeEvalWithCache(expr: Expr)(implicit cache: Cache, symbols: Symbols): Option[Expr] = {
+  def maybeEvalWithCache(expr: Expr)(implicit symbols: Symbols, cache: Cache): Option[Expr] = {
     if(cache.contains(expr)) {
       Some(cache(expr))
     } else {

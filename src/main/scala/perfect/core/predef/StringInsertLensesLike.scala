@@ -33,15 +33,12 @@ trait StringInsertLensesLike { self: ProgramUpdater with ContExps with Lenses wi
               val leftValue_s = StringLiteral.unapply(expr1val).getOrElse(return Stream.empty)
               val rightValue_s = StringLiteral.unapply(expr2val).getOrElse(return Stream.empty)
               Utils.ifEmpty {
-                associativeInsert(leftValue_s, rightValue_s, leftAfter, inserted, rightAfter,
+                val res = associativeInsert(leftValue_s, rightValue_s, leftAfter, inserted, rightAfter,
                   direction,
                   StringLiteral.apply,
                   (l: String, i: String, r: String) => out.subExpr(StringInsertLensGoal(l, i, r, direction))
-                ).flatMap { case (args, f) =>
-                  ContExp.repairArguments(in.context, Seq((expr1, args.head), (expr2, args(1)))).map{ case (args2, f2) =>
-                    ContExp(StringConcat(args2.head, args2(1)), f combineWith f2 combineWith args.head.context combineWith args(1).context)
-                  }
-                }
+                )
+                ContExp.propagateArgumentRepair(in.context, res, Seq(expr1, expr2), (x: Seq[Exp]) => StringConcat(x.head, x(1)))
               } {
                 // We want to avoid at maximum having to solve constraints.
                 Stream(ContExp(in.exp, Cont(Map(), out.exp === in.exp)))

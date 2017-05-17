@@ -286,7 +286,7 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
 
   lazy val bodyDefinition: Option[Expr] = formula.assignments.map(f => f(expr))
 
-  def getFunctionValue(implicit cache: Cache, symbols: Symbols): Option[Expr] = {
+  def getFunctionValue(implicit symbols: Symbols, cache: Cache): Option[Expr] = {
     givenValue match {
       case Some(e) => givenValue
       case None =>
@@ -322,7 +322,7 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
     }
   }
 
-  def functionValue(implicit cache: Cache, symbols: Symbols): Expr = {
+  def functionValue(implicit symbols: Symbols, cache: Cache): Expr = {
     givenValue match {
       case Some(e) => e
       case None =>

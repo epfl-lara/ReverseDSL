@@ -32,10 +32,6 @@ trait StringConcatLensesLike { self: ProgramUpdater with ContExps with Lenses wi
     }
   }
 
-  trait MkStringVar {
-    def apply(name: String, avoid: Var*): Var
-  }
-
   trait StringConcatHelpers {
     def StringConcat: StringConcatExtractor
     implicit class AugmentedSubExpr[T <: Exp](e: T) {
@@ -47,8 +43,8 @@ trait StringConcatLensesLike { self: ProgramUpdater with ContExps with Lenses wi
     val +& = StringConcat
   }
 
-  class StringConcatLensLike(StringLiteral: StringLiteralExtractor, val StringConcat: StringConcatExtractor, mkStringVar: MkStringVar) extends MultiArgsSemanticLens with StringConcatHelpers {
-    def extract(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(
+  class StringConcatLensLike(StringLiteral: StringLiteralExtractor, val StringConcat: StringConcatExtractor) extends MultiArgsSemanticLens with StringConcatHelpers {
+    def extract(e: Exp)(implicit symbols: Symbols, cache: Cache): Option[(
         Seq[Exp],
         (Seq[ContExp], ContExp) => Stream[(Seq[ContExp], Cont)],
         Seq[Exp] => Exp)] = {
@@ -66,7 +62,7 @@ trait StringConcatLensesLike { self: ProgramUpdater with ContExps with Lenses wi
 
     def typeJump(a: String, b: String): Int = self.typeJump(a, b)
 
-    def put(originalArgsValues: Seq[ContExp], out: ContExp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
+    def put(originalArgsValues: Seq[ContExp], out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ContExp], Cont)] = {
       val newOutput = out.exp
       val leftProgram@ContExp(leftValue, leftF) = originalArgsValues.head
       val rightProgram@ContExp(rightValue, rightF) = originalArgsValues.tail.head
@@ -98,8 +94,8 @@ trait StringConcatLensesLike { self: ProgramUpdater with ContExps with Lenses wi
       }
 
       def defaultCase: Stream[(Seq[ContExp], Cont)] = {
-        val left = mkStringVar("l")
-        val right = mkStringVar("r")
+        val left = varFromExp("l", StringLiteral(""), true)
+        val right = varFromExp("r", StringLiteral(""), true)
         //Log(s"String default case: ${left.id} + ${right.id} == $newOutput:")
 
         val f = Cont(Map(

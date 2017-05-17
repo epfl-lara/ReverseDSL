@@ -50,6 +50,10 @@ trait ProgramUpdater { self: ContExps with Lenses =>
   /** Freshen a variable, i.e. gives it a new name. */
   def freshen(a: Var, others: Var*): Var
 
+  /** Creates a var from an expression with the given name */
+  def varFromExp(name: String, e: Exp, showUniqueId: Boolean)(implicit symbols: Symbols): Var
+  def varFromExp(name: String, e: Exp)(implicit symbols: Symbols): Var = varFromExp(name, e, false)
+
   /** The main reversion lens */
   def lens: SemanticLens
 
@@ -71,7 +75,7 @@ trait ProgramUpdater { self: ContExps with Lenses =>
 
 
   /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
-  def maybeEvalWithCache(expr: Exp)(implicit cache: Cache, symbols: Symbols): Option[Exp] = {
+  def maybeEvalWithCache(expr: Exp)(implicit symbols: Symbols, cache: Cache): Option[Exp] = {
     if(cache.contains(expr)) {
       Some(cache(expr))
     } else {

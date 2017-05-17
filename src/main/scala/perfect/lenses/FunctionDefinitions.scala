@@ -71,6 +71,23 @@ object FunctionDefinitions {
       })
   }
 
+
+  // Concat definition in inox
+  val listConcatFunDef = mkFunDef(Utils.listconcat)("A"){ case Seq(tA) =>
+    (Seq("left" :: T(list)(tA), "right" :: T(list)(tA)),
+      T(list)(tA),
+      { case Seq(left, right) =>
+        if_(left.isInstOf(T(cons)(tA))) {
+          let("c"::T(cons)(tA), left.asInstOf(T(cons)(tA)))(c =>
+            ADT(T(cons)(tA),
+              Seq(c.getField(head), E(Utils.listconcat)(tA)(c.getField(tail), right)))
+          )
+        } else_ {
+          right
+        }
+      })
+  }
+
   // Rec definition in inox.
   val recFunDef = mkFunDef( rec)("A1", "A2", "B"){ case Seq(tA1, tA2, tB) =>
     (Seq("F" :: FunctionType(Seq(FunctionType(Seq(tA1, tA2), tB), tA1, tA2), tB), "x1" :: tA1, "x2" :: tA2),
@@ -84,6 +101,7 @@ object FunctionDefinitions {
     filterFunDef,
     mapFunDef,
     mkStringFunDef,
-    recFunDef
+    recFunDef,
+    listConcatFunDef
   )
 }

@@ -10,13 +10,14 @@ trait PatternMatchLenses extends PatternMatchLensesLike with ContExps with Strin
     with Lenses with StringLenses with ADTLenses =>
 
   override def buildContExpCommands = super.buildContExpCommands += PatternMatchLensGoal
+  override def buildMergeCommands = super.buildMergeCommands += PatternMatchLensGoal
   /** Pattern match the input program, inserting the variables if forClone is activated.
     * The pattern with the vars replaced by their inputs must always be the original program value.
     **/
   def extractPatternMatchGoal(e: Exp): Option[(Exp, List[(Var, Exp)], Boolean)]
   def buildPatternMatchGoal(pattern: Exp, vars: List[(Var, Exp)], forClone: Boolean): Exp
 
-  object PatternMatchLensGoal extends PatternMatchLensGoalExtractor with ContExpCommand {
+  object PatternMatchLensGoal extends PatternMatchLensGoalExtractor with ContExpCommand with MergeCommand {
     def unapply(e: Exp): Option[(Exp, List[(Var, Exp)], Boolean)] = extractPatternMatchGoal(e: Exp)
     def apply(pattern: Exp, vars: List[(Var, Exp)], forClone: Boolean): Exp = buildPatternMatchGoal(pattern, vars, forClone)
 
@@ -51,7 +52,7 @@ trait PatternMatchLenses extends PatternMatchLensesLike with ContExps with Strin
   /** Inserts a variable for a given selected text. Simpler than CloneTextMultiple. */
   object CloneText  {
     def apply(left: String, text: String, right: String)(implicit symbols: Symbols): ContExp = {
-      val variable = mkStringVar(text)
+      val variable = StringLiteral.mkVar(text)
       apply(left, text, right, variable)
     }
     def apply(left: String, text: String, right: String, insertedVar: Var)(implicit symbols: Symbols): ContExp = {
@@ -92,8 +93,8 @@ trait PatternMatchLenses extends PatternMatchLensesLike with ContExps with Strin
       }
 
       private def SplitVar(v1: Var, inserted: Set[Var]): (Var, Var) = {
-        val v1p1 = mkStringVar(v1, (inserted + v1).toSeq :_*)
-        val v1p2 = mkStringVar(v1, (inserted + v1 + v1p1).toSeq :_*)
+        val v1p1 = StringLiteral.mkVar(v1, (inserted + v1).toSeq :_*)
+        val v1p2 = StringLiteral.mkVar(v1, (inserted + v1 + v1p1).toSeq :_*)
         (v1p1, v1p2)
       }
       def merge(left1: String, textVarRight1: List[(String, Var, String)],
@@ -145,7 +146,7 @@ trait PatternMatchLenses extends PatternMatchLensesLike with ContExps with Strin
                       if(inserted(v2)) {
                         merge(left2, textVarRight2, left1, textVarRight1, inserted)
                       } else { // We insert a new variable and link the two other variables.
-                        val v = mkStringVar(v1, v2)
+                        val v = StringLiteral.mkVar(v1, v2)
                         merge(right1, tail1, right2, tail2, inserted) map {
                           case (Goal(leftNew, textVarRightNew), mp) =>
                             (Goal("", (middle1, v, leftNew)::textVarRightNew),

@@ -153,7 +153,7 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     /** The first argument is the raw list of arguments
       * The second return element is a function which, given an evaluator from the expr to their values with in.context, and out, returns a stream of arguments with a new fomrula.
       * The third return element is a function which recombines multiple arguments into a single expression. */
-    def extract(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[
+    def extract(e: Exp)(implicit symbols: Symbols, cache: Cache): Option[
       ( Seq[Exp],
         (Seq[ContExp], ContExp) => Stream[(Seq[ContExp], Cont)],
         Seq[Exp] => Exp

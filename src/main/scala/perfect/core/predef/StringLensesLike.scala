@@ -8,6 +8,9 @@ trait StringLensesLike { self: ProgramUpdater =>
   trait StringLiteralExtractor {
     def unapply(e: Exp): Option[String]
     def apply(e: String): Exp
+
+    def mkVar(name: String, avoid: Var*): Var = varFromExp(name, apply(""), false)
+    def mkVar(original: Var, avoid: Var*): Var = freshen(original, avoid: _*)
   }
 
   @inline def charType(a: Char): Int =

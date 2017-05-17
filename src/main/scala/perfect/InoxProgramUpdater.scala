@@ -16,6 +16,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with core.predef.ListStringLibraryLenses
     with core.predef.AssociativeLenses
     with core.predef.StringConcatLenses
+    with core.predef.ListConcatLenses
     with core.predef.DefaultLenses
     with core.predef.RecursiveLenses
     with core.predef.WrappedLenses {
@@ -87,7 +88,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     perfect.Log(s"Simplified: $simplified")
     val streamOfSolutions = simplified.partialAssignments match {
       case Some((wrapper, remaining)) if remaining.forall(x => x._2 == AllValues) =>
-        maybeEvalWithCache(wrapper(tupleWrap(freeVariables)))(cache, symbols).toStream
+        maybeEvalWithCache(wrapper(tupleWrap(freeVariables))).toStream
       case e =>
         if(e.nonEmpty) Log(s"Warning: some equations could not be simplified: $e")
         val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
@@ -148,7 +149,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
 
   // Members declared in perfect.core.FunctionInvocationLenses
-  def extractInvocation(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(Seq[Exp], Seq[Exp] => Exp)] = e match {
+  def extractInvocation(e: Exp)(implicit symbols: Symbols, cache: Cache): Option[(Seq[Exp], Seq[Exp] => Exp)] = e match {
     case inox.trees.FunctionInvocation(id, tpe, args) => Some((args, newArgs => inox.trees.FunctionInvocation(id, tpe, newArgs)))
     case _ => None
   }
@@ -213,7 +214,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
     mkStringVar(original.id.name, avoid: _*)
   }
 
-  def isSameInvocation(e: Expr, g: Expr)(implicit cache: Cache, symbols: Symbols) = e match {
+  def isSameInvocation(e: Expr, g: Expr)(implicit symbols: Symbols, cache: Cache) = e match {
     case FunctionInvocation(f, tpes, _) => g match {
       case FunctionInvocation(f2, tpes2, _) => f == f2 && tpes == tpes2
       case _ => false
@@ -375,7 +376,24 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case inox.trees.StringLiteral(s) => Some(s)
     case _ => None
   }
+  
+  // Members declared in perfect.core.predef.ListConcatLenses
+  def buildListConcat(left: Exp,right: Exp)(implicit symbols: Symbols): Exp = {
+    left.getType match {
+      case ADTType(_, Seq(tp)) => E(perfect.Utils.listconcat)(tp)(left, right)
+      case _ => throw new Exception(s"Could not figure out type of $left")
+    }
+  }
+  def extractListConcat(e: Exp): Option[(Exp, Exp, (Exp, Exp) => Exp)] = e match {
+    case FunctionInvocation(perfect.Utils.listconcat, tp, Seq(left, right)) =>
+      Some((left, right, (left, right) => FunctionInvocation(perfect.Utils.listconcat, tp, Seq(left, right))))
+    case _ => None
+  }
 
+  // Members declared in perfect.core.ProgramUpdater
+  def varFromExp(name: String, e: Exp, showUniqueId: Boolean)(implicit symbols: Symbols): Var = {
+    Variable(FreshIdentifier(name, showUniqueId), e.getType, Set())
+  }
 
   // Lenses which do not need the value of the program to invert it.
   val shapeLenses: SemanticLens =
@@ -392,17 +410,15 @@ object InoxProgramUpdater extends core.ProgramUpdater
       perfect.Utils.map -> MapLens,
       perfect.Utils.mkString -> MkStringLens,
       perfect.Utils.rec2 -> RecursiveLens2,
-      perfect.Utils.dummyStringConcat -> StringConcatLens.named("stringConcat")
+      perfect.Utils.dummyStringConcat -> StringConcatLens,
+      perfect.Utils.listconcat -> ListConcatLens
       // TODO: Add all lenses from lenses.Lenses
-      /*MapLens,
-      ListConcatLens,
+      /*
       FlattenLens,
       FlatMapLens,
       SplitEvenLens,
       MergeLens,
-      SortWithLens,
-      MkStringLens,
-      RecLens2*/
+      SortWithLens*/
     ), {
       case FunctionInvocation(id, _, _) => Some(id)
       case StringConcat(_, _) => Some(perfect.Utils.dummyStringConcat)

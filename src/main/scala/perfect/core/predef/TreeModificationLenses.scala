@@ -34,6 +34,25 @@ trait TreeModificationLenses {  self: ProgramUpdater with
                         pf.wrap(x => adtBuilder(args.take(index) ++ List(x) ++ args.drop(index + 1)))
                       }
                   }
+                /*case TreeModification.Goal(tpeGlobal, tpeLocal, original@ADT(adt, Seq(hdOriginal, tlOriginal)), modified, path) =>
+                  val (index, remaining) = path.span(_ == Utils.tail)
+                  leftValue match {
+                    case ListLiteral(l, _) =>
+                      if(index.length < l.length) {
+                        Stream((Seq(
+                          TreeModification(tpeGlobal, tpeLocal, original, modified, path),
+                          ContExp(rightValue)),
+                          Cont())
+                        )
+                      } else {
+                        Stream((Seq(
+                          ContExp(leftValue),
+                          TreeModification(tpeGlobal, tpeLocal, original, modified, path.drop(index.length))),
+                          Cont()
+                        ))
+                      }
+                    case _ => Stream.empty
+                  }*/
                 case _ => Stream.empty
               }
           }

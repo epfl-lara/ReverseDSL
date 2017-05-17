@@ -47,7 +47,7 @@ trait ListStringLibraryLensesLike { self: ProgramUpdater
       }
     }
 
-    def put(originalArgsValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
+    def put(originalArgsValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ContExp], Cont)] = {
       val ContExp(originalInputExpr@ListLiteral(originalInput, listLiteralBuilder), originalInput_formula) = originalArgsValues.head
       val ContExp(infixExpr@StringLiteral(infix), _) = originalArgsValues.tail.head
       val originalInputList: List[String] = originalInput.map{

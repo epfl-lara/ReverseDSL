@@ -10,13 +10,18 @@ trait ContExps { self: ProgramUpdater =>
     def unapply(e: Exp): Option[Exp]
   }
 
-  trait ContExpCommand {
-    def Eval: EvalContExpCommand
+  trait MergeCommand {
     def merge(a1: Exp, a2: Exp)(implicit symbols: Symbols): Option[(Exp, Seq[(Var, KnownValue)])]
   }
 
+  trait ContExpCommand {
+    def Eval: EvalContExpCommand
+  }
+
   def buildContExpCommands: ListBuffer[ContExpCommand] = ListBuffer[ContExpCommand]()
-  lazy val commands: List[ContExpCommand] = buildContExpCommands.toList
+  def buildMergeCommands: ListBuffer[MergeCommand] = ListBuffer[MergeCommand]()
+  lazy val contExpCommands: List[ContExpCommand] = buildContExpCommands.toList
+  lazy val mergeCommands: List[MergeCommand] = buildMergeCommands.toList
 
   sealed trait KnownValue {
     def getValue: Option[Exp]
@@ -71,7 +76,7 @@ trait ContExps { self: ProgramUpdater =>
 
     def inlineSimpleConts(e: Cont)(implicit symbols: Symbols): Cont = {
       def evalExprIfNeeded(e: Exp): Option[Exp] =
-        commands.view.map{
+        contExpCommands.view.map{
           cpf => cpf.Eval.unapply(e)
         }.find(_.nonEmpty).flatten
       val result = e.known.map{
@@ -197,7 +202,7 @@ trait ContExps { self: ProgramUpdater =>
                       case StrongValue(e) if isVar(e2) && known.get(e2.asInstanceOf[Var]).forall(_.isInstanceOf[OriginalValue]) =>
                         (known + (e2.asInstanceOf[Var] -> StrongValue(v)), nc)
                       case StrongValue(e) =>
-                        commands.view.map{ command => command.merge(e2, e)}.find(_.nonEmpty).flatten match {
+                        mergeCommands.view.map{ command => command.merge(e2, e)}.find(_.nonEmpty).flatten match {
                           case Some((newExp, newAssign)) =>
                             val (newKnown, newConstraint) = ((known, nc) /: newAssign) {
                               case ((known, nc), xsy@(x, sy)) if !(this.known contains x) || this.known(x).isInstanceOf[OriginalValue] =>
@@ -301,6 +306,20 @@ trait ContExps { self: ProgramUpdater =>
 
   /** Previously 'ProgramFormula'*/
   object ContExp {
+
+    /** After getting a new value or repair goal for each argument, repair all original expressions.
+      * Returns a stream of solutions for the total expression */
+    def propagateArgumentRepair(inFormula: Cont, argsValuesRepaired: Stream[(Seq[ContExp], Cont)], originalArgExprs: Seq[Exp], exprBuilder: Seq[Exp] => Exp)(implicit symbols: Symbols, cache: Cache) = {
+      for {argsf <- argsValuesRepaired
+           (args, f) = argsf
+           res <- ContExp.repairArguments(inFormula, originalArgExprs.zip(args))
+           (args2, f2) = res
+      } yield {
+        ContExp(exprBuilder(args2), f combineWith f2 combineWith Cont(args.map(_.context)))
+      }
+    }
+
+    /** Repairs each individual argument and performs a cartesian product to have a list of repairs */
     def repairArguments(inFormula: Cont,
                         arguments: Seq[(Exp, ContExp)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Exp], Cont)] = {
       val argumentsReversed = arguments.map { case (arg, expected) =>
@@ -354,7 +373,7 @@ trait ContExps { self: ProgramUpdater =>
       this
     }
 
-    def maybeEval(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[Exp] = {
+    def maybeEval(e: Exp)(implicit symbols: Symbols, cache: Cache): Option[Exp] = {
       context.assignments.flatMap(assign => maybeEvalWithCache(assign(e)))
     }
 
@@ -379,7 +398,7 @@ trait ContExps { self: ProgramUpdater =>
 
     lazy val bodyDefinition: Option[Exp] = context.assignments.map(f => f(exp))
 
-    def getFunctionValue(implicit cache: Cache, symbols: Symbols): Option[Exp] = {
+    def getFunctionValue(implicit symbols: Symbols, cache: Cache): Option[Exp] = {
       givenValue match {
         case Some(e) => givenValue
         case None =>
@@ -415,7 +434,7 @@ trait ContExps { self: ProgramUpdater =>
       }
     }
 
-    def functionValue(implicit cache: Cache, symbols: Symbols): Exp = {
+    def functionValue(implicit symbols: Symbols, cache: Cache): Exp = {
       givenValue match {
         case Some(e) => e
         case None =>

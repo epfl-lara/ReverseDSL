@@ -31,7 +31,7 @@ trait WrappedLensesLike {
     out =  "Therefore, I am the boss"
     result: "Therefore, " + (f(a) + v + "boss")
     **/
-    private def maybeWrapString(in: ContExp, out: ContExp)(implicit cache: Cache, symbols: Symbols): Stream[ContExp] = {
+    private def maybeWrapString(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       val inexp = in.exp
       val inValue = in.getFunctionValue.getOrElse(return Stream.empty)
       if (inValue == out.exp) {
@@ -170,6 +170,7 @@ trait WrappedLensesLike {
   *  result:  v  #::   Element("span", List(), List(), List()) #:: Stream.empty
   * */
     private def maybeUnwrap(in: ContExp, out: ContExp, _inValue: Option[Exp] = None)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
+      if(isVar(out.exp)) return Stream.empty
       val outValue = out.getFunctionValue.getOrElse(return Stream.empty)
       val inValue = _inValue.getOrElse(in.getFunctionValue.getOrElse(return Stream.empty))
       if (inValue == outValue) {

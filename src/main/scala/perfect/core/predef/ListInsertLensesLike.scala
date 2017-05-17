@@ -4,7 +4,8 @@ package predef
 /**
   * Created by Mikael on 15/05/2017.
   */
-trait ListInsertLensesLike { self: ProgramUpdater with ContExps with Lenses with ADTLenses with ListLensesLike =>
+trait ListInsertLensesLike extends AssociativeLenses { self: ProgramUpdater
+    with ContExps with Lenses with ListLensesLike with ListConcatLensesLike =>
   trait ListInsertLensGoalExtractor {
     def unapply(e: Exp): Option[(List[Exp], List[Exp], List[Exp],
       (List[Exp], Option[Exp]) => Exp,
@@ -14,11 +15,34 @@ trait ListInsertLensesLike { self: ProgramUpdater with ContExps with Lenses with
       apply(before, inserted, after, AssociativeInsert.InsertAutomatic)
   }
 
-  class ListInsertLensLike(ListInsertLensGoal: ListInsertLensGoalExtractor, Cons: ListConsExtractor, ListLiteral: ListLiteralExtractor) extends SemanticLens {
+  class ListInsertLensLike(ListInsertLensGoal: ListInsertLensGoalExtractor,
+                           Cons: ListConsExtractor,
+                           ListLiteral: ListLiteralExtractor,
+                           ListConcat: ListConcatExtractor)
+      extends SemanticLens with AssociativeConcat[List[Exp], Exp] {
+    def typeJump(a: List[Exp], b: List[Exp]): Int = if(a.nonEmpty && b.nonEmpty) 1 else 0
+
+    def endsWith(a: List[Exp], b: List[Exp]): Boolean = a.endsWith(b)
+    def startsWith(a: List[Exp], b: List[Exp]): Boolean = a.startsWith(b)
+    def length(a: List[Exp]): Int = a.length
+    def take(a: List[Exp], i: Int): List[Exp] = a.take(i)
+    def drop(a: List[Exp], i: Int): List[Exp] = a.drop(i)
+    def empty: List[Exp] = Nil
+
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
       out.simplifiedExpr match {
         case ListInsertLensGoal(before, inserted, after, listBuilder, listInsertGoalBuilder) =>
           in.exp match {
+            case ListConcat(left, right, listConcatBuilder) =>
+              val leftValue = in.maybeEval(left).getOrElse(return Stream.empty)
+              val rightValue = in.maybeEval(right).getOrElse(return Stream.empty)
+              val (leftValue_s,_) = ListLiteral.unapply(leftValue).getOrElse(return Stream.empty)
+              val (rightValue_s,_) = ListLiteral.unapply(rightValue).getOrElse(return Stream.empty)
+              val res = associativeInsert(leftValue_s, rightValue_s, before, inserted, after,
+                AssociativeInsert.InsertAutomatic,
+                (x: List[Exp]) => listBuilder(x, None), (l, i, r) => ContExp(listInsertGoalBuilder(l, i, r)))
+              ContExp.propagateArgumentRepair(in.context, res, Seq(left, right), (x: Seq[Exp]) => listConcatBuilder(x.head, x(1)))
+
             case ListLiteral(Nil, literalListBuilder) =>
               Stream(ContExp(literalListBuilder(before ++ inserted ++ after), out.context))
             case Cons(head, tail, literalListBuilder) =>

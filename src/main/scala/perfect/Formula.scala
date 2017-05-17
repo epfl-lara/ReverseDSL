@@ -360,7 +360,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
     Log(s"Simplified: $simplified")
     val streamOfSolutions = simplified.partialAssignments match {
       case Some((wrapper, remaining)) if remaining.forall(x => x._2 == AllValues) =>
-        ReverseProgram.maybeEvalWithCache(wrapper(tupleWrap(freeVariables)))(new ReverseProgram.Cache(), symbols).toStream
+        ReverseProgram.maybeEvalWithCache(wrapper(tupleWrap(freeVariables)))(symbols, new ReverseProgram.Cache()).toStream
       case e =>
         if(e.nonEmpty) Log(s"Warning: some equations could not be simplified: $e")
         val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())

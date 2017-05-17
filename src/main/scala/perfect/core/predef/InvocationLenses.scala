@@ -7,16 +7,16 @@ package predef
 trait InvocationLenses extends InvocationLensesLike {
   self: ProgramUpdater with ContExps with Lenses =>
 
-  def extractInvocation(e: Exp)(implicit cache: Cache, symbols: Symbols):
+  def extractInvocation(e: Exp)(implicit symbols: Symbols, cache: Cache):
   Option[(Seq[Exp], Seq[Exp] => Exp)]
 
-  def isSameInvocation(e1: Exp, e2: Exp)(implicit cache: Cache, symbols: Symbols): Boolean
+  def isSameInvocation(e1: Exp, e2: Exp)(implicit symbols: Symbols, cache: Cache): Boolean
 
   object InvocationExtractor extends InvocationExtractor {
-    def unapply(e: Exp)(implicit cache: Cache, symbols: Symbols): Option[(Seq[Exp], (Seq[Exp]) => Exp)] =
+    def unapply(e: Exp)(implicit symbols: Symbols, cache: Cache): Option[(Seq[Exp], (Seq[Exp]) => Exp)] =
       extractInvocation(e)
 
-    def isSame(e: Exp, f: Exp)(implicit cache: Cache, symbols: Symbols): Boolean = isSameInvocation(e, f)
+    def isSame(e: Exp, f: Exp)(implicit symbols: Symbols, cache: Cache): Boolean = isSameInvocation(e, f)
   }
 
   abstract class InvocationLens extends InvocationLensLike(InvocationExtractor)

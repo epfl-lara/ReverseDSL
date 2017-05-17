@@ -24,7 +24,7 @@ trait RecursiveLensesLike { self: ProgramUpdater
                            Lambda: LambdaExtractor,
                            Invocation: InvocationExtractor) extends InvocationLensLike(Invocation) {
 
-    def put(originalArgValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
+    def put(originalArgValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ContExp], Cont)] = {
       val ContExp(fexp, f_formula) = originalArgValues.head
       fexp match {
         case f@Lambda(Seq(vL, v1, v2), body) =>

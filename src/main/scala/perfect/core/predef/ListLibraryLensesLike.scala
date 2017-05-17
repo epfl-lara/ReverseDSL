@@ -25,7 +25,7 @@ trait ListLibraryLensesLike {
                        ListLiteral: ListLiteralExtractor,
                        ListLibraryOptions: ListLibraryOptions)
     extends InvocationLensLike(Invocation) with FilterLike[Exp] { // TODO: Incorporate filterRev as part of the sources.
-    def put(originalArgsValues: Seq[ContExp], newOutputProgram: ContExp, builder: Seq[Exp] => Exp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
+    def put(originalArgsValues: Seq[ContExp], newOutputProgram: ContExp, builder: Seq[Exp] => Exp)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ContExp], Cont)] = {
       val ContExp(lambda, lambdaF) = originalArgsValues.tail.head
       val newOutput = newOutputProgram.exp
       val ContExp(ListLiteral(originalInput, listBuilder), listF) = originalArgsValues.head
@@ -104,7 +104,7 @@ trait ListLibraryLensesLike {
 
     import ListLibraryOptions._
 
-    def put(originalArgsValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit cache: Cache, symbols: Symbols): Stream[(Seq[ContExp], Cont)] = {
+    def put(originalArgsValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ContExp], Cont)] = {
       //Log(s"map.apply($newOutput)")
       val ContExp(lambda, lambdaF) = originalArgsValues.tail.head
       val ContExp(ListLiteral(originalInput, listBuilder), listF) = originalArgsValues.head

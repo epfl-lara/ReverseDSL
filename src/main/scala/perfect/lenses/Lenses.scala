@@ -50,14 +50,14 @@ object Lenses {
     def identifier: Identifier
     def funDef: FunDef
     def mapping = identifier -> this
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], out: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula]
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula]
   }
 
   /** Lense-like filter */
   case object FilterLens extends Lens with FilterLike[Expr] { // TODO: Incorporate filterRev as part of the sources.
     import Utils._
     val identifier = Utils.filter
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
       val ProgramFormula(lambda, lambdaF) = originalArgsValues.tail.head
       val newOutput = newOutputProgram.expr
       val ProgramFormula(ListLiteral(originalInput, _), listF) = originalArgsValues.head
@@ -116,7 +116,7 @@ object Lenses {
 
     import Utils.AugmentedStream
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
       Log(s"map.apply($newOutput)")
       val ProgramFormula(lambda: Lambda, lambdaF) = originalArgsValues.tail.head
       val ProgramFormula(ListLiteral(originalInput, listBuilder), listF) = originalArgsValues.head
@@ -283,7 +283,7 @@ object Lenses {
     import Utils._
     val identifier = flatten
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
 ???
     }
 
@@ -346,7 +346,7 @@ object Lenses {
       }
     }
     
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
       val ProgramFormula(originalInputExpr@ListLiteral(originalInput, _), originalInput_formula) = originalArgsValues.head
       val ProgramFormula(infixExpr@StringLiteral(infix), _) = originalArgsValues.tail.head
       val originalInputList: List[String] = originalInput.map{
@@ -713,7 +713,7 @@ object Lenses {
     import Utils._
     val identifier = flatmap
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
       val originalInputProg@ProgramFormula(ListLiteral(originalInput, _), originalInputF) = originalArgsValues.head
       val ProgramFormula(lambda: Lambda, lambdaF) = originalArgsValues.tail.head
       val uniqueUnknownValue = defaultValue(lambda.args.head.getType)
@@ -798,7 +798,7 @@ object Lenses {
 
     def endsWith(list: Expr, end: Expr): Boolean = startsWith(reverse(list, None), reverse(end, None))
 
-    def put(tps: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tps: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
       val newOutput = newOutputProgram.expr
       val ProgramFormula(leftValue@ListLiteral(leftValue_s, _), leftF) = originalArgsValues.head
       val ProgramFormula(rightValue@ListLiteral(rightValue_s, _), rightF) = originalArgsValues.tail.head
@@ -1004,7 +1004,7 @@ object Lenses {
       else 0) // We mostly insert into empty strings if available.
     }
 
-    def put(tps: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tps: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutputProgram: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
       val newOutput = newOutputProgram.expr
       val leftProgram@ProgramFormula(leftValue@StringLiteral(lv), leftF) = originalArgsValues.head
       val rightProgram@ProgramFormula(rightValue@StringLiteral(rv), rightF) = originalArgsValues.tail.head
@@ -1193,7 +1193,7 @@ object Lenses {
         }
       )
     }
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
       ???
     }
   }
@@ -1226,7 +1226,7 @@ object Lenses {
         })
     }
     def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula],
-                             newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+                             newOutput: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
       ???
     }
   }
@@ -1254,7 +1254,7 @@ object Lenses {
       })
     }
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols): Stream[ArgumentsFormula] = {
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
       import ImplicitTuples._
       val ProgramFormula(in@ListLiteral(inList, tpe), inListF) = originalArgsValues.head
       val lambdaProg@ProgramFormula(lambdaComp: Lambda, lambdaF) = originalArgsValues.tail.head
@@ -1326,7 +1326,7 @@ object Lenses {
         })
     }
 
-    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit cache: Cache, symbols: Symbols)
+    def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit symbols: Symbols, cache: Cache)
     : Stream[ArgumentsFormula] = {
       val ProgramFormula(f: Lambda, f_formula) = originalArgsValues.head
       val ProgramFormula(x1, x1_formula) = originalArgsValues.tail.head
