@@ -6,7 +6,7 @@ package perfect
 import scala.language.dynamics
 object Log extends Log with Dynamic {
   var activate = false
-  def activated[A](execution: =>A): A = {
+  def activated[A](execution: =>A): A = synchronized {
     val prevActivate = Log.activate
     Log.activate = true
     val res = execution

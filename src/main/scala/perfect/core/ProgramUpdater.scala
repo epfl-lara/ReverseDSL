@@ -145,7 +145,7 @@ trait ProgramUpdater { self: ContExps with Lenses =>
 
   lazy val theLens = lens
 
-  var debug: Boolean = false
+  def debug: Boolean = false
 
   def repair(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
     if(!Log.activate) {

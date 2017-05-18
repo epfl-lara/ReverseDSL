@@ -420,7 +420,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
 // Lenses which need the value of the program to invert it.
   val semanticLenses: SemanticLens = valueLenses // andThen
 
-  debug = true
+  override def debug = Log.activate
 
   val lens = combine(
     NoChangeLens.named("No Change?"),

@@ -23,15 +23,11 @@ trait ListLibraryExtendedLenses {
       // Bidirectionalization for free, we recover the position of the original elements.
       newOutput.simplifiedExpr match {
         case tm@TreeModificationLensGoal(_, at) =>
-          def rec(goal: Exp, index: Int = 0): Option[(Exp, Int)] = goal match {
-            case TreeModificationLensGoal(subgoal, 1) =>
-              rec(subgoal, index + 1)
-            case TreeModificationLensGoal(subgoal, 0) =>
-              Some((subgoal, index))
-            case _ =>
-              None
+          val (listGoal, n) = TreeModificationLensGoal.indexOfElemModifiedInList(tm).getOrElse(return Stream.empty)
+          val subgoal = listGoal match {
+            case TreeModificationLensGoal(elemGoal, 0) => elemGoal
+            case _ => return Stream.empty
           }
-          val (subgoal, n) = rec(tm).getOrElse(return Stream.empty)
 
           val inVar = extractLambdaUnknownVar(lambdaComp).getOrElse(return Stream.empty)
           val tpe = inVar.getType
@@ -65,7 +61,7 @@ trait ListLibraryExtendedLenses {
           } else ??? // TODO: Deletions
 
         case v =>
-          ???
+          throw new Exception("Unexpected case " + v)
       }
     }
   }
