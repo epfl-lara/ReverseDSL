@@ -193,8 +193,6 @@ class XmlTest extends FunSuite with TestHelpers {
   test("Hu 2004 without sorting modification in name") {
     import Utils._
     val newOutModification: ProgramFormula = TreeModification(
-      inoxTypeOf[Node],
-      inoxTypeOf[String],
       initialOutWithoutSorting,
       "Prof. Masato Takeichi",
       List(children, head, children, head, children, head, tag)
@@ -256,7 +254,7 @@ class XmlTest extends FunSuite with TestHelpers {
     </addrbook>*/
     implicit val symbols = Utils.defaultSymbols
     val newOutInsertionData: ProgramFormula =
-      TreeModification(inoxTypeOf[Node],inoxTypeOf[List[Node]],initialOutWithoutSorting,
+      TreeModification(initialOutWithoutSorting,
         ListInsertGoal(inoxTypeOf[Node],
           List(<index>
             <name>Masato Takeichi</name>
@@ -325,8 +323,6 @@ class XmlTest extends FunSuite with TestHelpers {
   test("Hu 2004 without sorting insertion in index") {
     import Utils._
     val newOutInsertionIndex = TreeModification(
-      inoxTypeOf[Node],
-      inoxTypeOf[List[Node]],
       initialOutWithoutSorting,
       ListInsertGoal(inoxTypeOf[Node],
         List(
@@ -400,8 +396,6 @@ class XmlTest extends FunSuite with TestHelpers {
   test("Hu 2004 modification in name") {
     import Utils._
     val newOutModification: ProgramFormula = TreeModification(
-      inoxTypeOf[Node],
-      inoxTypeOf[String],
       initialOutWithoutSorting,
       "Prof. Masato Takeichi",
       List(children, head, children, tail, tail, head, children, head, tag)
@@ -435,7 +429,7 @@ class XmlTest extends FunSuite with TestHelpers {
   test("Hu 2004 insertion in data") {
     implicit val symbols = Utils.defaultSymbols
     val newOutInsertionData: ProgramFormula =
-      TreeModification(inoxTypeOf[Node],inoxTypeOf[List[Node]],initialOutWithoutSorting,
+      TreeModification(initialOutWithoutSorting,
         ListInsertGoal(inoxTypeOf[Node],
           List(<index>
             <name>Zhenjiang Hu</name>
@@ -501,8 +495,6 @@ class XmlTest extends FunSuite with TestHelpers {
   test("Hu 2004 insertion in index") {
     import Utils._
     val newOutInsertionIndex = TreeModification(
-      inoxTypeOf[Node],
-      inoxTypeOf[List[Node]],
       initialOutWithoutSorting,
       ListInsertGoal(inoxTypeOf[Node],
         List(

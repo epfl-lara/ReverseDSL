@@ -287,46 +287,16 @@ object InoxProgramUpdater extends core.ProgramUpdater
   /** Returns the original tree, the modified subtree, and instead of a path,
     * an index indicating where the next change should happen with a way to rebuild the goal with the new original subtree */
   def extractTreeModificationGoal(goal: Exp)(implicit symbols: Symbols):
-      Option[(Exp, Exp, Option[(Int, Exp)])] = goal match {
-    case TreeModificationGoal(tpeGlobal, tpeLocal, original, modified, l) =>
-      Some((original, modified, l match {
-        case head::tail =>
-          original match {
-            case l@inox.trees.ADT(ADTType(adtid, tps), args) =>
-              symbols.adts(adtid) match {
-                case f: ADTConstructor =>
-                  val i = f.selectorID2Index(head)
-                  val newOriginal = args(i)
-                  Some((i, TreeModificationGoal(newOriginal.getType, tpeLocal, newOriginal, modified, tail)))
-                case _ => return None
-              }
-            case _ => return None
-          }
-        case _ => None
-      }))
+      Option[(Exp, Int)] = goal match {
+    case TreeModificationGoal(lambda, modified, index) => Some((modified, index))
     case _ => None
   }
 
   /** Returns a goal with the original tree, the modified tree, and the next path element.
     * The second exp of the path element should continue with TreeMdodificationGoal until the modified
     * part of the original is reached. */
-  def buildTreeModificationGoal(original: Exp, modified: Exp, path: Option[(Int, Exp)])(implicit symbols: Symbols): Exp = {
-    def getIdentifier(i: Int) = original.getType match {
-      case ADTType(adtid, tps) =>
-        symbols.adts(adtid) match {
-          case f: ADTConstructor =>
-            f.fields(i).id
-          case _ => ???
-        }
-      case _ => ???
-    }
-    path match {
-      case None => perfect.semanticlenses.TreeModificationGoal(original.getType, modified.getType, original, modified, Nil)
-      case Some((i, perfect.semanticlenses.TreeModificationGoal(originalType, modifiedType, original2, modified2, path))) =>
-        val identifier = getIdentifier(i)
-        perfect.semanticlenses.TreeModificationGoal(original.getType, modified.getType, original, modified, path :+ identifier)
-      case _ => ???
-    }
+  def buildTreeModificationGoal(original: Exp, modified: Exp, index: Int)(implicit symbols: Symbols): Exp = {
+    perfect.semanticlenses.TreeModificationGoal(original, modified, index)
   }
 
   def extractTreeUnwrapGoal(e: Exp)(implicit symbols: Symbols): Option[(Exp, Option[(Int, Exp)])] = e match {

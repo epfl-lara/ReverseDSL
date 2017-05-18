@@ -106,8 +106,6 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     pfun shouldProduce output
     implicit val symbols = Utils.defaultSymbols
     val newOut = TreeModification(
-      inoxTypeOf[Node],
-      inoxTypeOf[String],
       output,
       "Good morning",
       List(Utils.children, Utils.head, Utils.children, Utils.head, Utils.tag)

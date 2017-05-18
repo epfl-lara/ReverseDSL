@@ -103,6 +103,10 @@ object ListInsert extends CustomProgramFormula  {
   def apply(tpe: Type, leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr]): ProgramFormula = {
     ProgramFormula(Goal(tpe, leftUnmodified, inserted, rightUnmodified))
   }
+  def apply(leftUnmodified: List[Expr], inserted: List[Expr], rightUnmodified: List[Expr])(implicit symbols: Symbols): ProgramFormula = {
+    apply(leftUnmodified.headOption.orElse(inserted.headOption).orElse(rightUnmodified.headOption
+    ).get.getType, leftUnmodified, inserted, rightUnmodified)
+  }
 
   def unapply(f: ProgramFormula): Option[(Type, List[Expr], List[Expr], List[Expr])] = {
     Goal.unapply(f.expr)

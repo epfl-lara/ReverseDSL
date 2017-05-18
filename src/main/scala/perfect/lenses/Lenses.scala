@@ -17,7 +17,7 @@ object Lenses {
   import ReverseProgram.{maybeEvalWithCache, Cache, repair}
   import perfect.core.predef.AssociativeInsert
 
-  val lenses = List[Lens](
+  lazy val lenses = List[Lens](
     FilterLens,
     MapLens,
     ListConcatLens,
@@ -31,9 +31,9 @@ object Lenses {
     RecLens2
   )
 
-  val reversions = lenses.map(x => x.identifier -> x).toMap
+  lazy val reversions = lenses.map(x => x.identifier -> x).toMap
 
-  val funDefs = lenses.map(_.funDef) ++ ProgramFormula.customFunDefs ++ List(
+  lazy val funDefs = lenses.map(_.funDef) ++ ProgramFormula.customFunDefs ++ List(
     mkFunDef(Utils.stringCompare)(){case _ =>
       (Seq("left"::StringType, "right"::StringType),
         IntegerType,
@@ -153,9 +153,10 @@ object Lenses {
       }
 
       newOutput match {
-        case TreeModification(tpeGlobal, tpeLocal, originalOutputModifList, modified, argsInSequence) =>
-          val ListLiteral(originalOutputModifList2, _) = originalOutputModifList
-          val (index, remaining) = argsInSequence.span(_ == Utils.tail)
+        case TreeModification.All(Lambda(Seq(x), body), modified, indices) =>
+          val originalOutputModifList = exprOps.replaceFromSymbols(Map(x.toVariable -> modified), body)
+          val (originalOutputModifList2, _) = ListLiteral.unapply(originalOutputModifList).getOrElse(return Stream.empty)
+          val (index, remaining) = indices.span(_ == 1)
           val original = originalInput(index.length)
           val newVar = Variable(FreshIdentifier("x"), inputType, Set())
 
@@ -163,22 +164,20 @@ object Lenses {
             ???
           } else {
             repair(ProgramFormula(Application(lambda, Seq(original))),
-              newOutput.subExpr(TreeModification.Goal(tpeGlobal, tpeLocal, originalOutputModifList2(index.length), modified, remaining.tail))) map {
+              newOutput.subExpr(TreeModificationGoal.All(originalOutputModifList2(index.length), modified, remaining.tail))) map {
               case pf@ProgramFormula(Application(lExpr, Seq(expr2)), formula2) =>
                 val lambda2 = castOrFail[Expr, Lambda](lExpr)
                 if (lambda2 != lambda && expr2 == original) {
-                  (Seq(TreeModification(ADTType(Utils.cons, Seq(argType)),
-                    tpeLocal,
+                  (Seq(TreeModification.All(
                     originalArgsValues.head.expr,
                     expr2,
-                    index :+ Utils.head
+                    index :+ 0
                   ) combineWith formula2 combineWith originalArgsValues.head.formula, ProgramFormula(lambda2, formula2)), Formula())
                 } else {
-                  (Seq(TreeModification(ADTType(Utils.cons, Seq(argType)),
-                    tpeLocal,
+                  (Seq(TreeModification.All(
                     originalArgsValues.head.expr,
                     expr2,
-                    index :+ Utils.head
+                    index :+ 0
                   ) combineWith formula2 combineWith originalArgsValues.head.formula, ProgramFormula(lambda)), Formula())
                 }
             }
@@ -824,20 +823,21 @@ object Lenses {
             ListLiteral(_, tpe),
             ListInsert(tpe, _, _, _))
 
-        case TreeModification.Goal(tpeGlobal, tpeLocal, original@ADT(adt, Seq(hdOriginal, tlOriginal)), modified, path) =>
-          val (index, remaining) = path.span(_ == Utils.tail)
+        case m@TreeModification.Goal.All(lambda@Lambda(Seq(x), body), modified, path) =>
+          Log(s"lambda: $lambda, body: $body, modified: $modified, path: $path")
+          val output = exprOps.replaceFromSymbols(Map(x.toVariable -> modified), body)
+          val (index, remaining) = path.span(_ == 1)
           leftValue match {
             case ListLiteral(l, _) =>
               if(index.length < l.length) {
                 Stream((Seq(
-                  TreeModification(tpeGlobal, tpeLocal, original, modified, path),
-                  ProgramFormula(rightValue)),
+                  TreeModification.All(output, modified, path), ProgramFormula(rightValue)),
                   Formula())
                 )
               } else {
                 Stream((Seq(
                   ProgramFormula(leftValue),
-                  TreeModification(tpeGlobal, tpeLocal, original, modified, path.drop(index.length))),
+                  TreeModification.All(output, modified, path.drop(index.length))),
                   Formula()
                 ))
               }
@@ -1261,8 +1261,8 @@ object Lenses {
 
       // Bidirectionalization for free, we recover the position of the original elements.
       newOutput.simplifiedExpr match {
-        case TreeModification.Goal(tpeGlobal, tpeLocal, original, modified, arguments) =>
-          val (index, remaining) = arguments.span(_ == tail)
+        case TreeModification.Goal.All(lambda, modified, arguments) =>
+          val (index, remaining) = arguments.span(_ == 1)
           if(remaining.nonEmpty) {
             val n = index.length
             lazy val tracingLambdaComp = \("in1"::_TTuple2(tpes.head, Int32Type), "in2"::_TTuple2(tpes.head, Int32Type))((in1, in2) =>
@@ -1278,9 +1278,9 @@ object Lenses {
                 }
                 lazy val inverseMap = indexOrder.indices.toList.zip(indexOrder).toMap
                 val prev_n = inverseMap(n)
-                val newArguments = List.fill(prev_n.toInt)(tail) ++ remaining
+                val newArguments = List.fill(prev_n.toInt)(1) ++ remaining
 
-                Stream((Seq(TreeModification(tpeGlobal, tpeLocal, in, modified, newArguments),
+                Stream((Seq(TreeModification.All(in, modified, newArguments),
                   lambdaProg.assignmentsAsOriginals()), Formula()))
               case None =>
                 Stream.empty

@@ -90,7 +90,7 @@ object ReverseProgram {
       TreeModification.Lens andThen
         ValueLens))
 
-  val functionInvocationLens: semanticlenses.SemanticLens =
+  lazy val functionInvocationLens: semanticlenses.SemanticLens =
     ShortcutLens(lenses.Lenses.reversions, {
       case FunctionInvocation(id, _, _) => Some(id)
       case _ => None

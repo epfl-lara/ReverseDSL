@@ -66,7 +66,7 @@ object DefaultLens extends SemanticLens {
         case l: Lambda => Some(l)
         //case _ => throw new Exception("Don't know how to deal with an application over non-lambda: "+lambdaExpr)
         case l => in.formula.partialAssignments.flatMap(assign => maybeEvalWithCache(assign._1(l)))
-      }) /: Log.Original_Value
+      }) // /: Log.Original_Value
 
       // Returns the new list of arguments plus a mapping from old to new values.
       def freshenArgsList(argNames: Seq[Variable]): (Seq[Variable], Map[Variable, Variable], Map[Variable, Variable]) = {

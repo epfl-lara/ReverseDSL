@@ -50,8 +50,6 @@ class RecursiveTest extends FunSuite with TestHelpers {
     prog shouldProduce original
     Log activated (prog repairFrom
       TreeModification(
-        inoxTypeOf[List[String]],
-        inoxTypeOf[String],
         original,
         modified,
         List(Utils.head)

@@ -64,11 +64,11 @@ trait TestHelpers extends InoxConvertible.conversions { self: FunSuite =>
   implicit def contToFormula(in: InoxProgramUpdater.Cont): Formula = Formula(in.known, in.constraints)
   implicit def ContExpToPF(in: InoxProgramUpdater.ContExp): ProgramFormula = ProgramFormula(in.exp, in.context)
 
-  //*
+  /*
   val reverser = InoxProgramUpdater
   val ListInsert = InoxProgramUpdater.ListInsertLensGoal
   // */
-  /*
+  //*
   val reverser = ReverseProgram
   // */
 
