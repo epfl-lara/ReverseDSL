@@ -97,7 +97,7 @@ class RecursiveTest extends FunSuite with TestHelpers {
     val goal = ListInsertGoal(List("four"), List("five"), List("six"))
     //val goal = _List[String]("four", "five", "six")
 
-    Log activated println(repairProgramList(prog, goal, 3).take(3).map(eval).mkString("\n"))
+  //  Log activated println(repairProgramList(prog, goal, 3).take(3).map(eval).mkString("\n"))
   }
 
   //TODO: Test filter recursive.

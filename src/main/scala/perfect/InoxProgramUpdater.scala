@@ -48,7 +48,15 @@ object InoxProgramUpdater extends core.ProgramUpdater
   override def ExpFalse: InoxProgramUpdater.Exp = inox.trees.BooleanLiteral(false)
 
   /** All free variables of an expression */
-  def freeVariables(e: inox.trees.Expr): Set[inox.trees.Variable] = inox.trees.exprOps.variablesOf(e)
+  def extractors(e: inox.trees.Expr): (Seq[inox.trees.Expr], Seq[inox.trees.Expr] => inox.trees.Expr) =
+    inox.trees.exprOps.Deconstructor.unapply(e).getOrElse((Seq(), _ => e))
+
+  /** All sub-variables than an expression binds. */
+  def bindings(e: Exp): Set[Var] = e match {
+    case inox.trees.Lambda(vds, body) => vds.map(_.toVariable).toSet
+    case inox.trees.Let(vd, expr, body) => Set(vd.toVariable)
+    case _ => Set.empty[Var]
+  }
 
   lazy val context = inox.Context.empty.copy(options = inox.Options(Seq(inox.optSelectedSolvers(Set("smt-cvc4")))))
 
@@ -84,9 +92,9 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   /** Obtain all possible assignments from the formula Cont for the given free variables */
   def determinizeAll(cont: Cont)(freeVariables: Seq[Var] = cont.varsToAssign.toSeq)(implicit symbols: Symbols, cache: Cache): Stream[Map[Var, Exp]] = {
-    perfect.Log(s"Trying to get all solutions for ${cont.varsToAssign} of \n" + cont)
+    perfect.Log(s"Trying to get all solutions for ${freeVariables} of \n" + cont)
     val simplified = Cont.inlineSimpleConts(cont)
-    perfect.Log(s"Simplified: $simplified")
+    perfect.Log(s"Problem Simplified: $simplified")
     val streamOfSolutions = simplified.partialAssignments match {
       case Some((wrapper, remaining)) if remaining.forall(x => x._2 == AllValues) =>
         maybeEvalWithCache(wrapper(tupleWrap(freeVariables))).toStream
@@ -109,11 +117,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   // Members declared in perfect.core.ProgramUpdater
   def Assign(v: Variable, e: Expr, body: Expr): Expr = inox.trees.Let(v.toVal, e, body)
-  def exists(f: Expr => Boolean)(e: Expr): Boolean = exprOps.exists(f)(e)
   def isValue(e: Expr): Boolean = perfect.Utils.isValue(e)
   def isVar(e: Expr): Boolean = e.isInstanceOf[Variable]
-  def postMap(f: Expr => Option[Expr])(e: Expr): Expr = exprOps.postMap(f)(e)
-  def preMap(f: Exp => Option[Exp],recursive: Boolean)(e: Exp): Exp = exprOps.preMap(f, recursive)(e)
 
   // Members declared in perfect.core.predef.ApplicationLenses
   def buildApplication(lambda: Exp, args: Seq[Exp]): Exp = inox.trees.Application(lambda, args)

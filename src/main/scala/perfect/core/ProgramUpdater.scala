@@ -32,20 +32,14 @@ trait ProgramUpdater { self: ContExps with Lenses =>
   def ExpTrue: Exp
   def ExpFalse: Exp
 
-  /** Transforms an expression bottom-up */
-  def postMap(f: Exp => Option[Exp])(e: Exp): Exp
+  /** For this expression, a way to obtain its sub-expressions and to rebuild it */
+  def extractors(e: Exp): (Seq[Exp], Seq[Exp] => Exp)
 
-  /** Transforms an expression top-down */
-  def preMap(f: Exp => Option[Exp], recursive: Boolean = false)(e: Exp): Exp
-
-  /** Returns true if a sub-tree of e satisfies the predicate f.*/
-  def exists(f: Exp => Boolean)(e: Exp): Boolean
+  /** Which variables this expression binds*/
+  def bindings(e: Exp): Set[Var]
 
   /** Default symbols */
   implicit def symbols: Symbols
-
-  /** All free variables of an expression */
-  def freeVariables(e: Exp): Set[Var]
 
   /** Freshen a variable, i.e. gives it a new name. */
   def freshen(a: Var, others: Var*): Var
@@ -73,6 +67,41 @@ trait ProgramUpdater { self: ContExps with Lenses =>
     }(b)
   }
 
+  /** Transforms an expression bottom-up */
+  def postMap(f: Exp => Option[Exp])(e: Exp): Exp = {
+    val rec = postMap(f) _
+    val (exprs, builder) = extractors(e)
+    val newExprs = exprs map rec
+    val r = if(newExprs != exprs) builder(newExprs) else e
+    f(r).getOrElse(r)
+  }
+
+  /** Transforms an expression top-down */
+  def preMap(f: Exp => Option[Exp], recursive: Boolean = false)(e: Exp): Exp = {
+    val newE = f(e).getOrElse(e)
+    if(newE != e && recursive) return preMap(f, recursive)(newE)
+    val (exprs, builder) = extractors(newE)
+    val newExprs = exprs map preMap(f)
+    if(newExprs != exprs) builder(newExprs) else newE
+  }
+
+  /** Returns true if a sub-tree of e satisfies the predicate f.*/
+  def exists(f: Exp => Boolean)(e: Exp): Boolean = {
+    if(f(e)) return true
+    val (exprs, builder) = extractors(e)
+    exprs.exists(exists(f))
+  }
+
+  /** All free variables of an expression */
+  def freeVariables(e: Exp): Set[Var] = {
+    e match {
+      case Var(v) => Set(v)
+      case _ =>
+        val (exprs, builder) = extractors(e)
+        exprs.toSet.flatMap(freeVariables) -- bindings(e)
+    }
+  } /: perfect.Log.prefix(s"freeVariables($e) = ")
+
 
   /** Eval function. Uses a cache normally. Does not evaluate already evaluated expressions. */
   def maybeEvalWithCache(expr: Exp)(implicit symbols: Symbols, cache: Cache): Option[Exp] = {
@@ -90,7 +119,7 @@ trait ProgramUpdater { self: ContExps with Lenses =>
   implicit class AugmentedExp(e1: Exp) {
     def ===(e2: Exp) = Equal(e1, e2)
   }
-  /** Automatic simplification of EXPR1 && EXPR2 if one is true.*/
+  /* Automatic simplification of EXPR1 && EXPR2 if one is true.*/
   implicit class BooleanSimplification(f: Exp) {
     @inline def &<>&(other: Exp): Exp =
       if(other == ExpTrue)  f
