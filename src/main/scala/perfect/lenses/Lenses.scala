@@ -1298,10 +1298,6 @@ object Lenses {
     }
   }
 
-  /*case object ApplicationLens extends Lens {
-
-  }*/
-
   object RecLens {
     def build(name: String, arg1: ValDef, arg2: ValDef)(returnType: Type)(f: (Variable, Variable, Variable) => Expr): Expr = {
       Lambda(Seq(arg1, arg2),

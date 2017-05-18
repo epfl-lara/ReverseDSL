@@ -12,8 +12,14 @@ trait TreeModificationLenses {  self: ProgramUpdater with
   def extractTreeModificationGoal(e: Exp)(implicit symbols: Symbols):
     Option[(Exp, Exp, Option[(Int, Exp)])]
 
+  /** Returns a goal with the original tree, the modified tree, and the next path element.
+    * The second exp of the path element should continue with TreeMdodificationGoal until the modified
+    * part of the original is reached. */
+  def buildTreeModificationGoal(original: Exp, modified: Exp, path: Option[(Int, Exp)])(implicit symbols: Symbols): Exp
+
   object TreeModificationLensGoal {
-    def unapply(e: Exp)(implicit symbols: Symbols) = extractTreeModificationGoal(e)
+    def unapply(e: Exp)(implicit symbols: Symbols): Option[(Exp, Exp, Option[(Int, Exp)])] = extractTreeModificationGoal(e)
+    def apply(original: Exp, modified: Exp, path: Option[(Int, Exp)])(implicit symbols: Symbols): Exp = buildTreeModificationGoal(original, modified, path)
   }
 
   object TreeModificationLens extends SemanticLens {

@@ -97,6 +97,8 @@ object FunctionDefinitions {
       })
   }
 
+  import ImplicitTuples._
+
   // Flatmap definition in inox
   val flatMapFunDef = mkFunDef(Utils.flatmap)("A", "B"){ case Seq(tA, tB) =>
     (Seq("ls" :: T(list)(tA), "f" :: FunctionType(Seq(tA), T(list)(tB))),
@@ -114,12 +116,74 @@ object FunctionDefinitions {
       })
   }
 
+  val sortWithFunDef= mkFunDef(sortWith)("A"){ case Seq(tA) =>
+    (Seq("in" :: T(list)(tA), "comp" :: FunctionType(Seq(tA, tA), IntegerType)),
+      T(list)(tA),
+      { case Seq(input, comp) =>
+        if_(input.isInstOf(T(nil)(tA)) || input.asInstOf(T(cons)(tA)).getField(tail).isInstOf(T(nil)(tA))) {
+          input
+        } else_ {
+          let("r"::T(tuple2)(T(list)(tA), T(list)(tA)),
+            FunctionInvocation(splitEven, Seq(tA), Seq(input)))( r=>
+            FunctionInvocation(merge, Seq(tA), Seq(
+              FunctionInvocation(sortWith, Seq(tA), Seq(r.getField(_1), comp)),
+              FunctionInvocation(sortWith, Seq(tA), Seq(r.getField(_2), comp)),
+              comp))
+          )
+        }
+      })
+  }
+
+  val mergeFunDef : FunDef = mkFunDef(merge)("A") { case Seq(tA) =>
+    (Seq("left":: T(list)(tA), "right":: T(list)(tA), "comp" :: FunctionType(Seq(tA, tA), IntegerType)),
+      T(list)(tA),
+      { case Seq(left, right, comp) =>
+        if_(left.isInstOf(T(cons)(tA))) {
+          if_(right.isInstOf(T(cons)(tA))) {
+            let("leftcons"::T(cons)(tA), left.asInstOf(T(cons)(tA)))( leftcons =>
+              let("rightcons"::T(cons)(tA), right.asInstOf(T(cons)(tA)))( rightcons =>
+                if_(Application(comp, Seq(leftcons.getField(head), rightcons.getField(head))) <= IntegerLiteral(BigInt(0))) {
+                  ADT(T(cons)(tA), Seq(leftcons.getField(head), FunctionInvocation(merge, Seq(tA), Seq(leftcons.getField(tail), right, comp))))
+                } else_ {
+                  ADT(T(cons)(tA), Seq(rightcons.getField(head), FunctionInvocation(merge, Seq(tA), Seq(left, rightcons.getField(tail), comp))))
+                }
+              )
+            )
+          } else_ {
+            left
+          }
+        } else_ {
+          right
+        }
+      })
+  }
+  import ImplicitTuples.tuple2
+  val splitEvenFunDef: FunDef = mkFunDef(splitEven)("A") { case Seq(tA) =>
+    (Seq("l"::T(list)(tA)),
+      T(tuple2)(T(list)(tA), T(list)(tA)),
+      { case Seq(l) =>
+        if_(l.isInstOf(T(cons)(tA))) {
+          let("r"::T(tuple2)(T(list)(tA), T(list)(tA)),
+            FunctionInvocation(splitEven, Seq(tA), Seq(l.asInstOf(T(cons)(tA)).getField(tail))))(r =>
+            ADT(T(tuple2)(T(list)(tA), T(list)(tA)), Seq(
+              ADT(T(cons)(tA), Seq(l.asInstOf(T(cons)(tA)).getField(head), r.getField(_2))),
+              r.getField(_1))))
+        } else_ {
+          ADT(T(tuple2)(T(list)(tA), T(list)(tA)), Seq(ADT(T(nil)(tA), Seq()), ADT(T(nil)(tA), Seq())))
+        }
+      }
+    )
+  }
+
   val funDefs = List[FunDef](
     filterFunDef,
     mapFunDef,
     mkStringFunDef,
     recFunDef,
     listConcatFunDef,
-    flatMapFunDef
+    flatMapFunDef,
+    sortWithFunDef,
+    mergeFunDef,
+    splitEvenFunDef
   )
 }

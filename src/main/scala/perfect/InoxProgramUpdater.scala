@@ -19,7 +19,8 @@ object InoxProgramUpdater extends core.ProgramUpdater
     with core.predef.ListConcatLenses
     with core.predef.DefaultLenses
     with core.predef.RecursiveLenses
-    with core.predef.WrappedLenses {
+    with core.predef.WrappedLenses
+    with lenses.ListLibraryExtendedLenses{
 
   import inox.FreshIdentifier
 
@@ -306,6 +307,28 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case _ => None
   }
 
+  /** Returns a goal with the original tree, the modified tree, and the next path element.
+    * The second exp of the path element should continue with TreeMdodificationGoal until the modified
+    * part of the original is reached. */
+  def buildTreeModificationGoal(original: Exp, modified: Exp, path: Option[(Int, Exp)])(implicit symbols: Symbols): Exp = {
+    def getIdentifier(i: Int) = original.getType match {
+      case ADTType(adtid, tps) =>
+        symbols.adts(adtid) match {
+          case f: ADTConstructor =>
+            f.fields(i).id
+          case _ => ???
+        }
+      case _ => ???
+    }
+    path match {
+      case None => perfect.semanticlenses.TreeModificationGoal(original.getType, modified.getType, original, modified, Nil)
+      case Some((i, perfect.semanticlenses.TreeModificationGoal(originalType, modifiedType, original2, modified2, path))) =>
+        val identifier = getIdentifier(i)
+        perfect.semanticlenses.TreeModificationGoal(original.getType, modified.getType, original, modified, path :+ identifier)
+      case _ => ???
+    }
+  }
+
   def extractTreeUnwrapGoal(e: Exp)(implicit symbols: Symbols): Option[(Exp, Option[(Int, Exp)])] = e match {
     case TreeUnwrapGoal(tpe, original, path) =>
       path match {
@@ -412,14 +435,11 @@ object InoxProgramUpdater extends core.ProgramUpdater
       perfect.Utils.rec2 -> RecursiveLens2,
       perfect.Utils.dummyStringConcat -> StringConcatLens,
       perfect.Utils.listconcat -> ListConcatLens,
-      perfect.Utils.flatmap -> FlatMapLens
+      perfect.Utils.flatmap -> FlatMapLens,
+      perfect.Utils.sortWith -> new SortWithLensLike(InvocationExtractor)
       // TODO: Add all lenses from lenses.Lenses
       /*
-      FlattenLens,
-      FlatMapLens,
-      SplitEvenLens,
-      MergeLens,
-      SortWithLens*/
+      FlattenLens,*/
     ), {
       case FunctionInvocation(id, _, _) => Some(id)
       case StringConcat(_, _) => Some(perfect.Utils.dummyStringConcat)

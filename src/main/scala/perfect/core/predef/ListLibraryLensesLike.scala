@@ -1,12 +1,15 @@
 package perfect.core
 package predef
 
+import scala.collection.mutable.ListBuffer
+
 /**
   * Created by Mikael on 15/05/2017.
   */
 trait ListLibraryLensesLike {
   self: ProgramUpdater
-    with ContExps with Lenses with ListLensesLike with ListInsertLensesLike with InvocationLensesLike with ApplicationLensesLike =>
+    with ContExps with Lenses with ListLensesLike
+    with ListInsertLensesLike with InvocationLensesLike with ApplicationLensesLike =>
 
   trait ListLibraryOptions {
     /** In a map, can the output be transfered to the input, e.g. when adding a new row. */
@@ -292,6 +295,5 @@ trait ListLibraryLensesLike {
       fmapr.flatMapRev(originalInput.map(x => (x, originalInputF)), outValue).flatMap(recombineArgumentsLambdas(lambda, listBuilder))
     }
   }
-
 }
 
