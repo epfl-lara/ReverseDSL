@@ -30,6 +30,22 @@ class RecursiveTest extends FunSuite with TestHelpers {
       _List[String]()
     })
 
+  def filterDef = lenses.Lenses.RecLens.build("filter",
+    "l"::inoxTypeOf[List[String]], "f"::inoxTypeOf[String => Boolean])(inoxTypeOf[List[String]])((filterrec, ls, f) =>
+    if_(ls.isInstOf(TCons[String])) {
+      let("c"::TCons[String], ls.asInstOf(TCons[String]))(c =>
+        let("head"::String, c.getField(head))( head =>
+          if_(Application(f, Seq(head))) {
+            ADT(TCons[String], Seq(head, filterrec(c.getField(tail), f)))
+          } else_ {
+            filterrec(c.getField(tail), f)
+          }
+        )
+      )
+    } else_ {
+      _List[String]()
+    })
+
   test("Home-made list map inverse list") {
     val prog = let("mp"::inoxTypeOf[(List[String], String => String) => List[String]], mapDef)(mp =>
       mp(_List[String]("brother", "boss"), \("s"::String)(s => "Big " +& s))
@@ -70,6 +86,18 @@ class RecursiveTest extends FunSuite with TestHelpers {
         mpv shouldEqual mpd.toVariable
         l shouldEqual _List[String]("brother", "boss")
     }
+  }
+
+  test("Home-made filter") {
+    val prog = let("filter"::inoxTypeOf[(List[String], String => Boolean) => List[String]], filterDef)(filter =>
+      filter(_List[String]("four", "lot of five", "six"), \("s"::String)(s => StringLength(s) < IntegerLiteral(5)))
+    )
+
+    prog shouldProduce _List[String]("four", "six")
+    val goal = ListInsertGoal(List("four"), List("five"), List("six"))
+    //val goal = _List[String]("four", "five", "six")
+
+    Log activated println(repairProgramList(prog, goal, 3).take(3).map(eval).mkString("\n"))
   }
 
   //TODO: Test filter recursive.
