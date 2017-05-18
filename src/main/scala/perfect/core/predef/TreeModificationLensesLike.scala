@@ -11,6 +11,13 @@ trait TreeModificationLensesLike {  self: ProgramUpdater with
     def unapply(e: Exp)(implicit symbols: Symbols): Option[(Exp, Int)]
     def apply(original: Exp, modified: Exp, index: Int)(implicit symbols: Symbols): Exp
 
+    def apply(original: Exp, selector: (Exp, Int) => Exp, modified: Exp, indices: List[Int])(implicit symbols: Symbols): Exp =
+      indices match {
+        case Nil => modified
+        case head::tail =>
+          Self(original, Self(selector(original, head), selector, modified, tail), head)
+      }
+
     /** For ADT-based lists only, recovers the sub-goal for target element and its index. */
     def indexOfElemModifiedInList(goal: Exp, index: Int = 0): Option[(Exp, Int)] = {
       goal match {

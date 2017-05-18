@@ -18,13 +18,15 @@ object ADTExpr extends CustomProgramFormula with MergeProgramFormula {
       case _ => None
     }
   }
+  var xCounter = 1
+
   object Lens extends SemanticLens {
     override def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
       in.expr match {
         case ADT(adtType@ADTType(tp, tpArgs), argsIn) =>
           out.simplifiedExpr match {
             case outExpr@ADT(ADTType(tp2, tpArgs2), argsOut) if tp2 == tp && tpArgs2 == tpArgs && in.getFunctionValue != Some(outExpr) => // Same type ! Maybe the arguments will change or move.
-              Log("ADT 2")
+              //Log("ADT 2")
               val argsInValue = in.getFunctionValue match {
                 case Some(ADT(ADTType(_, _), argsInValue)) => argsInValue.map(x => Some(x))
                 case _ => argsIn.map(_ => None)
@@ -35,7 +37,7 @@ object ADTExpr extends CustomProgramFormula with MergeProgramFormula {
               }
               val streamOfSeqSolutions = inox.utils.StreamUtils.cartesianProduct(seqOfStreamSolutions)
               for {seq <- streamOfSeqSolutions
-                   _ = Log(s"combineResults($seq)")
+                   //_ = Log(s"combineResults($seq)")
                    (newArgs, assignments) = ProgramFormula.combineResults(seq)
               } yield {
                 ProgramFormula(ADT(ADTType(tp2, tpArgs2), newArgs), assignments)
@@ -53,7 +55,7 @@ object ADTExpr extends CustomProgramFormula with MergeProgramFormula {
           val constructor = as.constructor.get
           val fields = constructor.fields
           val index = as.selectorIndex
-          val vrs = fields.map { fd => Variable(FreshIdentifier("x", true), fd.getType, Set()) }
+          val vrs = fields.map { fd => Variable(FreshIdentifier("x"+ { xCounter += 1; xCounter }, false), fd.getType, Set()) }
           val constraints = vrs.zipWithIndex.map {
             case (vd, i) => vd -> (if (i == index) StrongValue(out.expr) else OriginalValue(originalAdtValue.args(i)))
           }.toMap

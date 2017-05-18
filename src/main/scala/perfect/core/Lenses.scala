@@ -11,6 +11,13 @@ trait Lenses { self: ProgramUpdater with ContExps =>
     def andThen(other: SemanticLens) = CombinedLens(self, other)
     def interleave(other: SemanticLens) = InterleavedLens(self, other)
     def named(name: String) = LogLens(this, name)
+    def failIfSucceed(): SemanticLens = new SemanticLens {
+      def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
+        val res = self.put(in, out)
+        if(res.nonEmpty) throw new Exception("Failed as expected")
+        res
+      }
+    }
   }
 
   ////// Lens combinators

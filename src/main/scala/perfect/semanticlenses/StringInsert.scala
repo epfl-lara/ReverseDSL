@@ -37,7 +37,7 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
         case StringConcat(outArg1, outArg2) =>
           in.expr match {
             case StringConcat(expr1, expr2) =>
-              ProgramFormula.repairArguments(in.formula, Seq((expr1, out.subExpr(outArg1)), (expr2, out.subExpr(outArg2)))).map{ case (args, f) =>
+              ProgramFormula.repairArguments(in, Seq((expr1, out.subExpr(outArg1)), (expr2, out.subExpr(outArg2)))).map{ case (args, f) =>
                 ProgramFormula(StringConcat(args(0), args(1)), f)
               }
             case _ => Stream.empty
@@ -60,7 +60,7 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
                   val expr1v = expr1val.get
                   val expr2v = expr2val.get
                   lenses.Lenses.StringConcatLens.put(Nil)(Seq(in.subExpr(expr1v), in.subExpr(expr2v)), out).flatMap { case (args, f) =>
-                    ProgramFormula.repairArguments(in.formula, Seq((expr1, args(0)), (expr2, args(1)))).map{ case (args2, f2) =>
+                    ProgramFormula.repairArguments(in, Seq((expr1, args(0)), (expr2, args(1)))).map{ case (args2, f2) =>
                       ProgramFormula(StringConcat(args2(0), args2(1)), f combineWith f2 combineWith args(0).formula combineWith args(1).formula)
                     }
                   }

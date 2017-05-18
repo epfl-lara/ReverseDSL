@@ -110,9 +110,19 @@ object ReverseProgram {
      (MapDataLens andThen // Matcher for FiniteMap and MapApply constructions
       ADTExpr.Lens) // Matcher for ADT and ADTSelector constructions.
 
+  /** Replaces the input by the output if the input is a value (with no free variables for lambdas) */
+  case object ConstantReplaceLens extends semanticlenses.SemanticLens {
+    isPreemptive = true
+    def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
+      // Literals without any free variables should be immediately replaced by the new value
+      if(isValue(in.expr) && isValue(out.simplifiedExpr)) Stream(out) else Stream.empty
+    }
+  }
 
-  val lens = NoChangeLens andThen
+  val lens = NoChangeLens andThen ConstantReplaceLens andThen
     shapeLenses andThen WrapperLens(semanticLenses andThen DefaultLens, MaybeWrappedSolutions)
+
+  var repairid = 1
 
   /** Will try its best to transform in so that it produces out or at least incorporates the changes.
     * Entry point of all lenses.
@@ -129,11 +139,13 @@ object ReverseProgram {
     if(!Log.activate) {
       lens.put(in, out)
     } else {
-      val stackLevel = Thread.currentThread().getStackTrace.length
-      Log(s"\n@repair$stackLevel(\n  $in\n, $out)")
+      val stackLevel = {repairid += 1; repairid} //Thread.currentThread().getStackTrace.length
+      val instr = in.toString.replaceAll("\n", "\n  ")
+      val outstr = out.toString.replaceAll("\n", "\n  ")
+      Log(s"\n@repair$stackLevel(\n  $instr\n, $outstr)")
 
       lens.put(in, out) #:::
-        {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $in\n, $out):\n~>")
+        {Log(s"Finished repair$stackLevel"); Stream.empty[ProgramFormula]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $instr\n, $outstr):\n~>")
     }
   }
 }

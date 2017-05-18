@@ -424,7 +424,7 @@ class XmlTest extends FunSuite with TestHelpers {
         <tel>+81-3-5841-7430</tel>
       </person>
     </addrbook>
-    pfWithSorting repairFrom newOutModification shouldProduce expectedOutModification
+    Log activated (pfWithSorting repairFrom newOutModification) shouldProduce expectedOutModification
   }
   test("Hu 2004 insertion in data") {
     implicit val symbols = Utils.defaultSymbols

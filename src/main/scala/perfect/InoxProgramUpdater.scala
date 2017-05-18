@@ -174,7 +174,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
   /** Returns an "unknown" fresh variable matching the type of the lambda's first argument*/
   def extractLambdaUnknownVar(e: Exp): Option[Var] = e match {
-    case inox.trees.Lambda(Seq(vd), body) => Some(Variable(FreshIdentifier("unknown", true), vd.tpe, Set()))
+    case inox.trees.Lambda(vd +: _, body) => Some(Variable(FreshIdentifier("unknown", true), vd.tpe, Set()))
     case _ => None
   }
 
@@ -257,12 +257,13 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case _ => None
   }
 
+  var xCounter = 1
   def extractADTSelector(e: Exp)(implicit symbols: Symbols): Option[(Exp, Exp => Exp, Seq[Var], Int)]  = e match {
     case as@inox.trees.ADTSelector(expr, id) =>
       val constructor = as.constructor.get
       val fields = constructor.fields
       val index = as.selectorIndex
-      val vrs = fields.map { fd => Variable(FreshIdentifier("x", true), fd.getType, Set()) }
+      val vrs = fields.map { fd => Variable(FreshIdentifier("x"+{ xCounter += 1; xCounter }, false), fd.getType, Set()) }
       Some((expr, x => inox.trees.ADTSelector(x, id), vrs, index))
     case _ => None
   }
@@ -400,13 +401,13 @@ object InoxProgramUpdater extends core.ProgramUpdater
   def functionInvocationLens: SemanticLens =
     ShortcutLens(Map[inox.Identifier, SemanticLens](
       perfect.Utils.filter -> FilterLens,
-      perfect.Utils.map -> MapLens,
+      perfect.Utils.map -> MapLens.named("Map Lens"),
       perfect.Utils.mkString -> MkStringLens,
       perfect.Utils.rec2 -> RecursiveLens2,
       perfect.Utils.dummyStringConcat -> StringConcatLens,
       perfect.Utils.listconcat -> ListConcatLens,
       perfect.Utils.flatmap -> FlatMapLens,
-      perfect.Utils.sortWith -> new SortWithLensLike(InvocationExtractor)
+      perfect.Utils.sortWith -> SortWithLens
       // TODO: Add all lenses from lenses.Lenses
       /*
       FlattenLens,*/
@@ -420,7 +421,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
 // Lenses which need the value of the program to invert it.
   val semanticLenses: SemanticLens = valueLenses // andThen
 
-  override def debug = Log.activate
+  override def debug = false // Log.activate
 
   val lens = combine(
     NoChangeLens.named("No Change?"),

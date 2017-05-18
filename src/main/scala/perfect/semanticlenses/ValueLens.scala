@@ -14,7 +14,7 @@ import perfect.Utils.isValue
 object ValueLens extends SemanticLens {
   override def put(in: ProgramFormula, out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
     if(!out.expr.isInstanceOf[Variable] && in.getFunctionValue == Some(out.expr)) return {
-      Log("@return original function");
+      //Log("@return original function");
       Stream(in.assignmentsAsOriginals() combineWith out.formula)
     } else {
       Stream.empty

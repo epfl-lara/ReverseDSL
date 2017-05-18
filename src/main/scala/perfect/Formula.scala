@@ -279,7 +279,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
       }
       Formula(k, nc)
     }
-  } /: Log.prefix(s"combineWith($this,$other) = ")// ensuring { (f: Formula) => !f.isCircular }
+  } // /: Log.prefix(s"combineWith($this,$other) = ")// ensuring { (f: Formula) => !f.isCircular }
 
   def combineWith(assignment: (Variable, KnownValue))(implicit symbols: Symbols): Formula = {
     this combineWith Formula(Map(assignment))
@@ -300,7 +300,7 @@ case class Formula(known: Map[Variable, KnownValue] = Map(), constraints: Expr =
     Formula(newKnown, constraints)
   }
 
-  private lazy val knownToString: String = known.toSeq.map{
+  private lazy val knownToString: String = known.toSeq.sortBy(_._1.toString).map{
     case (k, StrongValue(e)) => k.toString + "=>" + e
     case (k, OriginalValue(e)) => k.toString + "->" + e
     case (k, AllValues) => "\u2200" + k

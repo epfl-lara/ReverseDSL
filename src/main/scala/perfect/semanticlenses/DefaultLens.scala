@@ -101,13 +101,13 @@ object DefaultLens extends SemanticLens {
               exprOps.preMap({
                 case v: Variable => toInline.get(v)
                 case _ => None
-              }, true)(back(newBodyFresh)) /: Log.prefix(s"backpf($newBodyFresh, $newBodyFreshFormula) = ")
+              }, true)(back(newBodyFresh)) // /: Log.prefix(s"backpf($newBodyFresh, $newBodyFreshFormula) = ")
             }
 
             for {pf <- repair(newpf, out)
                  ProgramFormula(newBodyFresh, newBodyFormula) = pf
                  newBody = backPf(newBodyFresh, newBodyFormula)
-                 isSameBody = (newBody == body) /: Log.isSameBody
+                 isSameBody = (newBody == body) // /: Log.isSameBody
                  args <- ProgramFormula.regroupArguments(arguments.zip(freshArgsNames).map { case (arg, expected) =>
                      repair(in.subExpr(arg), out.subExpr(expected) combineWith newBodyFormula combineWith Formula(expected -> argumentValues(expected)))
                    })
@@ -121,15 +121,15 @@ object DefaultLens extends SemanticLens {
                      out.subExpr(newLambda) combineWith newBodyFormula)
                  }
                  ProgramFormula(newAppliee, lambdaRepairFormula) = pfLambda
-                 finalApplication = Application(newAppliee, newArguments) /: Log.prefix("finalApplication")
+                 finalApplication = Application(newAppliee, newArguments) // /: Log.prefix("finalApplication")
             } yield {
-              Log(s"newBodyFormula: $newBodyFormula")
-              Log(s"lambdaRepairFormula: $lambdaRepairFormula")
-              Log(s"newArgumentsFormula: $newArgumentsFormula")
+              // Log(s"newBodyFormula: $newBodyFormula")
+              // Log(s"lambdaRepairFormula: $lambdaRepairFormula")
+              // Log(s"newArgumentsFormula: $newArgumentsFormula")
               val varsToRemove = freshArgsNames.filter{ v => !exprOps.exists{ case `v` => true case _ => false}(finalApplication)}
               val combinedFormula = newBodyFormula combineWith lambdaRepairFormula combineWith
                 newArgumentsFormula removeArgs varsToRemove
-              Log.prefix("[return] ") :=
+              //Log.prefix("[return] ") :=
                 ProgramFormula(finalApplication: Expr, combinedFormula)
             }
           } else {

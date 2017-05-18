@@ -12,11 +12,11 @@ trait ApplicationLensesLike { self: ProgramUpdater with ContExps with LambdaLens
     isPreemptive = true
     def put(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = in.exp match {
       case Application(lambdaExpr, arguments) => // TODO: Put this into a lense.
-        val originalValueMaybe: Option[Exp] = in.subExpr(lambdaExpr).simplifiedExpr match {
+        val originalValueMaybe: Option[Exp] = (in.subExpr(lambdaExpr).simplifiedExpr match {
           case l@Lambda(_, _) => Some(l)
           //case _ => throw new Exception("Don't know how to deal with an application over non-lambda: "+lambdaExpr)
           case l => in.context.partialAssignments.flatMap(assign => maybeEvalWithCache(assign._1(l)))
-        } // /: Log.Original_Value
+        }) // /: perfect.Log.Original_Value
 
         // Returns the new list of arguments plus a mapping from old to new values.
         def freshenArgsList(argNames: Seq[Var]): (Seq[Var], Map[Var, Var], Map[Var, Var]) = {
@@ -34,6 +34,7 @@ trait ApplicationLensesLike { self: ProgramUpdater with ContExps with LambdaLens
             object Back { def unapply(e: KnownValue) = Some(e.map(back)) }
 
             val freshBody = renew(body)
+
             val assignments = in.context.assignments
             val argumentVals =
               arguments.map( arg =>

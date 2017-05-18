@@ -9,7 +9,8 @@ import scala.collection.mutable.ListBuffer
 trait ListLibraryLensesLike {
   self: ProgramUpdater
     with ContExps with Lenses with ListLensesLike
-    with ListInsertLensesLike with InvocationLensesLike with ApplicationLensesLike =>
+    with ListInsertLensesLike with InvocationLensesLike
+    with ApplicationLensesLike with TreeModificationLensesLike with ADTLensesLike =>
 
   trait ListLibraryOptions {
     /** In a map, can the output be transfered to the input, e.g. when adding a new row. */
@@ -31,19 +32,19 @@ trait ListLibraryLensesLike {
     def put(originalArgsValues: Seq[ContExp], newOutputProgram: ContExp, builder: Seq[Exp] => Exp)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ContExp], Cont)] = {
       val ContExp(lambda, lambdaF) = originalArgsValues.tail.head
       val newOutput = newOutputProgram.exp
-      val ContExp(ListLiteral(originalInput, listBuilder), listF) = originalArgsValues.head
+      val inList@ContExp(ListLiteral(originalInput, listBuilder), listF) = originalArgsValues.head
       //Log(s"FilterLens: $originalArgsValues => $newOutputProgram")
       val filterLambda = (expr: Exp) => lambdaF.assignments.flatMap(assign => maybeEvalWithCache(assign(Application(lambda, Seq(expr))))) contains ExpTrue
       newOutput match {
         case ListLiteral(newOutputList, _) =>
           filterRev(originalInput, filterLambda, newOutputList).map { (e: List[Exp]) =>
-            (Seq(ContExp(listBuilder(e), listF.assignmentsAsOriginals), ContExp(lambda)), Cont())
+            (Seq(inList.subExpr(listBuilder(e)), ContExp(lambda)), Cont())
           }
         case Var(v) => // Convert to a formula and return a new variable
           newOutputProgram.getFunctionValue match {
             case Some(ListLiteral(newOutputList, _)) =>
               filterRev(originalInput, filterLambda, newOutputList).map { (e: List[Exp]) =>
-                (Seq(ContExp(listBuilder(e), listF.assignmentsAsOriginals), ContExp(lambda)), Cont())
+                (Seq(inList.subExpr(listBuilder(e)), ContExp(lambda)), Cont())
               }
             case _ =>
               val newVar = freshen(v)
@@ -103,7 +104,9 @@ trait ListLibraryLensesLike {
                     Invocation: InvocationExtractor,
                     ListLiteral: ListLiteralExtractor,
                     ListInsertLensGoal: ListInsertLensGoalExtractor,
-                    ListLibraryOptions: ListLibraryOptions) extends InvocationLensLike(Invocation) {
+                    ListLibraryOptions: ListLibraryOptions,
+                    ADT: ADTExtractor,
+                    TreeModificationLensGoal: TreeModificationLensGoalExtractor) extends InvocationLensLike(Invocation) {
 
     import ListLibraryOptions._
 
@@ -114,37 +117,40 @@ trait ListLibraryLensesLike {
       val valueByDefault = originalInput.headOption.getOrElse(extractLambdaDefaultArgument(lambda).getOrElse(return Stream.empty))
       // Maybe we change only arguments. If not possible, we will try to change the lambda.
 
-      out.exp match {
-        /*case TreeModification(tpeGlobal, tpeLocal, originalOutputModifList, modified, argsInSequence) =>
-          val ListLiteral(originalOutputModifList2, listBuilder) = originalOutputModifList
-          val (index, remaining) = argsInSequence.span(_ == Utils.tail)
-          val original = originalInput(index.length)
-          val newVar = Variable(FreshIdentifier("x"), argType, Set())
+      out.simplifiedExpr match {
+        case tm@TreeModificationLensGoal(modified, index) =>
+          val (listGoal, index) = TreeModificationLensGoal.indexOfElemModifiedInList(tm).getOrElse(return Stream.empty)
+          val subgoal: Exp = listGoal match {
+            case TreeModificationLensGoal(subgoal, 0) => subgoal
+            case _ => return Stream.empty
+          }
+          //val ListLiteral(originalOutputModifList2, listBuilder) = originalOutputModifList
+          val original = originalInput(index)
+          val newVar = extractLambdaUnknownVar(lambda)
 
-          if(remaining.isEmpty) { // TODO: Case not supported yet, we currently have to end with "head" selection.
-            Stream.empty
-          } else {
-            repair(ContExp(Application(lambda, Seq(original))),
-              newOutput.subExpr(TreeModification.Goal(tpeGlobal, tpeLocal, originalOutputModifList2(index.length), modified, remaining.tail))) map {
-              case pf@ContExp(Application(lExpr, Seq(expr2)), formula2) =>
-                val lambda2 = castOrFail[Exp, Lambda](lExpr)
-                if (lambda2 != lambda && expr2 == original) {
-                  (Seq(TreeModification(ADTType(Utils.cons, Seq(argType)),
-                    tpeLocal,
-                    originalArgsValues.head.exp,
-                    expr2,
-                    index :+ Utils.head
-                  ) combineWith formula2 combineWith originalArgsValues.head.context, ContExp(lambda2, formula2)), Cont())
-                } else {
-                  (Seq(TreeModification(ADTType(Utils.cons, Seq(argType)),
-                    tpeLocal,
-                    originalArgsValues.head.exp,
-                    expr2,
-                    index :+ Utils.head
-                  ) combineWith formula2 combineWith originalArgsValues.head.context, ContExp(lambda)), Cont())
-                }
-            }
-          }*/
+          repair(ContExp(Application(lambda, Seq(original))),
+            out.subExpr(subgoal)) map {
+            case pf@ContExp(Application(lambda2, Seq(expr2)), formula2) =>
+              val selector = (x: Exp, i: Int) => x match {
+                case ADT(args, _) => args(i)
+                case _ => throw new Exception("Unexpected ")
+              }
+              if (lambda2 != lambda && expr2 == original) {
+                (Seq(ContExp(TreeModificationLensGoal(
+                  originalArgsValues.head.exp,
+                  selector,
+                  expr2,
+                  List.fill(index)(1) :+ 0
+                ), formula2 combineWith originalArgsValues.head.context), ContExp(lambda2, formula2)), Cont())
+              } else {
+                (Seq(ContExp(TreeModificationLensGoal(
+                  originalArgsValues.head.exp,
+                  selector,
+                  expr2,
+                  List.fill(index)(1) :+ 0
+                ), formula2 combineWith originalArgsValues.head.context), ContExp(lambda)), Cont())
+              }
+          }
 
 
         case ListInsertLensGoal(before, inserted, after, listBuilder, listInsertLensGoalBuilder) =>

@@ -90,6 +90,14 @@ trait ContExps { self: ProgramUpdater =>
 
   /** Previously 'Formula'*/
   case class Cont(known: Map[Var, KnownValue] = Map(), constraints: Exp = ExpTrue) {
+    def isUnconstrained(exp: Exp): Boolean = exp match {
+      case Var(v) => known.get(v).collect{
+        case OriginalValue(_) => true
+        case StrongValue(e) => isUnconstrained(e)
+      }.getOrElse(false)
+      case _ => false
+    }
+
     import Cont._
     // Can contain middle free variables.
     lazy val varsToAssign: Set[Var] = known.keySet ++ freeVariables(constraints)
@@ -233,7 +241,7 @@ trait ContExps { self: ProgramUpdater =>
         }
         Cont(k, nc)
       }
-    } /: perfect.Log.prefix(s"combineWith($this,$other) = ")
+    } // /: perfect.Log.prefix(s"combineWith($this,$other) = ")
 
     def combineWith(assignment: (Var, KnownValue))(implicit symbols: Symbols): Cont = {
       this combineWith Cont(Map(assignment))
@@ -254,7 +262,7 @@ trait ContExps { self: ProgramUpdater =>
       Cont(newKnown, constraints)
     }
 
-    private lazy val knownToString: String = known.toSeq.map{
+    private lazy val knownToString: String = known.toSeq.sortBy(_._1.toString).map{
       case (k, StrongValue(e)) => k.toString + "=>" + e
       case (k, OriginalValue(e)) => k.toString + "->" + e
       case (k, AllValues) => "\u2200" + k
@@ -498,5 +506,9 @@ trait ContExps { self: ProgramUpdater =>
         ContExp(assignment.get(exp), newCont)
       } else this
     }
+
+    /** Returns true if the value this expression provides is not binding */
+    def isUnconstrained: Boolean =
+      context.isUnconstrained(exp)
   }
 }

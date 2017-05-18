@@ -147,15 +147,19 @@ trait ProgramUpdater { self: ContExps with Lenses =>
 
   def debug: Boolean = false
 
+  var repairid = 1
+
   def repair(in: ContExp, out: ContExp)(implicit symbols: Symbols, cache: Cache): Stream[ContExp] = {
     if(!Log.activate) {
       theLens.put(in, out)
     } else {
-      val stackLevel = Thread.currentThread().getStackTrace.length
-      Log(s"\n@repair$stackLevel(\n  $in\n, $out)")
+      val stackLevel = {repairid += 1; repairid} // Thread.currentThread().getStackTrace.length
+      val instr = in.toString.replaceAll("\n", "\n  ")
+      val outstr = out.toString.replaceAll("\n", "\n  ")
+      Log(s"\n@repair$stackLevel(\n  $instr\n, $outstr)")
 
       theLens.put(in, out) #:::
-        {Log(s"Finished repair$stackLevel"); Stream.empty[ContExp]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $in\n, $out):\n~>")
+        {Log(s"Finished repair$stackLevel"); Stream.empty[ContExp]}  /:: Log.prefix(s"@return for repair$stackLevel(\n  $instr\n, $outstr):\n~>")
     }
   }
 }

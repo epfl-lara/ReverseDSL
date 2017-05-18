@@ -22,7 +22,7 @@ trait ADTLenses extends ADTLensesLike with ContExps {
   /** Returns true if e and g are two instances of the same ADT type */
   def isSameADT(e: Exp, g: Exp): Boolean
 
-  override def buildMergeCommands = super.buildMergeCommands += ADT
+  override def buildMergeCommands: ListBuffer[MergeCommand] = super.buildMergeCommands += ADT
 
   object ADT extends ADTExtractor with MergeCommand {
     def unapply(e: Exp): Option[(Seq[Exp], (Seq[Exp]) => Exp)] = extractADT(e)
@@ -31,9 +31,9 @@ trait ADTLenses extends ADTLensesLike with ContExps {
 
     override def merge(e1: Exp, e2: Exp)(implicit symbols: Symbols): Option[(Exp, Seq[(Var, KnownValue)])] = {
       e2 match {
-        case e2@ADT(vars1, v1Builder) if vars1.forall(isVar(_)) =>
+        case e2@ADT(vars1, v1Builder) if vars1.forall(isVar) =>
           e1 match {
-            case ADT(vars2, v2Builder) if vars2.forall(isVar(_)) && ADT.isSame(e1, e2) =>
+            case ADT(vars2, v2Builder) if vars2.forall(isVar) && ADT.isSame(e1, e2) =>
               val vvars1 = vars1.collect[Var, Seq[Var]] { case Var(v) => v }
               val vvars2 = vars2.collect[Var, Seq[Var]] { case Var(v) => v }
               Some((e1, vars1.zip(vvars2).map{ case (Var(x1), x2) =>

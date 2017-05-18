@@ -46,11 +46,20 @@ object Lenses {
 
   type ArgumentsFormula = (Seq[ProgramFormula], Formula)
   
-  abstract class Lens extends MultiArgsSemanticLens with FunctionInvocationExtractor {
+  abstract class Lens extends MultiArgsSemanticLens with FunctionInvocationExtractor { self =>
     def identifier: Identifier
     def funDef: FunDef
     def mapping = identifier -> this
     def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula]
+    def failIfSucceed(): Lens = new Lens {
+      def identifier = self.identifier
+      def funDef = self.funDef
+      def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], out: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
+        val res = self.put(tpes)(originalArgsValues, out)
+        if(res.nonEmpty) throw new Exception("Failed as expected")
+        res
+      }
+    }
   }
 
   /** Lense-like filter */
@@ -61,17 +70,17 @@ object Lenses {
       val ProgramFormula(lambda, lambdaF) = originalArgsValues.tail.head
       val newOutput = newOutputProgram.expr
       val ProgramFormula(ListLiteral(originalInput, _), listF) = originalArgsValues.head
-      Log(s"FilterLens: $originalArgsValues => $newOutputProgram")
+      //Log(s"FilterLens: $originalArgsValues => $newOutputProgram")
       val filterLambda = (expr: Expr) => maybeEvalWithCache(lambdaF.assignments.get(Application(lambda, Seq(expr)))) == Some(BooleanLiteral(true))
       newOutput match {
         case ListLiteral(newOutputList, _) =>
           filterRev(originalInput, filterLambda, newOutputList).map{ (e: List[Expr]) =>
-            (Seq(ProgramFormula(ListLiteral(e, tpes.head), listF.assignmentsAsOriginals), ProgramFormula(lambda)), Formula())
+            (Seq(originalArgsValues.head.subExpr(ListLiteral(e, tpes.head)) combineWith listF.assignmentsAsOriginals, ProgramFormula(lambda)), Formula())
           }
         case Variable(id, lstType, flags) => // Convert to a formula and return a new variable
           newOutputProgram.getFunctionValue match {
             case Some(ListLiteral(newOutputList, _)) =>
-              Log.prefix(s"filterRev($originalInput, $newOutputList)") :=
+              //Log.prefix(s"filterRev($originalInput, $newOutputList)") :=
               filterRev(originalInput, filterLambda, newOutputList).map{ (e: List[Expr]) =>
                 (Seq(ProgramFormula(ListLiteral(e, tpes.head), listF.assignmentsAsOriginals), ProgramFormula(lambda)), Formula())
               }
@@ -117,7 +126,7 @@ object Lenses {
     import Utils.AugmentedStream
 
     def put(tpes: Seq[Type])(originalArgsValues: Seq[ProgramFormula], newOutput: ProgramFormula)(implicit symbols: Symbols, cache: Cache): Stream[ArgumentsFormula] = {
-      Log(s"map.apply($newOutput)")
+      //Log(s"map.apply($newOutput)")
       val ProgramFormula(lambda: Lambda, lambdaF) = originalArgsValues.tail.head
       val ProgramFormula(ListLiteral(originalInput, listBuilder), listF) = originalArgsValues.head
       val inputType = tpes.head
@@ -824,20 +833,21 @@ object Lenses {
             ListInsert(tpe, _, _, _))
 
         case m@TreeModification.Goal.All(lambda@Lambda(Seq(x), body), modified, path) =>
-          Log(s"lambda: $lambda, body: $body, modified: $modified, path: $path")
+          //Log(s"lambda: $lambda, body: $body, modified: $modified, path: $path")
           val output = exprOps.replaceFromSymbols(Map(x.toVariable -> modified), body)
           val (index, remaining) = path.span(_ == 1)
           leftValue match {
             case ListLiteral(l, _) =>
               if(index.length < l.length) {
                 Stream((Seq(
-                  TreeModification.All(output, modified, path), ProgramFormula(rightValue)),
+                    newOutputProgram.subExpr(TreeModification.Goal.All(output, modified, path)),
+                    ProgramFormula(rightValue)),
                   Formula())
                 )
               } else {
                 Stream((Seq(
-                  ProgramFormula(leftValue),
-                  TreeModification.All(output, modified, path.drop(index.length))),
+                    ProgramFormula(leftValue),
+                    newOutputProgram.subExpr(TreeModification.Goal.All(output, modified, path.drop(index.length)))),
                   Formula()
                 ))
               }

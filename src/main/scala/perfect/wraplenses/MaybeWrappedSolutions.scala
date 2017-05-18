@@ -45,11 +45,11 @@ object MaybeWrappedSolutions extends SemanticLens {
     result: Element("div", List(v), List(), List())
   * */
   private def maybeWrap(program: ProgramFormula, newOutProgram: ProgramFormula, functionValue: Expr)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
-    Log(s"Testing maybewrap for function Value = $functionValue")
+    //Log(s"Testing maybewrap for function Value = $functionValue")
     val newOut = newOutProgram.getFunctionValue.getOrElse(return Stream.empty)
     val function = program.expr
     if(functionValue == newOut) return Stream.empty[ProgramFormula] // Value returned in maybeUnwrap
-    Log(s"maybewrap 2")
+    //Log(s"maybewrap 2")
 
     val containsFunctionValue = exprOps.exists {
       case t if t == functionValue => true
@@ -116,7 +116,7 @@ object MaybeWrappedSolutions extends SemanticLens {
   *  result:        v  #::   Element("span", List(), List(), List()) #:: Stream.empty
   * */
   private def maybeUnwrap(program: ProgramFormula, newOutProgram: ProgramFormula, functionValue: Expr)(implicit symbols: Symbols, cache: Cache): Stream[ProgramFormula] = {
-    Log(s"Testing maybeUnwrap for function Value = $functionValue")
+    //Log(s"Testing maybeUnwrap for function Value = $functionValue")
     val newOut = newOutProgram.getFunctionValue.getOrElse(return Stream.empty)
     val function = program.expr
     if(functionValue == newOut) {

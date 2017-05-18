@@ -226,12 +226,12 @@ object ProgramFormula {
 
   /** Given a sequence of (arguments expression, expectedValue),
       returns the cartesian product of all argument programs and solutions. */
-  def repairArguments(inFormula: Formula,
+  def repairArguments(in: ProgramFormula,
                       arguments: Seq[(Expr, ProgramFormula)])(implicit symbols: Symbols, cache: Cache): Stream[(Seq[Expr], Formula)] = {
-    Log(s"combining arguments for $inFormula")
+    //Log(s"combining arguments for $inFormula")
     val argumentsReversed = arguments.map { case (arg, expected) =>
-      Log(s"repairing argument $arg should equal $expected")
-      repair(ProgramFormula(arg, inFormula), expected)
+      //Log(s"repairing argument $arg should equal $expected")
+      repair(in.subExpr(arg), expected)
     }
     regroupArguments(argumentsReversed)
   }
@@ -257,7 +257,7 @@ case class ProgramFormula(expr: Expr, formula: Formula = Formula()) {
   lazy val freeVars: Set[Variable] = exprOps.variablesOf(expr)
   lazy val unchanged: Set[Variable] = freeVars -- formula.varsToAssign
 
-  override def toString = expr.toString + s" [$formula]" + (if(canDoWrapping) " (wrapping enabled)" else "") + (if(isWrappingLowPriority) " (avoid wrap)" else "")
+  override def toString = expr.toString + s" [$formula]" + (if(canDoWrapping) " (string wrapping enabled)" else "") + (if(isWrappingLowPriority) " (avoid wrap)" else "")
   var canDoWrapping = false
 
   def wrappingEnabled: this.type = {
