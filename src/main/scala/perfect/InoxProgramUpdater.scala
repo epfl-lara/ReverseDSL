@@ -90,23 +90,13 @@ object InoxProgramUpdater extends core.ProgramUpdater
   import inox.trees._
   import inox.trees.dsl._
 
-  /** Obtain all possible assignments from the formula Cont for the given free variables */
-  def determinizeAll(cont: Cont)(freeVariables: Seq[Var] = cont.varsToAssign.toSeq)(implicit symbols: Symbols, cache: Cache): Stream[Map[Var, Exp]] = {
-    perfect.Log(s"Trying to get all solutions for ${freeVariables} of \n" + cont)
-    val simplified = Cont.inlineSimpleConts(cont)
-    perfect.Log(s"Problem Simplified: $simplified")
-    val streamOfSolutions = simplified.partialAssignments match {
-      case Some((wrapper, remaining)) if remaining.forall(x => x._2 == AllValues) =>
-        maybeEvalWithCache(wrapper(tupleWrap(freeVariables))).toStream
-      case e =>
-        if(e.nonEmpty) Log(s"Warning: some equations could not be simplified: $e")
-        val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
-        val constraint = InoxConstraint(input === tupleWrap(freeVariables) &<>& simplified.constraints &<>&
-          and(simplified.known.toSeq.map{ case (k, v) => v.getConstraint(k)}: _*))
-        Log(s"Solving as $constraint")
-        constraint.toStreamOfInoxExpr(input)
-    }
-    streamOfSolutions.map {
+  def weakCondition(v: Variable, c: OriginalValue): Exp = E(perfect.Utils.original)(v === c.e)
+
+  def solveGeneralConstraints(constraint: Exp, freeVariables: Seq[Var]): Stream[Map[Var, Exp]] = {
+    val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
+    val fullconstraint = InoxConstraint(input === tupleWrap(freeVariables) &<>& constraint)
+    Log(s"Solving as $fullconstraint")
+    fullconstraint.toStreamOfInoxExpr(input).map {
       case Tuple(args) => freeVariables.zip(args).map{ case (fv: Var, expr: Exp) => fv -> expr }.toMap
       case e if freeVariables.length == 1 => Map(freeVariables.head -> e)
       case UnitLiteral() if freeVariables.length == 0 => Map[Var, Exp]()
@@ -114,6 +104,10 @@ object InoxProgramUpdater extends core.ProgramUpdater
         throw new Exception(s"Other unexpected solution: $e")
     }
   }
+
+
+
+  /** Obtain all possible assignments from the formula Cont for the given free variables */
 
   // Members declared in perfect.core.ProgramUpdater
   def Assign(v: Variable, e: Expr, body: Expr): Expr = inox.trees.Let(v.toVal, e, body)
