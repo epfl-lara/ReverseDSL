@@ -165,13 +165,16 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case perfect.ListLiteral(elements, builder) => Some((elements, builder))
     case _ => None
   }
-  def freshen(a: Var, others: Var*): Var = {
-    if(others.isEmpty) {
-      Variable(FreshIdentifier(a.id.name, true), a.tpe, a.flags)
-    } else {
-      Variable(FreshIdentifier(perfect.Utils.uniqueName(a.id.name, others.map(v => v.id.name).toSet)), a.tpe, Set())
-    }
+
+  def freshVar(exp: Exp, name: Option[String], showUniqueId: Boolean, others: Var*)(implicit symbols: Symbols): Var = {
+    val n = name.getOrElse(exp match {
+      case Variable(id, _, _) => id.name
+      case _ => Utils.makeVariableName(exp.toString)
+    })
+    val nWithoutConflicts = Utils.uniqueName(n, others.map(_.id.name).toSet)
+    Variable(FreshIdentifier(nWithoutConflicts , showUniqueId), exp.getType, Set())
   }
+
   /** Returns the default value of the unique argument of the lambda, */
   def extractLambdaDefaultArgument(e: Exp): Option[Exp] = e match {
     case inox.trees.Lambda(Seq(vd), body) => Some(perfect.Utils.defaultValue(vd.tpe))
@@ -387,11 +390,6 @@ object InoxProgramUpdater extends core.ProgramUpdater
     case FunctionInvocation(perfect.Utils.listconcat, tp, Seq(left, right)) =>
       Some((left, right, (left, right) => FunctionInvocation(perfect.Utils.listconcat, tp, Seq(left, right))))
     case _ => None
-  }
-
-  // Members declared in perfect.core.ProgramUpdater
-  def varFromExp(name: String, e: Exp, showUniqueId: Boolean)(implicit symbols: Symbols): Var = {
-    Variable(FreshIdentifier(name, showUniqueId), e.getType, Set())
   }
 
   // Lenses which do not need the value of the program to invert it.
