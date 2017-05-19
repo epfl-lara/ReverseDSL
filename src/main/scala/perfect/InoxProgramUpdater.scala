@@ -350,9 +350,6 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   // Members declared in perfect.lenses.StringConcatLenses
   def buildStringConcat(left: Exp,right: Exp): Exp = inox.trees.StringConcat(left, right)
-  def buildStringConcatSimplified(left: Exp,right: Exp): Exp = {
-    new StringConcatExtended.AugmentedSubExpr(left).+<>&(right)
-  }
   def extractStringConcat(e: Exp): Option[(Exp, Exp)] = e match {
     case inox.trees.StringConcat(a, b) => Some((a, b))
     case _ => None
