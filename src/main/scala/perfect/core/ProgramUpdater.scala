@@ -46,7 +46,6 @@ trait ProgramUpdater { self: ContExps with Lenses =>
 
   /** Creates a var from an expression with the given name */
   def varFromExp(name: String, e: Exp, showUniqueId: Boolean)(implicit symbols: Symbols): Var
-  def varFromExp(name: String, e: Exp)(implicit symbols: Symbols): Var = varFromExp(name, e, false)
 
   /** The main reversion lens */
   def lens: SemanticLens
@@ -60,6 +59,8 @@ trait ProgramUpdater { self: ContExps with Lenses =>
   def eval(expr: Exp)(implicit symbols: Symbols): Either[Exp, String]
 
   //////////// Concrete members
+  def varFromExp(name: String, e: Exp)(implicit symbols: Symbols): Var = varFromExp(name, e, false)
+
   def replaceFromVars(substs: Map[Var, Exp], b: Exp) = {
     postMap {
       case Var(v) => substs.get(v)
