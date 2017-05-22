@@ -30,11 +30,6 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   def Equal(e1: Exp, e2: Exp): Exp = inox.trees.Equals(e1, e2)
 
-  /** Wrapper around a constraint which initially holds */
-  override def Originally(e1: InoxProgramUpdater.Exp): InoxProgramUpdater.Exp = {
-    inox.trees.FunctionInvocation(perfect.Utils.original, Seq(), Seq(e1))
-  }
-
   /** Value of a true expression */
   override def ExpTrue: InoxProgramUpdater.Exp = inox.trees.BooleanLiteral(true)
 
@@ -397,7 +392,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
       perfect.Utils.filter -> FilterLens,
       perfect.Utils.map -> MapLens.named("Map Lens"),
       perfect.Utils.mkString -> MkStringLens,
-      perfect.Utils.rec2 -> RecursiveLens2,
+      perfect.Utils.rec2 -> RecursiveLens,
       perfect.Utils.dummyStringConcat -> StringConcatLens,
       perfect.Utils.listconcat -> ListConcatLens,
       perfect.Utils.flatmap -> FlatMapLens,
