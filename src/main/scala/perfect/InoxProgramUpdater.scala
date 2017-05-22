@@ -57,12 +57,18 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   implicit def symbols = perfect.Utils.defaultSymbols.withFunctions(lenses.Lenses.funDefs)
 
-  def eval(expr: inox.trees.Expr)(implicit symbols: Symbols): Either[inox.trees.Expr, String] = {
+  def eval(expr: Exp)(implicit symbols: Symbols): Either[Exp, String] = {
+    eval(ContExp(expr)) match {
+      case Left(x) => Left(x.exp)
+      case Right(x) => Right(x)
+    }
+  }
+  override def eval(expr: ContExp)(implicit symbols: Symbols): Either[ContExp, String] = {
     import inox.evaluators._
     val p = inox.InoxProgram(context, symbols)
     val evaluator = LambdaPreservingEvaluator(p)
-    evaluator.eval(expr) match {
-      case EvaluationResults.Successful(e) => Left(e)
+    evaluator.eval(expr.exp) match {
+      case EvaluationResults.Successful(e) => Left(ContExp(e))
       case EvaluationResults.EvaluatorError(msg) => Right(msg)
       case EvaluationResults.RuntimeError(msg) => Right(msg)
       case m => Right("An error occurred. Sorry not to be able to give more information than " + m)

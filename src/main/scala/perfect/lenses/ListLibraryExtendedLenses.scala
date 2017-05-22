@@ -16,7 +16,7 @@ trait ListLibraryExtendedLenses {
 
   object SortWithLens extends SortWithLensLike(InvocationExtractor)
 
-  class SortWithLensLike(Invocation: InvocationExtractor) extends InvocationLensLike(Invocation) {
+  class SortWithLensLike(val Invocation: InvocationExtractor) extends InvocationLensLike {
     def put(originalArgsValues: Seq[ContExp], out: ContExp, builder: Seq[Exp] => Exp)(implicit symbols: Symbols, cache: Cache): Stream[(Seq[ContExp], Cont)] = {
       val ContExp(inExp, inListF) = originalArgsValues.head
       val (inList, inListBuilder) = ListLiteral.unapply(inExp).getOrElse(return Stream.empty)
