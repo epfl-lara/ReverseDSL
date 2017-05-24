@@ -55,11 +55,11 @@ trait ListLibraryExtendedLenses {
               TreeModificationLensGoal(inListBuilder(inList.take(k)), r, 1)
           }
           Stream((Seq(ContExp(inModification),
-            lambdaProg.assignmentsAsOriginals()), Cont()))
+            lambdaProg), Cont()))
         case ListInsertLensGoal(left, inserted, right, listbuilder, listInsertGoalBuilder) => // We care only about deleted elements.
           if(left.length + right.length == inList.length) { // Only inserted elements. We insert them at the end of the original list.
-            Stream((Seq(ContExp(listInsertGoalBuilder(inList, inserted, Nil), inListF.assignmentsAsOriginals),
-              lambdaProg.assignmentsAsOriginals()), Cont()))
+            Stream((Seq(ContExp(listInsertGoalBuilder(inList, inserted, Nil), inListF),
+              lambdaProg), Cont()))
           } else ??? // TODO: Deletions
 
         case v =>
