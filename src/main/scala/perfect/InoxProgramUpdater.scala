@@ -261,13 +261,18 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
 
   var xCounter = 1
-  def extractADTSelector(e: Exp)(implicit symbols: Symbols): Option[(Exp, Exp => Exp, Seq[Var], Int)]  = e match {
+  def extractADTSelector(e: Exp)(implicit symbols: Symbols): Option[(Exp, Exp => Exp, Exp => Seq[Var], Int)]  = e match {
     case as@inox.trees.ADTSelector(expr, id) =>
-      val constructor = as.constructor.get
-      val fields = constructor.fields
       val index = as.selectorIndex
-      val vrs = fields.map { fd => Variable(FreshIdentifier("x"+{ xCounter += 1; xCounter }, false), fd.getType, Set()) }
-      Some((expr, x => inox.trees.ADTSelector(x, id), vrs, index))
+
+      val vrsBuilder = (x: Exp) => x match {
+        case ADT(adt, args) =>
+          val constructor = adt.lookupADT.get.toConstructor
+          val fields = constructor.fields
+          val vrs = fields.map { fd => Variable(FreshIdentifier("x"+{ xCounter += 1; xCounter }, false), fd.getType, Set()) }
+          vrs
+      }
+      Some((expr, x => inox.trees.ADTSelector(x, id), vrsBuilder, index))
     case _ => None
   }
   /** Returns true if e and g are two instances of the same ADT type */

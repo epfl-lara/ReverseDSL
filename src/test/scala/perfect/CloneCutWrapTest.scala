@@ -49,14 +49,6 @@ class CloneCutWrapTest extends FunSuite with TestHelpers {
     }
   }
 
-  test("Clone node") {
-    // TODO
-  }
-
-  test("Insert node") {
-    // TODO
-  }
-
   test("Unwrap") {
     val output = _Node("b", children=_List[Node](_Node("i", children=_List[Node](_Node("Hello")))))
     val pfun =
