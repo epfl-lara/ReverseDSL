@@ -51,10 +51,12 @@ class RecursiveTest extends FunSuite with TestHelpers {
       mp(_List[String]("brother", "boss"), \("s"::String)(s => "Big " +& s))
     )
     prog shouldProduce _List[String]("Big brother", "Big boss")
-    prog repairFrom _List[String]("Big brothers", "Big boss") match {
-      case Let(mpd, mpval, Application(mpv, Seq(l, Lambda(Seq(i), StringConcat(StringLiteral("Big "), iv))))) =>
-        mpv shouldEqual mpd.toVariable
-        l shouldEqual _List[String]("brothers", "boss")
+    InoxProgramUpdater.Utils.Log.activated {
+      prog repairFrom _List[String]("Big brothers", "Big boss") match {
+        case Let(mpd, mpval, Application(mpv, Seq(l, Lambda(Seq(i), StringConcat(StringLiteral("Big "), iv))))) =>
+          mpv shouldEqual mpd.toVariable
+          l shouldEqual _List[String]("brothers", "boss")
+      }
     }
   }
   test("Home-made list map inverse precise list modification") {

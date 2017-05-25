@@ -67,11 +67,13 @@ object InoxProgramUpdater extends core.ProgramUpdater
     import inox.evaluators._
     val p = inox.InoxProgram(context, symbols)
     val evaluator = LambdaPreservingEvaluator(p)
-    evaluator.eval(expr.exp) match {
+    try { evaluator.eval(expr.exp) match {
       case EvaluationResults.Successful(e) => Left(ContExp(e))
       case EvaluationResults.EvaluatorError(msg) => Right(msg)
       case EvaluationResults.RuntimeError(msg) => Right(msg)
       case m => Right("An error occurred. Sorry not to be able to give more information than " + m)
+    } } catch {
+      case e: Exception => Right("An exception was thrown: " + e)
     }
   }
 
@@ -421,7 +423,7 @@ object InoxProgramUpdater extends core.ProgramUpdater
 // Lenses which need the value of the program to invert it.
   val semanticLenses: SemanticLens = valueLenses // andThen
 
-  override def debug = false // Log.activate
+  override def debug = true //Log.activate
 
   val lens = combine(
     NoChangeLens.named("No Change?"),
