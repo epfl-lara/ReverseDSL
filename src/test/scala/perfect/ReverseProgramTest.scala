@@ -30,6 +30,11 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
 
   implicit val symbols = Utils.defaultSymbols
 
+  test("Deal with newlines in solver") {
+    val r = variable[String]("r")
+    perfect.InoxProgramUpdater.solveGeneralConstraints(r === "\n", Seq(r)).head(r) shouldEqual StringLiteral("\n")
+  }
+
   test("Create a program from scratch") {
     val out = Element("div", WebElement(TextNode("Hello world"))::Nil)
     checkProg(out, generateProgram(out))

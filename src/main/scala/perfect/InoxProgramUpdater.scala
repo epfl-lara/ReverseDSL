@@ -95,11 +95,20 @@ object InoxProgramUpdater extends core.ProgramUpdater
 
   def weakCondition(v: Variable, c: OriginalValue): Exp = E(perfect.Utils.original)(v === c.e)
 
+  val replaceNewLines = postMap {
+    case StringLiteral(n) => Some(StringLiteral(n.replaceAllLiterally("\n", "@LF#!")))
+    case _ => None
+  } _
+  val reinsertNewLines = postMap {
+    case StringLiteral(n) => Some(StringLiteral(n.replaceAllLiterally("@LF#!", "\n")))
+    case _ => None
+  } _
+
   def solveGeneralConstraints(constraint: Exp, freeVariables: Seq[Var]): Stream[Map[Var, Exp]] = {
     val input = Variable(FreshIdentifier("input"), tupleTypeWrap(freeVariables.map(_.getType)), Set())
-    val fullconstraint = InoxConstraint(input === tupleWrap(freeVariables) &<>& constraint)
+    val fullconstraint = InoxConstraint(replaceNewLines(input === tupleWrap(freeVariables) &<>& constraint))
     Log(s"Solving as $fullconstraint")
-    fullconstraint.toStreamOfInoxExpr(input).map {
+    fullconstraint.toStreamOfInoxExpr(input).map(reinsertNewLines).map {
       case Tuple(args) => freeVariables.zip(args).map{ case (fv: Var, expr: Exp) => fv -> expr }.toMap
       case e if freeVariables.length == 1 => Map(freeVariables.head -> e)
       case UnitLiteral() if freeVariables.length == 0 => Map[Var, Exp]()
