@@ -47,18 +47,6 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
     checkProg(out2, ReverseProgram.put(Some(pfun), out2).head)
   }
 
-  test("Variable assigment keeps the shape") {
-    val expected1 = "Hello world"
-    val expected2 = "We are the children"
-    val pfun = let(vText.toVal, "Hello world")(v => v)
-    checkProg(expected1, pfun)
-    val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 match {
-      case l@Let(vd, expr, body) =>
-        if (!isVarIn(vd.id, body)) fail(s"There was no use of the variable $vd in the given let-expression: $l")
-    }
-  }
-
   test("Change in output not modifying a variable but keeping the shape") {
     val expected1 = Element("div", WebElement(TextNode("Hello world"))::Nil)
     val expected2 = Element("pre", WebElement(TextNode("Hello world"))::Nil)
@@ -206,7 +194,7 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
   }
 
   test("Change an applied lambda's shape by unwrapping an element") {
-    Log activated changeLambdaShapeUnwrapping(Application(lambda2, Seq("Hello world")), false)
+    changeLambdaShapeUnwrapping(Application(lambda2, Seq("Hello world")), false)
   }
 
   test("Change a variable lambda's shape by unwrapping an element") {
@@ -274,52 +262,6 @@ class ReverseProgramTest extends FunSuite with TestHelpers {
       => //Log(funBody)
         if(!isVarIn(v2.id, body)) fail(s"There was no variable $v2 in the given lambda: $newLambda")
         s shouldEqual "Changed parameter"
-    }
-  }
-  test("Reverse simple string concatenation") {
-    val expected1 = "Hello world"
-    val expected2 = "Hello buddy"
-    val expected3 = "Hello bigworld"
-    val expected4 = "Hello    world"
-
-    val pfun = "Hello " +& "world"
-    checkProg(expected1, pfun)
-    val pfun2 = Log activated { pfun repairFrom expected2 shouldProduce expected2 }
-    val pfun3 = checkProg(expected3, repairProgram(pfun, expected3, 3))
-    val pfun4 = checkProg(expected4, repairProgram(pfun, expected4, 3))
-
-    pfun2 match { case StringLiteral(s) +& StringLiteral(t) =>
-      s shouldEqual "Hello "
-      t shouldEqual "buddy"
-    }
-    pfun3 match { case StringLiteral(s) +& StringLiteral(t) =>
-      s shouldEqual "Hello "
-      t shouldEqual "bigworld"
-    }
-    pfun4 match { case StringLiteral(s) +& StringLiteral(t) =>
-      (s, t) shouldEqual ("Hello    ", "world")
-    }
-  }
-
-  test("Reverse 1 variable string concatenation") {
-    val expected1 = "Hello world"
-    val expected2 = "Hello buddy"
-
-    val ap = valdef[String]("a")
-
-    val pfun = 
-      let(ap, "Hello ")(av =>
-        av +& "world"
-      )
-
-    checkProg(expected1, pfun)
-    val pfun2 = pfun repairFrom expected2 shouldProduce expected2
-    pfun2 match {
-      case funBody@Let(v1, StringLiteral(s), body@StringConcat(_, StringLiteral(t)))
-      =>
-        if(!isVarIn(v1.id, body)) fail(s"There was no variable $v1 in the given final expression: $funBody")
-        s shouldEqual "Hello "
-        t shouldEqual "buddy"
     }
   }
 

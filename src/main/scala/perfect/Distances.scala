@@ -11,8 +11,8 @@ object DistanceExpr extends Distances {
     case e => super.size(a)
   }
   override def distance(a: Any, b: Any): Int = (a, b) match {
-    case (StringConcat(aa, ab), b) if aa == b => size(b) + 3 // Wrapping should not cost too much.
-    case (StringConcat(aa, ab), b) if ab == b => size(b) + 3
+    case (StringConcat(aa, ab), _) if aa == b => size(b) + 3 // Wrapping should not cost too much.
+    case (StringConcat(aa, ab), _) if ab == b => size(b) + 3
     case _ => super.distance(a, b)
   }
 }
@@ -66,7 +66,7 @@ trait Distances {
         case (false, true) => 4
         case (a: Int, b: Int) =>
           distance(a.toString, b.toString)
-        case (a, b) =>
+        case (_, _) =>
           //println(s"Comparing two non-related objects: $a, $b")
           size(a) + size(b)
       }
