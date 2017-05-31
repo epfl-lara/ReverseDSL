@@ -15,7 +15,7 @@ import perfect.core.predef.{FilterLike, FlatMapReverseLike, MapReverseLike}
 object Lenses {
   import perfect.semanticlenses._
   import ReverseProgram.{maybeEvalWithCache, Cache, repair}
-  import perfect.core.predef.AssociativeInsert
+  import perfect.InoxProgramUpdater.AssociativeInsert
 
   lazy val lenses = List[Lens](
     FilterLens,

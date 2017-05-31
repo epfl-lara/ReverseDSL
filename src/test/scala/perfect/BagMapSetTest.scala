@@ -20,7 +20,7 @@ import perfect.semanticlenses._
 class BagMapSetTest extends FunSuite with TestHelpers {
   import InoxConvertible._
   import StringConcatExtended._
-  import core.predef.AssociativeInsert
+  import perfect.InoxProgramUpdater.AssociativeInsert
 
   implicit def tupleToTupleExpr[A: InoxConvertible, B: InoxConvertible](in: (A, B)): (Expr, Expr) = {
     (in._1: Expr, in._2: Expr)

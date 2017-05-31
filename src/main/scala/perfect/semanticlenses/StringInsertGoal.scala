@@ -10,7 +10,7 @@ import perfect.StringConcatExtended._
   */
 object StringInsertGoal extends FunDefGoal {
   private val InsertString = FreshIdentifier("insertString")
-  import perfect.core.predef.AssociativeInsert
+  import perfect.InoxProgramUpdater.AssociativeInsert
   import AssociativeInsert._
 
   def apply(left: String, s: String, right: String, direction: InsertDirection): Expr = {

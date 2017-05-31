@@ -83,7 +83,7 @@ object StringInsert extends Enumeration with CustomProgramFormula  {
       }
     }
   }
-  import perfect.core.predef.AssociativeInsert._
+  import perfect.InoxProgramUpdater.AssociativeInsert._
 
   def computeDirection(left: String, s: String, right: String): InsertDirection = {
     val leftJump = lenses.Lenses.StringConcatLens.typeJump(left, s)

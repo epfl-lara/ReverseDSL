@@ -1,7 +1,5 @@
 package perfect
 
-import core.predef.AssociativeInsert
-
 object InoxProgramUpdater extends core.ProgramUpdater
     with core.ContExps
     with core.Lenses
@@ -29,6 +27,10 @@ object InoxProgramUpdater extends core.ProgramUpdater
   type Var = inox.trees.Variable
 
   def Equal(e1: Exp, e2: Exp): Exp = inox.trees.Equals(e1, e2)
+  def extractEqual(e: Exp): Option[(Exp, Exp)] = e match {
+    case inox.trees.Equals(e1, e2) => Some((e1, e2))
+    case _ => None
+  }
 
   /** Value of a true expression */
   override def ExpTrue: InoxProgramUpdater.Exp = inox.trees.BooleanLiteral(true)
@@ -346,10 +348,10 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
 
   // Members declared in perfect.lenses.PasteVariableLenses
-  def buildPasteStringVarGoal(left: String,v: Var,v_value: String,right: String,direction: perfect.core.predef.AssociativeInsert.InsertDirection): Exp = {
+  def buildPasteStringVarGoal(left: String,v: Var,v_value: String,right: String,direction: InsertDirection): Exp = {
     PasteVariableGoal(left, v, v_value, right, direction)
   }
-  def extractPasteStringVarGoal(e: Exp): Option[(String, Var, String, String, perfect.core.predef.AssociativeInsert.InsertDirection)] = {
+  def extractPasteStringVarGoal(e: Exp): Option[(String, Var, String, String, InsertDirection)] = {
     PasteVariableGoal.unapply(e)
   }
 
@@ -373,10 +375,10 @@ object InoxProgramUpdater extends core.ProgramUpdater
   }
 
   // Members declared in perfect.lenses.StringInsertLenses
-  def buildStringInsertGoal(left: String,inserted: String,right: String,direction: perfect.core.predef.AssociativeInsert.InsertDirection): Exp = {
+  def buildStringInsertGoal(left: String,inserted: String,right: String,direction: perfect.InoxProgramUpdater.AssociativeInsert.InsertDirection): Exp = {
     StringInsertGoal(left, inserted, right, direction)
   }
-  def extractStringInsertGoal(e: Exp): Option[(String, String, String, perfect.core.predef.AssociativeInsert.InsertDirection)] = {
+  def extractStringInsertGoal(e: Exp): Option[(String, String, String, perfect.InoxProgramUpdater.AssociativeInsert.InsertDirection)] = {
     StringInsertGoal.unapply(e)
   }
 

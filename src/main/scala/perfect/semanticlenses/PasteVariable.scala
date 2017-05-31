@@ -7,7 +7,7 @@ import inox.trees.dsl._
 import perfect.ProgramFormula.CustomProgramFormula
 import perfect.ReverseProgram.{Cache, maybeEvalWithCache, repair}
 import perfect.StringConcatExtended._
-import perfect.core.predef.AssociativeInsert
+import perfect.InoxProgramUpdater.AssociativeInsert
 
 
 /**

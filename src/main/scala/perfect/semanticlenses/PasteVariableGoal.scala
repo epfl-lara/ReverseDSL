@@ -1,6 +1,6 @@
 package perfect.semanticlenses
 
-import perfect.core.predef.AssociativeInsert
+import perfect.InoxProgramUpdater.AssociativeInsert
 import inox._
 import inox.trees._
 import inox.trees.dsl._
@@ -11,7 +11,7 @@ import perfect.StringConcatExtended._
   */
 object PasteVariableGoal extends FunDefGoal {
   private val Paste = FreshIdentifier("pastevariable")
-  def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: AssociativeInsert.InsertDirection): Expr = {
+  def apply(left: String, insertedVar: Variable, originalVarValue: String, right: String, direction: perfect.InoxProgramUpdater.AssociativeInsert.InsertDirection): Expr = {
     E(Paste)(
       StringLiteral(left),
       insertedVar,
@@ -21,14 +21,14 @@ object PasteVariableGoal extends FunDefGoal {
     )
   }
 
-  def unapply(f: Expr): Option[(String, Variable, String, String, AssociativeInsert.InsertDirection)] = {
+  def unapply(f: Expr): Option[(String, Variable, String, String, perfect.InoxProgramUpdater.AssociativeInsert.InsertDirection)] = {
     f match {
       case FunctionInvocation(Paste, Seq(), Seq(
       StringLiteral(leftBefore),
       inserted: Variable,
       StringLiteral(insertedValue),
       StringLiteral(rightBefore),
-      StringLiteral(AssociativeInsert(direction))
+      StringLiteral(perfect.InoxProgramUpdater.AssociativeInsert(direction))
       )) =>
         Some((leftBefore, inserted, insertedValue, rightBefore, direction))
       case _ =>
